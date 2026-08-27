@@ -1,0 +1,128 @@
+"""The eight domain entities of section 3, as plain dataclasses.
+
+No behaviour lives here beyond identity and defaults; persistence is the
+repositories' job and rules are the stages' job.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import date, datetime
+from typing import Any, Literal
+
+EvidenceKind = Literal["document", "structured"]
+Verdict = Literal["compliant", "partial", "gap", "insufficient_evidence"]
+CheckStatus = Literal["pending", "submitted", "assessed", "overdue", "waived"]
+ActionStatus = Literal[
+    "raised",
+    "assigned",
+    "in_progress",
+    "remediation_submitted",
+    "reassessed",
+    "resolved",
+    "escalated",
+]
+ExceptionStatus = Literal["active", "expired", "revoked"]
+Actor = Literal["system", "ai", "user"]
+Frequency = Literal["monthly", "quarterly", "annual"]
+
+
+@dataclass
+class ProcessArea:
+    id: str
+    name: str
+    owner_team: str
+    owner_name: str
+    attributes: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ControlDefinition:
+    id: str
+    title: str
+    criteria_text: str
+    frequency: Frequency
+    applies_when: dict[str, Any] = field(default_factory=dict)
+    evidence_kind: EvidenceKind = "document"
+    required_evidence_types: list[str] = field(default_factory=list)
+    freshness_days: int = 365
+    severity_weight: float = 1.0
+
+
+@dataclass
+class CheckInstance:
+    id: str
+    control_id: str
+    process_area_id: str
+    period: str
+    due_date: date
+    status: CheckStatus
+    assigned_team: str
+    owner_name: str
+
+
+@dataclass
+class Evidence:
+    id: str
+    check_instance_id: str
+    kind: EvidenceKind
+    doc_type: str
+    content: str
+    content_hash: str
+    submitted_at: datetime
+    author: str
+    is_remediation: bool = False
+
+
+@dataclass
+class Finding:
+    id: str
+    check_instance_id: str
+    verdict: Verdict
+    confidence: float
+    rationale: str
+    cited_spans: list[str] = field(default_factory=list)
+    gaps: list[str] = field(default_factory=list)
+    recommended_action: str = ""
+    needs_human_review: bool = False
+    assessed_at: datetime | None = None
+    supersedes_finding_id: str | None = None
+
+
+@dataclass
+class Action:
+    id: str
+    finding_id: str
+    title: str
+    owner_team: str
+    owner_name: str
+    due_date: date
+    status: ActionStatus = "raised"
+    resolution_note: str | None = None
+    resolved_at: datetime | None = None
+
+
+@dataclass
+class ComplianceException:
+    id: str
+    control_id: str
+    process_area_id: str
+    rationale: str
+    approved_by: str
+    granted_at: date
+    expires_at: date
+    status: ExceptionStatus = "active"
+
+
+@dataclass
+class AuditEvent:
+    """Append-only. Written as a by-product of every state transition."""
+
+    id: int | None
+    ts: datetime
+    actor: Actor
+    owner: str
+    action: str
+    entity_type: str
+    entity_id: str
+    detail: dict[str, Any] = field(default_factory=dict)
