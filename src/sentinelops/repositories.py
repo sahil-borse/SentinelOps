@@ -20,6 +20,7 @@ from .entities import (
     ComplianceException,
     ControlDefinition,
     Evidence,
+    EvidenceSubmission,
     Finding,
     ProcessArea,
 )
@@ -28,9 +29,11 @@ from .entities import (
 _SPEC: dict[type, tuple[str, dict[str, str]]] = {
     ProcessArea: ("process_areas", {"attributes": "json"}),
     ControlDefinition: ("control_definitions", {"applies_when": "json",
-                        "required_evidence_types": "json"}),
+                        "required_evidence_types": "json", "thresholds": "json"}),
     CheckInstance: ("check_instances", {"due_date": "date"}),
     Evidence: ("evidence", {"submitted_at": "datetime", "is_remediation": "bool"}),
+    EvidenceSubmission: ("evidence_submissions", {"submitted_at": "datetime",
+                         "is_remediation": "bool"}),
     Finding: ("findings", {"cited_spans": "json", "gaps": "json",
               "needs_human_review": "bool", "assessed_at": "datetime"}),
     Action: ("actions", {"due_date": "date", "resolved_at": "datetime"}),
@@ -189,6 +192,7 @@ def repositories(conn: sqlite3.Connection) -> dict[str, Any]:
         "controls": Repository(conn, ControlDefinition),
         "instances": Repository(conn, CheckInstance),
         "evidence": Repository(conn, Evidence),
+        "submissions": Repository(conn, EvidenceSubmission),
         "findings": Repository(conn, Finding),
         "actions": Repository(conn, Action),
         "exceptions": Repository(conn, ComplianceException),

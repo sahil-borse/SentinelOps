@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS control_definitions (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, criteria_text TEXT NOT NULL,
     frequency TEXT NOT NULL, applies_when TEXT NOT NULL, evidence_kind TEXT NOT NULL,
     required_evidence_types TEXT NOT NULL, freshness_days INTEGER NOT NULL,
-    severity_weight REAL NOT NULL);
+    severity_weight REAL NOT NULL, thresholds TEXT NOT NULL,
+    grace_days INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS check_instances (
     id TEXT PRIMARY KEY, control_id TEXT NOT NULL REFERENCES control_definitions(id),
     process_area_id TEXT NOT NULL REFERENCES process_areas(id), period TEXT NOT NULL,
@@ -25,6 +26,12 @@ CREATE TABLE IF NOT EXISTS check_instances (
     owner_name TEXT NOT NULL, UNIQUE (control_id, process_area_id, period));
 CREATE TABLE IF NOT EXISTS evidence (
     id TEXT PRIMARY KEY, check_instance_id TEXT NOT NULL REFERENCES check_instances(id),
+    kind TEXT NOT NULL, doc_type TEXT NOT NULL, content TEXT NOT NULL,
+    content_hash TEXT NOT NULL, submitted_at TEXT NOT NULL, author TEXT NOT NULL,
+    is_remediation INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS evidence_submissions (
+    id TEXT PRIMARY KEY, control_id TEXT NOT NULL REFERENCES control_definitions(id),
+    process_area_id TEXT NOT NULL REFERENCES process_areas(id), period TEXT NOT NULL,
     kind TEXT NOT NULL, doc_type TEXT NOT NULL, content TEXT NOT NULL,
     content_hash TEXT NOT NULL, submitted_at TEXT NOT NULL, author TEXT NOT NULL,
     is_remediation INTEGER NOT NULL);

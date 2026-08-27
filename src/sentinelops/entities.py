@@ -47,6 +47,11 @@ class ControlDefinition:
     required_evidence_types: list[str] = field(default_factory=list)
     freshness_days: int = 365
     severity_weight: float = 1.0
+    # Section 4, S2: "evidence_kind == structured with a numeric threshold ->
+    # evaluate in code". The threshold has to live on the control.
+    # {metric_name: {"min": x} | {"max": y}}
+    thresholds: dict[str, Any] = field(default_factory=dict)
+    grace_days: int = 15
 
 
 @dataclass
@@ -65,6 +70,30 @@ class CheckInstance:
 class Evidence:
     id: str
     check_instance_id: str
+    kind: EvidenceKind
+    doc_type: str
+    content: str
+    content_hash: str
+    submitted_at: datetime
+    author: str
+    is_remediation: bool = False
+
+
+@dataclass
+class EvidenceSubmission:
+    """Evidence as it arrives, before it is matched to a CheckInstance.
+
+    A team submits against a control for a period; S1 (slice 4) creates the
+    instance and S2 (slice 5) binds the submission to it as an `Evidence` row.
+    Keyed by (control, area, period) because the synthetic corpus is generated
+    before any instance exists — and because an instance with no matching
+    submission is exactly what "missed check" means.
+    """
+
+    id: str
+    control_id: str
+    process_area_id: str
+    period: str
     kind: EvidenceKind
     doc_type: str
     content: str
