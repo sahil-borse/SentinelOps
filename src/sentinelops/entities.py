@@ -120,6 +120,11 @@ class Finding:
     # the evidence had not changed. Non-null *is* the carried_forward flag, and
     # it names the finding it came from, so the trail stays followable.
     carried_forward_from: str | None = None
+    # Provenance: enough to reproduce and explain any verdict months later.
+    # Which criteria text was judged, which prompt asked, which bytes were read.
+    criteria_hash: str = ""
+    prompt_version: str = ""
+    evidence_hash: str = ""
     # Which tier decided: a pre-screen rule name, or "s3_model" once a model
     # has been asked. The share of findings that never say "s3_model" is the
     # cost story.

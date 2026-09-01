@@ -136,6 +136,7 @@ def test_every_quality_is_present(corpus):
         "missing",
         "remediation",
         "exception_suppressed",
+        "adversarial",
     ):
         assert kinds[quality] > 0, f"no {quality} evidence in the corpus"
 

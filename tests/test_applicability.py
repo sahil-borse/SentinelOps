@@ -309,9 +309,15 @@ def _code_only(path: Path) -> str:
     )
 
 
-def test_no_stage_module_can_reach_a_model_yet():
-    """S3 will import llm/. Until then, no stage may."""
+#: S3 is the tier that spends. Every other stage is rules, permanently.
+SPENDING_STAGES = {"assess.py"}
+
+
+def test_only_the_assessment_stage_can_reach_a_model():
+    """S0, S1, S2 and S4 are rules. Only S3 may import the provider boundary."""
     for path in (SRC / "stages").rglob("*.py"):
+        if path.name in SPENDING_STAGES:
+            continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             names = []
@@ -322,6 +328,11 @@ def test_no_stage_module_can_reach_a_model_yet():
             for name in names:
                 assert "llm" not in name.split("."), f"{path.name} imports {name}"
         assert "llm" not in _code_only(path), f"{path.name} references llm in code"
+
+
+def test_the_assessment_stage_does_reach_a_model():
+    """The positive half: S3 must actually go through the llm/ boundary."""
+    assert "llm" in _code_only(SRC / "stages" / "assess.py")
 
 
 def test_that_guard_would_actually_fire(tmp_path):

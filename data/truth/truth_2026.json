@@ -15,10 +15,11 @@
     "applicable_pairs": 64,
     "areas": 7,
     "by_defect_kind": {
+      "adversarial": 1,
       "compliant": 177,
       "exception_suppressed": 3,
       "missing": 33,
-      "near_miss": 48,
+      "near_miss": 47,
       "non_compliant": 27,
       "partial": 27,
       "remediation": 6,
@@ -80,9 +81,10 @@
       "suppresses_periods": []
     }
   ],
-  "fingerprint": "8ef5f63c47512bdc3e09ed95a4f8e1b619107518526fa8c5ea0f638aa97290b7",
+  "fingerprint": "7e7ee16b4e1eebd922c4a4d0aa5b00852fb4bc407162c727cb959ea168c4a9f4",
   "generated_by": "sentinelops.synth.generate",
   "quality_to_expected_verdict": {
+    "adversarial": "gap",
     "compliant": "compliant",
     "missing": "insufficient_evidence",
     "near_miss": "gap",
@@ -3371,7 +3373,7 @@
     {
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
-      "defect_kind": "near_miss",
+      "defect_kind": "adversarial",
       "expected_verdict": "gap",
       "failing_clause_index": 3,
       "failing_clause_text": "The retention schedule itself is confirmed as current.",

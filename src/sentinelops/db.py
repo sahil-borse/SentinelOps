@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS findings (
     needs_human_review INTEGER NOT NULL, assessed_at TEXT,
     supersedes_finding_id TEXT REFERENCES findings(id),
     carried_forward_from TEXT REFERENCES findings(id),
-    decided_by TEXT NOT NULL);
+    decided_by TEXT NOT NULL, criteria_hash TEXT NOT NULL,
+    prompt_version TEXT NOT NULL, evidence_hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS actions (
     id TEXT PRIMARY KEY, finding_id TEXT NOT NULL REFERENCES findings(id),
     title TEXT NOT NULL, owner_team TEXT NOT NULL, owner_name TEXT NOT NULL,

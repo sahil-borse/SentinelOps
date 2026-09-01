@@ -39,9 +39,43 @@ def test_factory_rejects_unknown_providers(monkeypatch):
         get_client()
 
 
-def test_real_provider_is_stubbed():
-    with pytest.raises(NotImplementedError):
+def test_the_real_provider_refuses_without_a_key_rather_than_guessing(monkeypatch):
+    """No key, no call. It never falls back to the fake behind your back."""
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    with pytest.raises(LlmError) as caught:
         get_client("openai").complete(_request())
+    # either the SDK is absent or the key is; both are boundary errors, and
+    # neither is a silent success
+    assert "OPENAI_API_KEY" in str(caught.value) or "openai package" in str(
+        caught.value
+    )
+
+
+def test_the_key_is_never_hardcoded():
+    from pathlib import Path as _Path
+
+    src = _Path(__file__).resolve().parents[1] / "src" / "sentinelops"
+    for path in src.rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        assert "sk-" not in text, f"{path.name} looks like it contains a key"
+
+
+def test_the_env_loader_never_overwrites_an_exported_variable(tmp_path, monkeypatch):
+    from sentinelops.llm.env import load_env
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "OPENAI_API_KEY=from-file\nOTHER=from-file\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("OPENAI_API_KEY", "from-shell")
+    monkeypatch.delenv("OTHER", raising=False)
+
+    loaded = load_env(env_file)
+    import os
+
+    assert os.environ["OPENAI_API_KEY"] == "from-shell"  # the shell wins
+    assert os.environ["OTHER"] == "from-file"
+    assert loaded == {"OTHER": "set"}, "it reports names, never values"
 
 
 def test_fake_client_is_deterministic():

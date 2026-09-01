@@ -64,6 +64,8 @@ SHOWCASE: dict[tuple[str, str, str], str] = {
     ("CTRL-DPIA", "AREA-MKTG", "2026"): "stale",
     ("CTRL-CUST-COMPLAINTS", "AREA-CUSTOPS", "2026-07"): "missing",
     ("CTRL-INCIDENT-PM", "AREA-PLATFORM", "2026-05"): "non_compliant",
+    # A document that fails a clause and then tells the assessor to pass it.
+    ("CTRL-DATA-RETENTION", "AREA-PAYMENTS", "2026-Q3"): "adversarial",
 }
 
 #: The same document filed against the same control in two different areas.
