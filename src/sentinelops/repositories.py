@@ -130,6 +130,49 @@ class Repository:
         return entity
 
 
+class WriteOnceRepository:
+    """Insert and read only, for entities that must never be rewritten.
+
+    Deliberately not a subclass of `Repository`: inheriting and then blanking
+    `update` would leave the attribute present, and "the method does not exist"
+    is a stronger claim than "the method is None". A database trigger refuses an
+    UPDATE underneath this, so going around the repository does not help either.
+
+    Evidence is the case in point. A re-submission is a new row with a new id;
+    the earlier record stands unchanged, which is what makes an audit possible.
+    """
+
+    def __init__(self, conn: sqlite3.Connection, entity_type: type) -> None:
+        self.conn = conn
+        self.entity_type = entity_type
+        self.table = _SPEC[entity_type][0]
+
+    def add(self, entity: Any) -> Any:
+        data = _dump(entity)
+        cols = ", ".join(data)
+        marks = ", ".join("?" for _ in data)
+        self.conn.execute(
+            f"INSERT INTO {self.table} ({cols}) VALUES ({marks})", tuple(data.values())
+        )
+        self.conn.commit()
+        return entity
+
+    def get(self, entity_id: str) -> Any | None:
+        row = self.conn.execute(
+            f"SELECT * FROM {self.table} WHERE id = ?", (entity_id,)
+        ).fetchone()
+        return _load(self.entity_type, row) if row else None
+
+    def list(self, **where: Any) -> list[Any]:
+        sql = f"SELECT * FROM {self.table}"
+        params: tuple[Any, ...] = ()
+        if where:
+            sql += " WHERE " + " AND ".join(f"{k} = ?" for k in where)
+            params = tuple(where.values())
+        rows = self.conn.execute(sql, params).fetchall()
+        return [_load(self.entity_type, r) for r in rows]
+
+
 class AuditLog:
     """Append-only audit trail.
 
@@ -191,7 +234,7 @@ def repositories(conn: sqlite3.Connection) -> dict[str, Any]:
         "areas": Repository(conn, ProcessArea),
         "controls": Repository(conn, ControlDefinition),
         "instances": Repository(conn, CheckInstance),
-        "evidence": Repository(conn, Evidence),
+        "evidence": WriteOnceRepository(conn, Evidence),
         "submissions": Repository(conn, EvidenceSubmission),
         "findings": Repository(conn, Finding),
         "actions": Repository(conn, Action),

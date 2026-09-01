@@ -40,7 +40,9 @@ CREATE TABLE IF NOT EXISTS findings (
     verdict TEXT NOT NULL, confidence REAL NOT NULL, rationale TEXT NOT NULL,
     cited_spans TEXT NOT NULL, gaps TEXT NOT NULL, recommended_action TEXT NOT NULL,
     needs_human_review INTEGER NOT NULL, assessed_at TEXT,
-    supersedes_finding_id TEXT REFERENCES findings(id));
+    supersedes_finding_id TEXT REFERENCES findings(id),
+    carried_forward_from TEXT REFERENCES findings(id),
+    decided_by TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS actions (
     id TEXT PRIMARY KEY, finding_id TEXT NOT NULL REFERENCES findings(id),
     title TEXT NOT NULL, owner_team TEXT NOT NULL, owner_name TEXT NOT NULL,
@@ -55,6 +57,15 @@ CREATE TABLE IF NOT EXISTS audit_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, actor TEXT NOT NULL,
     owner TEXT NOT NULL, action TEXT NOT NULL, entity_type TEXT NOT NULL,
     entity_id TEXT NOT NULL, detail TEXT NOT NULL);
+-- Evidence is write-once. The repository exposes no update, and the database
+-- refuses one regardless of who is asking: evidence that can be edited after
+-- the fact is not evidence. A re-submission is a new row, never a rewrite.
+CREATE TRIGGER IF NOT EXISTS evidence_is_write_once
+BEFORE UPDATE ON evidence
+BEGIN SELECT RAISE(ABORT, 'evidence is write-once: submit a new record'); END;
+CREATE TRIGGER IF NOT EXISTS evidence_is_undeletable
+BEFORE DELETE ON evidence
+BEGIN SELECT RAISE(ABORT, 'evidence is write-once: it cannot be deleted'); END;
 CREATE TABLE IF NOT EXISTS token_usage (
     id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, tier TEXT NOT NULL,
     model TEXT NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,

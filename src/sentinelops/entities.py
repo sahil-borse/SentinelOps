@@ -116,6 +116,14 @@ class Finding:
     needs_human_review: bool = False
     assessed_at: datetime | None = None
     supersedes_finding_id: str | None = None
+    # Set when S2 carried this verdict forward from an earlier period because
+    # the evidence had not changed. Non-null *is* the carried_forward flag, and
+    # it names the finding it came from, so the trail stays followable.
+    carried_forward_from: str | None = None
+    # Which tier decided: a pre-screen rule name, or "s3_model" once a model
+    # has been asked. The share of findings that never say "s3_model" is the
+    # cost story.
+    decided_by: str = "s3_model"
 
 
 @dataclass

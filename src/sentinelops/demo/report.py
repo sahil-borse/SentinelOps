@@ -101,3 +101,46 @@ def print_applicability_comparison(controls, area_a, area_b) -> None:
                 next(c for c in controls if c.id == control_id), area_b
             ).explain()
             print(f"    {control_id:<{width}} {reason}")
+
+
+def print_prescreen_breakdown(report) -> None:
+    """Where the pre-screen resolved things, and what it cost — which is nothing.
+
+    The bottom line is the one the video quotes: the share of the audit cycle
+    that reached a verdict without a model ever being asked.
+    """
+    _rule(f"S2 PRE-SCREEN — exit rate by rule, as of {report.as_of}")
+    print(f"  {'rule':<30} {'count':>6}  {'share':>7}")
+    print(f"  {'-' * 30} {'-' * 6}  {'-' * 7}")
+    for name, count, share in report.breakdown():
+        marker = " " if name.startswith("to_assess") else "*"
+        print(f"  {marker} {name:<28} {count:>6}  {share:>6.1%}")
+    print(f"  {'-' * 30} {'-' * 6}  {'-' * 7}")
+    print(f"  {'considered':<30} {report.considered:>6}")
+    print(f"  {'* resolved with no model call':<30} {report.resolved:>6}"
+          f"  {report.zero_model_share:>6.1%}")
+    print(f"  {'  sent to S3':<30} {len(report.to_assess):>6}"
+          f"  {1 - report.zero_model_share:>6.1%}")
+
+
+def print_finding(finding, evidence=None) -> None:
+    """One finding in full, with its citations shown against the source."""
+    _rule(f"FINDING {finding.id}")
+    print(f"  instance   {finding.check_instance_id}")
+    print(f"  verdict    {finding.verdict}   confidence {finding.confidence}"
+          f"   decided_by {finding.decided_by}")
+    print(f"  review?    {finding.needs_human_review}")
+    print(f"  rationale  {finding.rationale}")
+    for span in finding.cited_spans:
+        print(f"  cites      {span}")
+    for gap in finding.gaps:
+        print(f"  gap        {gap}")
+    if finding.recommended_action:
+        print(f"  action     {finding.recommended_action}")
+    if finding.carried_forward_from:
+        print(f"  carried    forward from {finding.carried_forward_from}")
+    if evidence is not None:
+        print(f"\n  source evidence {evidence.id} ({evidence.doc_type}):")
+        for line in evidence.content.splitlines():
+            hit = any(span in line for span in finding.cited_spans)
+            print(f"    {'>>' if hit else '  '} {line}")
