@@ -183,18 +183,21 @@ class FakeModelClient:
             payload = validate(payload, request.response_schema)
         text = json.dumps(payload)
 
-        # Token counts are produced by the (fake) provider and read off the
-        # response, exactly as the real client reads provider usage. They are
-        # never derived from the caller's character counts.
+        # Counts are produced by the (fake) provider and read off the response,
+        # exactly as the real client reads provider usage — the meter never
+        # estimates. What this stub reports is proportional to the prompt it was
+        # actually handed, because that is what a tokenizer does: a provider
+        # returning a number unrelated to its input would make any comparison
+        # between a full document and a retrieved extract meaningless.
+        prompt = request.system + "".join(m["content"] for m in request.messages)
         rng = random.Random(_digest(request))
-        input_tokens = 400 + rng.randrange(0, 400)
-        cached_tokens = len(request.system) // 4 if rng.random() > 0.3 else 0
         return LlmResponse(
             text=text,
             parsed_json=extract_json(text),
-            input_tokens=input_tokens,
-            output_tokens=90 + rng.randrange(0, 60),
-            cached_tokens=cached_tokens,
+            input_tokens=max(1, len(prompt) // 4),
+            output_tokens=max(1, len(text) // 4),
+            # the constant system prefix is the part a provider cache can serve
+            cached_tokens=len(request.system) // 4 if rng.random() > 0.3 else 0,
             model=MODEL,
             latency_ms=120 + rng.randrange(0, 200),
             raw={"provider": "fake"},

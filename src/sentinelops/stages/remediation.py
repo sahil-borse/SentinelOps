@@ -48,8 +48,14 @@ class ReassessmentResult:
     reason: str = ""
 
 
-def pending_remediation(repo, instance) -> Any | None:
-    """The earliest remediation filing not yet bound to this instance."""
+def pending_remediation(repo, instance, as_of: date | None = None) -> Any | None:
+    """The earliest remediation filing not yet bound to this instance.
+
+    Evidence dated after `as_of` has not been filed yet as far as this run is
+    concerned. Without that check a re-assessment run in April would pick up a
+    fix submitted in December and resolve the action before the work happened,
+    which quietly destroys any mean-time-to-resolution figure.
+    """
     bound = {e.id for e in repo["evidence"].list(check_instance_id=instance.id)}
     candidates = [
         s
@@ -58,7 +64,9 @@ def pending_remediation(repo, instance) -> Any | None:
             process_area_id=instance.process_area_id,
             period=instance.period,
         )
-        if s.is_remediation and f"EV-{s.id}" not in bound
+        if s.is_remediation
+        and f"EV-{s.id}" not in bound
+        and (as_of is None or s.submitted_at.date() <= as_of)
     ]
     return min(candidates, key=lambda s: s.submitted_at) if candidates else None
 
@@ -119,7 +127,7 @@ def reassess(
     superseded = prior[-1]
     result.superseded_finding_id = superseded.id
 
-    submission = pending_remediation(repo, instance)
+    submission = pending_remediation(repo, instance, as_of)
     if submission is None:
         result.reason = "no unbound remediation evidence for this instance"
         return result
@@ -264,6 +272,6 @@ def reassess_all(conn, as_of: date, *, client=None) -> list[ReassessmentResult]:
             f"{area_id.removeprefix('AREA-')}-{period}"
         )
         result = reassess(conn, instance_id, as_of, client=client)
-        if result.new_finding_id or result.reason:
+        if result.new_finding_id:
             results.append(result)
     return results
