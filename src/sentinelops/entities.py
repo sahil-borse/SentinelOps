@@ -188,7 +188,18 @@ class ComplianceException:
 
 @dataclass
 class AuditEvent:
-    """Append-only. Written as a by-product of every state transition."""
+    """Append-only, and tamper-evident.
+
+    `seq` is a monotonic position in the log. `prev_hash` is the hash of the
+    entry before it and `entry_hash` covers this entry *including* that link,
+    so the entries form a chain: altering any field changes that entry's hash,
+    which no longer matches what the next entry recorded as its predecessor.
+
+    This does not make the log tamper-proof — anyone with write access to the
+    file can rewrite it. It makes tampering *evident*, which is the property an
+    audit trail actually needs: you cannot quietly change one line, only
+    obviously rebuild every line after it.
+    """
 
     id: int | None
     ts: datetime
@@ -198,3 +209,6 @@ class AuditEvent:
     entity_type: str
     entity_id: str
     detail: dict[str, Any] = field(default_factory=dict)
+    seq: int = 0
+    prev_hash: str = ""
+    entry_hash: str = ""

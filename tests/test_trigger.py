@@ -435,7 +435,7 @@ def test_the_audit_log_still_refuses_to_mutate():
     from sentinelops.repositories import AuditLog
 
     assert {n for n in dir(AuditLog) if not n.startswith("_")} == {
-        "append", "read_all", "read_for"
+        "append", "read_all", "read_for", "verify_chain"
     }
 
 

@@ -7,9 +7,10 @@ per-entity field spec, so there is no inheritance hierarchy to reason about.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
-from dataclasses import fields
+from dataclasses import dataclass, fields
 from datetime import date, datetime
 from typing import Any
 
@@ -175,12 +176,75 @@ class WriteOnceRepository:
         return [_load(self.entity_type, r) for r in rows]
 
 
-class AuditLog:
-    """Append-only audit trail.
+#: What the first entry links back to. A constant, so an empty log has a
+#: defined starting point and entry one is covered like every other.
+GENESIS_HASH = "0" * 64
 
-    Deliberately exposes no update and no delete: the trail is evidence, and
-    evidence that can be edited is not evidence. `tests/test_audit_append_only.py`
-    asserts those methods are absent.
+
+def canonical_payload(event: AuditEvent) -> str:
+    """The bytes an entry's hash is taken over.
+
+    Deliberately explicit rather than "whatever json.dumps does today": the
+    field list, the ordering and the separators are all pinned, because a
+    verification that depends on incidental formatting will start failing for
+    reasons that have nothing to do with tampering.
+
+    `id` is excluded — it is a storage detail assigned by SQLite. `seq` is
+    included, so an entry cannot be moved to a different position in the log
+    without detection.
+    """
+    return json.dumps(
+        {
+            "seq": event.seq,
+            "ts": event.ts.isoformat(),
+            "actor": event.actor,
+            "owner": event.owner,
+            "action": event.action,
+            "entity_type": event.entity_type,
+            "entity_id": event.entity_id,
+            "detail": event.detail,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+
+
+def compute_entry_hash(event: AuditEvent) -> str:
+    """This entry's hash, covering the link to the one before it."""
+    return hashlib.sha256(
+        (event.prev_hash + "\n" + canonical_payload(event)).encode()
+    ).hexdigest()
+
+
+@dataclass(frozen=True)
+class ChainVerification:
+    """The result of walking the log."""
+
+    ok: bool
+    checked: int
+    broken_at: int | None = None
+    reason: str = ""
+
+    def __bool__(self) -> bool:
+        return self.ok
+
+    def describe(self) -> str:
+        if self.ok:
+            return f"OK - {self.checked} entries, chain intact"
+        return f"BROKEN at seq {self.broken_at} - {self.reason}"
+
+
+class AuditLog:
+    """Append-only audit trail, and tamper-evident with it.
+
+    Exposes no update and no delete: the trail is evidence, and evidence that
+    can be edited is not evidence. `tests/test_audit_append_only.py` asserts
+    those methods are absent.
+
+    Absence of a method only binds callers who go through this class, so the
+    entries are also chained — see `verify_chain`. Someone with the database
+    file can still rewrite it; they cannot do so without it showing.
     """
 
     def __init__(self, conn: sqlite3.Connection) -> None:
@@ -196,6 +260,9 @@ class AuditLog:
         detail: dict[str, Any] | None = None,
         ts: datetime | None = None,
     ) -> AuditEvent:
+        tail = self.conn.execute(
+            "SELECT seq, entry_hash FROM audit_events ORDER BY seq DESC LIMIT 1"
+        ).fetchone()
         event = AuditEvent(
             id=None,
             ts=ts or datetime.now(),
@@ -205,7 +272,10 @@ class AuditLog:
             entity_type=entity_type,
             entity_id=entity_id,
             detail=detail or {},
+            seq=(tail["seq"] + 1) if tail else 1,
+            prev_hash=tail["entry_hash"] if tail else GENESIS_HASH,
         )
+        event.entry_hash = compute_entry_hash(event)
         data = _dump(event)
         data.pop("id")
         cols = ", ".join(data)
@@ -220,6 +290,53 @@ class AuditLog:
     def read_all(self) -> list[AuditEvent]:
         rows = self.conn.execute("SELECT * FROM audit_events ORDER BY id").fetchall()
         return [_load(AuditEvent, r) for r in rows]
+
+    def verify_chain(self) -> ChainVerification:
+        """Walk the log and report the first broken link, if any.
+
+        Three ways an entry can fail, checked in the order they would show up:
+        its sequence number is not where it should be, its own hash no longer
+        matches its contents, or its recorded predecessor is not the entry that
+        actually precedes it. Any single edited row trips at least one.
+
+        An empty log verifies clean — there is nothing to have been altered.
+        """
+        rows = self.conn.execute("SELECT * FROM audit_events ORDER BY seq").fetchall()
+        expected_previous = GENESIS_HASH
+
+        for position, row in enumerate(rows, start=1):
+            event = _load(AuditEvent, row)
+
+            if event.seq != position:
+                return ChainVerification(
+                    ok=False, checked=position - 1, broken_at=event.seq,
+                    reason=(
+                        f"sequence is not contiguous: expected {position},"
+                        f" found {event.seq} (an entry was removed or reordered)"
+                    ),
+                )
+            if event.prev_hash != expected_previous:
+                return ChainVerification(
+                    ok=False, checked=position - 1, broken_at=event.seq,
+                    reason=(
+                        "recorded predecessor does not match the entry before it:"
+                        f" expected {expected_previous[:16]},"
+                        f" found {event.prev_hash[:16]}"
+                    ),
+                )
+            recomputed = compute_entry_hash(event)
+            if recomputed != event.entry_hash:
+                return ChainVerification(
+                    ok=False, checked=position - 1, broken_at=event.seq,
+                    reason=(
+                        "entry contents do not match its hash:"
+                        f" stored {event.entry_hash[:16]},"
+                        f" recomputed {recomputed[:16]} (this entry was altered)"
+                    ),
+                )
+            expected_previous = event.entry_hash
+
+        return ChainVerification(ok=True, checked=len(rows))
 
     def read_for(self, entity_type: str, entity_id: str) -> list[AuditEvent]:
         rows = self.conn.execute(

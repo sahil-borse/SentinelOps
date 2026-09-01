@@ -67,7 +67,9 @@ CREATE TABLE IF NOT EXISTS compliance_exceptions (
 CREATE TABLE IF NOT EXISTS audit_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, actor TEXT NOT NULL,
     owner TEXT NOT NULL, action TEXT NOT NULL, entity_type TEXT NOT NULL,
-    entity_id TEXT NOT NULL, detail TEXT NOT NULL);
+    entity_id TEXT NOT NULL, detail TEXT NOT NULL, seq INTEGER NOT NULL UNIQUE,
+    prev_hash TEXT NOT NULL, entry_hash TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS audit_events_seq ON audit_events (seq);
 -- Evidence is write-once. The repository exposes no update, and the database
 -- refuses one regardless of who is asking: evidence that can be edited after
 -- the fact is not evidence. A re-submission is a new row, never a rewrite.
