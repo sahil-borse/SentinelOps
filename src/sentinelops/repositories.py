@@ -10,8 +10,10 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, fields
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from .entities import (
@@ -181,6 +183,47 @@ class WriteOnceRepository:
 GENESIS_HASH = "0" * 64
 
 
+class _Clock:
+    """A clock that advances a little with every entry it stamps."""
+
+    def __init__(self, start: datetime, step_seconds: float) -> None:
+        self.now = start
+        self.step = timedelta(seconds=step_seconds)
+
+    def tick(self) -> datetime:
+        stamped, self.now = self.now, self.now + self.step
+        return stamped
+
+
+_CLOCK: ContextVar[_Clock | None] = ContextVar("sentinelops_clock", default=None)
+
+
+@contextmanager
+def simulated_clock(when: datetime, *, step_seconds: float = 1.0):
+    """Stamp audit entries with a simulated date rather than wall-clock time.
+
+    A year of scheduled cycles runs here in about three seconds, so without this
+    every entry in the trail carries today's date and the audit log's own
+    chronology — the thing an audit log exists for — becomes unusable. Inside
+    this block, entries are stamped from the cycle's date instead.
+
+    The clock advances one second per entry so a batch sorts readably; a real
+    deployment running nightly would use the wall clock and this would never be
+    entered. Nothing outside a simulation should call it, and the pack's method
+    note says the corpus is generated.
+    """
+    token = _CLOCK.set(_Clock(when, step_seconds))
+    try:
+        yield
+    finally:
+        _CLOCK.reset(token)
+
+
+def _stamp() -> datetime:
+    clock = _CLOCK.get()
+    return clock.tick() if clock is not None else datetime.now()
+
+
 def canonical_payload(event: AuditEvent) -> str:
     """The bytes an entry's hash is taken over.
 
@@ -265,7 +308,7 @@ class AuditLog:
         ).fetchone()
         event = AuditEvent(
             id=None,
-            ts=ts or datetime.now(),
+            ts=ts or _stamp(),
             actor=actor,  # type: ignore[arg-type]
             owner=owner,
             action=action,

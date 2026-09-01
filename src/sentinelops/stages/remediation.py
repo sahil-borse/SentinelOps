@@ -106,6 +106,20 @@ def reassess(
     year: int = 2026,
 ) -> ReassessmentResult:
     """Re-check one instance against its remediation evidence, on demand."""
+    from ..repositories import simulated_clock
+
+    with simulated_clock(datetime.combine(as_of, datetime.min.time().replace(hour=6))):
+        return _reassess(conn, check_instance_id, as_of, client=client, year=year)
+
+
+def _reassess(
+    conn,
+    check_instance_id: str,
+    as_of: date,
+    *,
+    client=None,
+    year: int = 2026,
+) -> ReassessmentResult:
     from ..repositories import repositories
     from .prescreen import _write_finding as write_rule_finding
 

@@ -1,6 +1,6 @@
 # SentinelOps — evaluation results
 
-Generated 2026-09-02 00:32 · corpus seed `20260831` ·
+Generated 2026-09-02 01:45 · corpus seed `20260831` ·
 fingerprint `7e7ee16b4e1eebd9` · 15 scheduled cycles
 
 > **These runs used `FakeModelClient`, not a language model.** The stub is a
@@ -17,7 +17,7 @@ fingerprint `7e7ee16b4e1eebd9` · 15 scheduled cycles
 
 | Metric | Manual (simulated) | SentinelOps | Difference |
 |---|---|---|---|
-| Missed-check rate | 17.2% (59/343) | 0.0% (0/343) | +17.2% |
+| Missed-check rate | 17.2% (59/343) | 0.0% (0/342) | +17.2% |
 | Verdict disagreement, identical evidence | 100.0% | 0.0% | structural |
 | Time to detection, median days | 102 | 13.0 | 89 days sooner |
 | Gap-detection precision | 82.1% | 95.5% | - |
@@ -25,7 +25,7 @@ fingerprint `7e7ee16b4e1eebd9` · 15 scheduled cycles
 | False-positive rate | 5.8% | 1.6% | - |
 | Resolved with zero model calls | n/a | 41.1% | - |
 | Tokens per audit cycle | 216,146 | 147,791 | 1.5x fewer |
-| Actions raised / resolved | n/a | 154 / 6 | MTTR 35.3 days |
+| Actions raised / resolved | n/a | 154 / 7 | MTTR 24.1 days |
 
 ---
 
@@ -36,8 +36,8 @@ fingerprint `7e7ee16b4e1eebd9` · 15 scheduled cycles
 The statement's first named pain: checks "dependent on teams remembering". A check
 is *missed* when it was due and nothing ever looked at it.
 
-The automated figure is a fact about the run: 343 instances came
-due across 15 cycles and 343 were examined.
+The automated figure is a fact about the run: 342 instances came
+due across 15 cycles and 342 were examined.
 It is 0.0% because applicability and scheduling are
 deterministic — a check cannot fail to be raised because nobody remembered it.
 
@@ -179,16 +179,16 @@ responds correctly to prompt size. They are still an approximation of a real
 tokenizer's output. Exact token and cost figures need the real provider; the
 *ratio* is the durable part.
 
-### 7. Actions raised vs resolved — 154 / 6
+### 7. Actions raised vs resolved — 154 / 7
 
 |  | count |
 |---|---|
 | Raised | 154 |
-| Resolved | 6 |
-| Still open | 148 |
-| Escalated | 141 |
-| Resolution rate | 3.9% |
-| Mean days to resolution | 35.3 |
+| Resolved | 7 |
+| Still open | 147 |
+| Escalated | 140 |
+| Resolution rate | 4.5% |
+| Mean days to resolution | 24.1 |
 
 The resolution rate is low because the corpus contains remediation evidence for
 only 6 of the failures — the rest are left open on purpose, so the
@@ -253,5 +253,5 @@ simulation seed (4242). The corpus fingerprint
 `7e7ee16b4e1eebd9` pins the exact evidence these numbers were
 measured on; if it changes, they were measured on something else.
 
-Audit chain over the whole run: **OK - 2458 entries, chain intact**
-(2,458 events).
+Audit chain over the whole run: **OK - 2466 entries, chain intact**
+(2,466 events).

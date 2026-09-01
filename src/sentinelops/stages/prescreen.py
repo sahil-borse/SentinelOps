@@ -245,12 +245,23 @@ def _write_finding(
         action="finding_recorded",
         entity_type="Finding",
         entity_id=finding.id,
+        # The trail carries the citation *text*, not a count of citations. An
+        # auditor reading the log alone has to be able to see what was quoted;
+        # "3 spans were cited" is not evidence of anything.
         detail={
             "check_instance_id": instance.id,
+            "control_id": instance.control_id,
+            "process_area_id": instance.process_area_id,
+            "period": instance.period,
             "verdict": verdict,
+            "confidence": confidence,
+            "rationale": rationale,
+            "cited_spans": [s[:300] for s in finding.cited_spans],
+            "gaps": finding.gaps,
+            "recommended_action": finding.recommended_action,
+            "needs_human_review": needs_human_review,
             "decided_by": decided_by,
             "model_calls": 0,
-            "cited_spans": len(finding.cited_spans),
             "carried_forward_from": carried_forward_from,
         },
     )
@@ -301,6 +312,13 @@ def run(conn, as_of: date, *, year: int = 2026) -> PrescreenReport:
     Returns the report; the instances named in `to_assess` are the only ones
     S3 will ever be asked about.
     """
+    from ..repositories import simulated_clock
+
+    with simulated_clock(datetime.combine(as_of, datetime.min.time().replace(hour=3))):
+        return _run(conn, as_of, year=year)
+
+
+def _run(conn, as_of: date, *, year: int = 2026) -> PrescreenReport:
     from ..repositories import repositories
 
     repo = repositories(conn)

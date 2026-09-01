@@ -94,6 +94,7 @@ class FlagReport:
     )
     actions_raised: list[str] = field(default_factory=list)
     actions_escalated: list[str] = field(default_factory=list)
+    actions_resolved_by_waiver: list[str] = field(default_factory=list)
 
 
 def overdue_multiplier(days_overdue: int) -> float:
@@ -282,6 +283,13 @@ def resolve(
 
 def run(conn, as_of: date) -> FlagReport:
     """Flag everything decided, raise the work, and chase what is late."""
+    from ..repositories import simulated_clock
+
+    with simulated_clock(datetime.combine(as_of, datetime.min.time().replace(hour=5))):
+        return _run(conn, as_of)
+
+
+def _run(conn, as_of: date) -> FlagReport:
     from ..repositories import repositories
 
     repo = repositories(conn)
@@ -363,6 +371,7 @@ def run(conn, as_of: date) -> FlagReport:
         report.flags.append(flag.id)
         report.by_category["exception"] += 1
         report.by_band[flag.severity_band] += 1
+        _close_out_waived(repo, instance, flag, as_of, report)
 
     for exception in sorted(repo["exceptions"].list(), key=lambda e: e.id):
         if exception.status != "expired":
@@ -402,11 +411,52 @@ def run(conn, as_of: date) -> FlagReport:
             "flags_raised": len(report.flags),
             "actions_raised": len(report.actions_raised),
             "actions_escalated": len(report.actions_escalated),
+            "actions_resolved_by_waiver": len(report.actions_resolved_by_waiver),
             **{f"category_{k}": v for k, v in report.by_category.items()},
             **{f"band_{k}": v for k, v in report.by_band.items()},
         },
     )
     return report
+
+
+def _close_out_waived(
+    repo, instance: CheckInstance, exception_flag: Flag, as_of: date,
+    report: FlagReport,
+) -> None:
+    """A waiver settles whatever the failure had already set in motion.
+
+    The gap or overdue flag closes and the action resolves, because the work
+    they were chasing is no longer owed. The *finding* is untouched: the
+    non-compliance was real when it was recorded, and a waiver excuses an
+    obligation rather than rewriting history.
+    """
+    for flag in repo["flags"].list(check_instance_id=instance.id):
+        if flag.category == "exception" or flag.status != "open":
+            continue
+        flag.status = "closed"
+        repo["flags"].update(flag)
+        repo["audit"].append(
+            actor="system",
+            owner=instance.owner_name,
+            action="flag_closed",
+            entity_type="Flag",
+            entity_id=flag.id,
+            detail={
+                "closed_by": exception_flag.id,
+                "reason": "the obligation was waived under an approved deviation",
+                "category": flag.category,
+            },
+        )
+
+    action = repo["actions"].get(f"ACT-{instance.id.removeprefix('CHK-')}")
+    if action is not None and action.status not in ("resolved",):
+        resolve(
+            repo, action,
+            f"Closed without remediation: the obligation was waived "
+            f"({exception_flag.id}). The finding it arose from stands.",
+            as_of, owner=instance.owner_name,
+        )
+        report.actions_resolved_by_waiver.append(action.id)
 
 
 def _escalate_actions(repo, as_of: date, report: FlagReport) -> None:

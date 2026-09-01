@@ -373,3 +373,176 @@ def test_the_flag_module_cannot_reach_a_model():
 
     src = Path(__file__).resolve().parents[1] / "src" / "sentinelops"
     assert "llm" not in _code_only(src / "stages" / "flag.py")
+
+
+# --- a waiver that arrives after the failure was already recorded ----------
+
+def test_a_waiver_after_the_fact_excuses_an_already_assessed_failure(conn, corpus):
+    """The case the audit pack exposed.
+
+    S2 closes an overdue check as `no_evidence` and marks it assessed, which is
+    terminal. A waiver granted a cycle later used to reach nothing at all, so an
+    approved deviation for an outstanding item excused precisely nothing.
+    """
+    seed_database(conn, corpus)
+    repo = repositories(conn)
+    target = "CHK-CRYPTO-KEY-HR-2026-Q1"
+
+    for month in (1, 2, 3, 4):
+        as_of = date(2026, month, 28)
+        run_cycle(conn, as_of)
+        prescreen(conn, as_of)
+        flag_run(conn, as_of)
+
+    # by April the check is closed as a failure and the work is raised
+    assert repo["instances"].get(target).status == "assessed"
+    finding = repo["findings"].list(check_instance_id=target)[0]
+    assert finding.verdict == "insufficient_evidence"
+    assert repo["actions"].get("ACT-CRYPTO-KEY-HR-2026-Q1").status == "assigned"
+
+    # EXC-004 is in force from 11 May
+    run_cycle(conn, date(2026, 5, 28))
+    flag_run(conn, date(2026, 5, 28))
+
+    assert repo["instances"].get(target).status == "waived"
+
+
+def test_the_waiver_leaves_the_finding_standing(conn, corpus):
+    """A waiver excuses an obligation; it does not rewrite what was found."""
+    seed_database(conn, corpus)
+    repo = repositories(conn)
+    for month in (1, 2, 3, 4, 5):
+        as_of = date(2026, month, 28)
+        run_cycle(conn, as_of)
+        prescreen(conn, as_of)
+        flag_run(conn, as_of)
+
+    findings = repo["findings"].list(check_instance_id="CHK-CRYPTO-KEY-HR-2026-Q1")
+    assert len(findings) == 1, "no new finding is invented by a waiver"
+    assert findings[0].verdict == "insufficient_evidence"
+    assert findings[0].supersedes_finding_id is None
+
+
+def test_the_waiver_closes_the_flag_and_resolves_the_action(conn, corpus):
+    seed_database(conn, corpus)
+    repo = repositories(conn)
+    for month in (1, 2, 3, 4, 5):
+        as_of = date(2026, month, 28)
+        run_cycle(conn, as_of)
+        prescreen(conn, as_of)
+        report = flag_run(conn, as_of)
+
+    target = "CHK-CRYPTO-KEY-HR-2026-Q1"
+    flags = {f.category: f for f in repo["flags"].list(check_instance_id=target)}
+    assert flags["overdue"].status == "closed"
+    assert flags["exception"].status == "open"
+
+    action = repo["actions"].get("ACT-CRYPTO-KEY-HR-2026-Q1")
+    assert action.status == "resolved"
+    assert "waived" in action.resolution_note
+    assert "the finding it arose from stands" in action.resolution_note.lower()
+    assert report.actions_resolved_by_waiver == [action.id]
+
+
+def test_the_waiver_records_who_approved_it_on_the_transition(conn, corpus):
+    seed_database(conn, corpus)
+    repo = repositories(conn)
+    for month in (1, 2, 3, 4, 5):
+        as_of = date(2026, month, 28)
+        run_cycle(conn, as_of)
+        prescreen(conn, as_of)
+        flag_run(conn, as_of)
+
+    event = [
+        e for e in repo["audit"].read_for("CheckInstance", "CHK-CRYPTO-KEY-HR-2026-Q1")
+        if e.action == "check_instance_waived"
+    ][0]
+    assert event.detail["exception_id"] == "EXC-004"
+    assert event.detail["approved_by"] == "Chief Information Security Officer"
+    assert event.detail["excused_verdict"] == "insufficient_evidence"
+    assert event.detail["excused_finding_id"]
+
+
+def test_a_compliant_check_is_never_waived(conn, corpus):
+    """There is nothing to excuse about a check that passed."""
+    seed_database(conn, corpus)
+    repo = repositories(conn)
+    for month in range(1, 13):
+        as_of = date(2026, month, 28)
+        run_cycle(conn, as_of)
+        prescreen(conn, as_of)
+        flag_run(conn, as_of)
+
+    findings = {f.check_instance_id: f for f in repo["findings"].list()}
+    for instance in repo["instances"].list():
+        if instance.status == "waived":
+            finding = findings.get(instance.id)
+            assert finding is None or finding.verdict != "compliant"
+
+
+def test_waiving_is_idempotent_across_cycles(conn, corpus):
+    seed_database(conn, corpus)
+    repo = repositories(conn)
+    for month in range(1, 13):
+        as_of = date(2026, month, 28)
+        run_cycle(conn, as_of)
+        prescreen(conn, as_of)
+        flag_run(conn, as_of)
+
+    events = [
+        e for e in repo["audit"].read_for("CheckInstance", "CHK-CRYPTO-KEY-HR-2026-Q1")
+        if e.action == "check_instance_waived"
+    ]
+    assert len(events) == 1
+
+
+# --- the audit trail carries simulated dates, not wall-clock ---------------
+
+def test_events_are_stamped_with_the_cycle_date_not_today(conn, corpus):
+    """Otherwise the audit log's own chronology is unusable."""
+    from datetime import datetime
+
+    seed_database(conn, corpus)
+    run_cycle(conn, date(2026, 3, 28))
+    prescreen(conn, date(2026, 3, 28))
+    flag_run(conn, date(2026, 3, 28))
+
+    stamps = [
+        e.ts for e in repositories(conn)["audit"].read_all()
+        if e.action != "exception_registered" and e.action != "corpus_seeded"
+    ]
+    assert stamps
+    assert all(s.date() == date(2026, 3, 28) for s in stamps)
+    assert all(s.year == 2026 for s in stamps)
+    assert max(stamps) < datetime(2026, 3, 29)
+
+
+def test_the_trail_sorts_chronologically_within_a_run(conn, corpus):
+    seed_database(conn, corpus)
+    for month in (1, 2, 3):
+        as_of = date(2026, month, 28)
+        run_cycle(conn, as_of)
+        prescreen(conn, as_of)
+        flag_run(conn, as_of)
+
+    events = repositories(conn)["audit"].read_all()
+    stamps = [e.ts for e in events]
+    assert stamps == sorted(stamps), "sequence order and time order agree"
+    assert stamps[0].date() < stamps[-1].date()
+
+
+def test_the_clock_is_restored_when_a_cycle_fails(conn, corpus):
+    """A leaked context variable would silently misdate every later entry."""
+    import pytest as _pytest
+
+    from sentinelops.repositories import _CLOCK
+
+    seed_database(conn, corpus)
+    with _pytest.raises(ValueError):
+        run_cycle(conn, date(2026, 3, 28), trigger="not-a-trigger")
+    assert _CLOCK.get() is None
+
+    repositories(conn)["audit"].append(
+        actor="system", owner="o", action="a", entity_type="E", entity_id="1"
+    )
+    assert repositories(conn)["audit"].read_all()[-1].ts.year >= 2026

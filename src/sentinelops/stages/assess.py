@@ -242,8 +242,16 @@ def _finding(
         entity_id=finding.id,
         detail={
             "check_instance_id": instance.id,
+            "control_id": instance.control_id,
+            "process_area_id": instance.process_area_id,
+            "period": instance.period,
             "verdict": verdict,
             "confidence": confidence,
+            "rationale": rationale,
+            # the quoted text itself, so the trail alone shows what was relied on
+            "cited_spans": [s[:300] for s in cited_spans],
+            "gaps": gaps,
+            "recommended_action": recommended_action,
             "decided_by": decided_by,
             "model": model,
             "model_calls": 0 if decided_by.startswith("s3_") is False else 1,
@@ -359,6 +367,20 @@ def run(
     limit: int = RETRIEVE_LIMIT,
 ) -> AssessmentReport:
     """Assess exactly the instances S2 could not decide. One call each."""
+    from ..repositories import simulated_clock
+
+    with simulated_clock(datetime.combine(as_of, datetime.min.time().replace(hour=4))):
+        return _run(conn, instance_ids, as_of, client=client, limit=limit)
+
+
+def _run(
+    conn,
+    instance_ids: list[str],
+    as_of: date,
+    *,
+    client=None,
+    limit: int = RETRIEVE_LIMIT,
+) -> AssessmentReport:
     from ..repositories import repositories
 
     repo = repositories(conn)

@@ -419,15 +419,42 @@ def seed_database(conn, corpus: Corpus) -> None:
     Areas, controls, exceptions and submissions only. CheckInstances, Evidence,
     Findings and Actions are produced by the pipeline, never by the generator.
     """
-    from ..repositories import repositories
+    from datetime import date as _date
+
+    from ..repositories import repositories, simulated_clock
 
     repo = repositories(conn)
+    # The register exists from the first day of the year under audit.
+    with simulated_clock(datetime.combine(_date(corpus.year, 1, 1), time(0, 0))):
+        _seed(repo, corpus)
+
+
+def _seed(repo, corpus: Corpus) -> None:
     for area in corpus.areas:
         repo["areas"].add(area)
     for control in corpus.controls:
         repo["controls"].add(control)
     for exception in corpus.exceptions:
         repo["exceptions"].add(exception)
+        # Granting a waiver is a decision somebody made and has to answer for.
+        # Recorded here so the audit pack can show the register without reading
+        # the exceptions table.
+        repo["audit"].append(
+            actor="user",
+            owner=exception.approved_by,
+            action="exception_registered",
+            entity_type="ComplianceException",
+            entity_id=exception.id,
+            detail={
+                "control_id": exception.control_id,
+                "process_area_id": exception.process_area_id,
+                "rationale": exception.rationale,
+                "approved_by": exception.approved_by,
+                "granted_at": exception.granted_at.isoformat(),
+                "expires_at": exception.expires_at.isoformat(),
+                "status_at_registration": exception.status,
+            },
+        )
     for submission in corpus.submissions:
         repo["submissions"].add(submission)
     repo["audit"].append(

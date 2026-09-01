@@ -29,7 +29,7 @@ notification is a logged payload, and that is the whole integration story.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from ..entities import CheckInstance, ComplianceException, ControlDefinition, ProcessArea
@@ -291,10 +291,13 @@ def _generate(
                     entity_id=identifier,
                     detail={
                         "control_id": control_id,
+                        "control_title": control.title,
                         "process_area_id": area_id,
+                        "area_name": area.name,
                         "period": period.label,
                         "due_date": instance.due_date.isoformat(),
                         "frequency": control.frequency,
+                        "assigned_team": area.owner_team,
                     },
                 )
                 notification = Notification(
@@ -366,9 +369,72 @@ def _advance_states(
 
     already = _escalated_levels(repo)
 
+    # A waiver can arrive after a check has already been closed as failed. The
+    # non-compliance was real and stays on the record; the obligation is then
+    # formally excused. Without this an approved deviation granted for an
+    # outstanding item excuses nothing, because S2 has already settled it.
+    current_findings = {}
+    for finding in repo["findings"].list():
+        held = current_findings.get(finding.check_instance_id)
+        if held is None or finding.id > held.id:
+            current_findings[finding.check_instance_id] = finding
+
     for instance in sorted(instances.values(), key=lambda i: i.id):
-        if instance.status in SETTLED:
+        if instance.status == "waived":
             continue
+        if instance.status == "assessed":
+            finding = current_findings.get(instance.id)
+            if finding is None or finding.verdict == "compliant":
+                continue
+            period_end = period_ends[(instance.control_id, instance.period)]
+            excuse = next(
+                (
+                    e
+                    for e in exceptions
+                    if waives(
+                        e, instance.control_id, instance.process_area_id,
+                        period_end, as_of,
+                    )
+                ),
+                None,
+            )
+            if excuse is None:
+                continue
+            area = areas[instance.process_area_id]
+            _transition(
+                repo, instance, "waived", "system", area.owner_name,
+                {
+                    "exception_id": excuse.id,
+                    "approved_by": excuse.approved_by,
+                    "granted_at": excuse.granted_at.isoformat(),
+                    "expires_at": excuse.expires_at.isoformat(),
+                    "excused_finding_id": finding.id,
+                    "excused_verdict": finding.verdict,
+                    "as_of": as_of.isoformat(),
+                    "note": (
+                        "the finding stands on the record; the obligation it "
+                        "reported is formally excused"
+                    ),
+                },
+            )
+            result.transitions.append((instance.id, "waived", excuse.id))
+            notification = Notification(
+                kind="waived",
+                to_team=instance.assigned_team,
+                to_owner=instance.owner_name,
+                entity_type="CheckInstance",
+                entity_id=instance.id,
+                subject=(
+                    f"{instance.control_id} for {instance.process_area_id}"
+                    f" ({instance.period}) — {finding.verdict} excused under"
+                    f" {excuse.id}, approved by {excuse.approved_by}"
+                ),
+                as_of=as_of,
+            )
+            result.notifications.append(notification)
+            _log(repo, notification)
+            continue
+
         area = areas[instance.process_area_id]
         key = (instance.control_id, instance.process_area_id, instance.period)
         period_end = period_ends[(instance.control_id, instance.period)]
@@ -527,7 +593,28 @@ def run_cycle(
     actor: str = "system",
     policy: SchedulePolicy = DEFAULT_POLICY,
 ) -> CycleResult:
-    """The entire scheduling cycle. The only entry point there is."""
+    """The entire scheduling cycle. The only entry point there is.
+
+    Everything the cycle records is stamped with the cycle's own date rather
+    than the wall clock of a machine replaying a simulated year in seconds —
+    see `repositories.simulated_clock`.
+    """
+    from ..repositories import simulated_clock
+
+    with simulated_clock(datetime.combine(as_of, time(2, 0))):
+        return _run_cycle(
+            conn, as_of, trigger=trigger, actor=actor, policy=policy
+        )
+
+
+def _run_cycle(
+    conn,
+    as_of: date,
+    *,
+    trigger: str,
+    actor: str,
+    policy: SchedulePolicy,
+) -> CycleResult:
     if trigger not in TRIGGERS:
         raise ValueError(f"unknown trigger {trigger!r}; expected one of {TRIGGERS}")
 
