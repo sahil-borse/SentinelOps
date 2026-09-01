@@ -25,7 +25,7 @@ from ..entities import (
 )
 from .areas import PROCESS_AREAS
 from .calendar import SIMULATED_TODAY, due_date, periods_for
-from .controls import CONTROL_SPECS, ControlSpec
+from .controls import CONTROL_SPECS, SPECS_BY_ID, ControlSpec
 from .documents import (
     EXPECTED_VERDICT,
     QUALITIES,
@@ -344,6 +344,43 @@ def _add_remediations(corpus: Corpus, rng: Random) -> None:
         )
 
 
+def _exception_truth(
+    exception: ComplianceException, corpus: Corpus
+) -> dict[str, Any]:
+    """What an exception is expected to do, so slice 8 can score it.
+
+    An exception in force when a period opens suppresses it and no check is ever
+    raised. One granted after the obligation is already open cannot suppress
+    anything — it waives the open check instead. Recording which is which here
+    means the harness scores against a stated expectation rather than against
+    whatever the pipeline happened to do.
+    """
+    spec = SPECS_BY_ID.get(exception.control_id)
+    suppressed = (
+        [
+            period.label
+            for period in periods_for(spec.frequency, corpus.year)
+            if suppresses(exception, exception.control_id, exception.process_area_id,
+                          period.end)
+        ]
+        if spec
+        else []
+    )
+    return {
+        "id": exception.id,
+        "control_id": exception.control_id,
+        "process_area_id": exception.process_area_id,
+        "status": exception.status,
+        "approved_by": exception.approved_by,
+        "granted_at": exception.granted_at.isoformat(),
+        "expires_at": exception.expires_at.isoformat(),
+        "expected_effect": "suppression" if suppressed else (
+            "none" if exception.status == "revoked" else "waiver"
+        ),
+        "suppresses_periods": suppressed,
+    }
+
+
 def truth_payload(corpus: Corpus) -> dict[str, Any]:
     """Everything the slice-8 harness needs to score the pipeline."""
     kinds: dict[str, int] = {}
@@ -364,17 +401,7 @@ def truth_payload(corpus: Corpus) -> dict[str, Any]:
             "by_defect_kind": dict(sorted(kinds.items())),
         },
         "consistency_pairs": [dict(CONSISTENCY_PAIR)],
-        "exceptions": [
-            {
-                "id": e.id,
-                "control_id": e.control_id,
-                "process_area_id": e.process_area_id,
-                "status": e.status,
-                "granted_at": e.granted_at.isoformat(),
-                "expires_at": e.expires_at.isoformat(),
-            }
-            for e in corpus.exceptions
-        ],
+        "exceptions": [_exception_truth(e, corpus) for e in corpus.exceptions],
         "fingerprint": corpus.fingerprint(),
         "rows": corpus.truth_rows,
     }

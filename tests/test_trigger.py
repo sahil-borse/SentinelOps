@@ -302,10 +302,13 @@ def test_a_lapsed_exception_raises_its_own_alert(seeded):
 
 def test_the_lapse_alert_is_routed_to_the_owning_team(seeded):
     result = run_cycle(seeded, date(2026, 7, 5))
-    alerts = [n for n in result.notifications if n.kind == "exception_expired"]
-    assert len(alerts) == 1
-    assert alerts[0].to_team == "Marketing"
-    assert alerts[0].entity_id == "EXC-002"
+    alerts = {
+        n.entity_id: n for n in result.notifications if n.kind == "exception_expired"
+    }
+    # both EXC-002 and EXC-004 have lapsed by this date, each to its own team
+    assert set(alerts) == {"EXC-002", "EXC-004"}
+    assert alerts["EXC-002"].to_team == "Marketing"
+    assert alerts["EXC-004"].to_team == "People Operations"
 
 
 def test_the_lapse_alert_fires_once_not_every_cycle(seeded):
@@ -539,3 +542,120 @@ def test_the_trigger_module_cannot_reach_a_model():
 
     src = Path(__file__).resolve().parents[1] / "src" / "sentinelops"
     assert "llm" not in _code_only(src / "stages" / "trigger.py")
+
+
+# --- the waiver the corpus now reaches on its own --------------------------
+
+def _run_the_year(conn):
+    """Advance the calendar month by month, as the demo does.
+
+    A month-end sweep rather than mid-month: a quarterly check due on the 15th
+    has then already been marked overdue by the time the next cycle sees it, so
+    the waiver lands on an instance that is visibly lapsed rather than merely
+    open.
+    """
+    for month in range(1, 13):
+        run_cycle(conn, date(2026, month, 28))
+    return run_cycle(conn, END_OF_STORY)
+
+
+def test_waived_is_reachable_from_the_corpus_alone(seeded):
+    """No purpose-built fixture: EXC-004 is part of the seeded data."""
+    _run_the_year(seeded)
+    waived = [
+        i for i in repositories(seeded)["instances"].list() if i.status == "waived"
+    ]
+    assert [i.id for i in waived] == ["CHK-CRYPTO-KEY-HR-2026-Q1"]
+
+
+def test_the_waiver_reaches_only_the_obligation_it_names(seeded):
+    _run_the_year(seeded)
+    repo = repositories(seeded)
+    assert repo["instances"].get("CHK-CRYPTO-KEY-HR-2026-Q1").status == "waived"
+    for quarter in ("Q2", "Q3", "Q4"):
+        instance = repo["instances"].get(f"CHK-CRYPTO-KEY-HR-2026-{quarter}")
+        assert instance is not None, "later quarters must still be raised"
+        assert instance.status != "waived"
+
+
+def test_the_waived_instance_was_open_and_overdue_first(seeded):
+    """It is a waiver, not a suppression: the check existed and had lapsed."""
+    repo = repositories(seeded)
+    run_cycle(seeded, date(2026, 4, 15))
+    assert repo["instances"].get("CHK-CRYPTO-KEY-HR-2026-Q1").status == "pending"
+
+    run_cycle(seeded, date(2026, 4, 30))
+    assert repo["instances"].get("CHK-CRYPTO-KEY-HR-2026-Q1").status == "overdue"
+
+    run_cycle(seeded, date(2026, 5, 15))  # inside EXC-004's window
+    assert repo["instances"].get("CHK-CRYPTO-KEY-HR-2026-Q1").status == "waived"
+
+
+def test_the_waiver_records_who_approved_it(seeded):
+    _run_the_year(seeded)
+    events = [
+        e
+        for e in repositories(seeded)["audit"].read_for(
+            "CheckInstance", "CHK-CRYPTO-KEY-HR-2026-Q1"
+        )
+        if e.action == "check_instance_waived"
+    ]
+    assert len(events) == 1
+    detail = events[0].detail
+    assert detail["exception_id"] == "EXC-004"
+    assert detail["approved_by"] == "Chief Information Security Officer"
+    assert detail["from_status"] == "overdue"
+    assert detail["was_overdue_by_days"] > 0
+
+
+def test_the_waiver_is_routed_like_any_other_alert(seeded):
+    result = None
+    for as_of in (date(2026, 4, 30), date(2026, 5, 15)):
+        result = run_cycle(seeded, as_of)
+    waivers = [n for n in result.notifications if n.kind == "waived"]
+    assert len(waivers) == 1
+    assert waivers[0].to_team == "People Operations"
+    assert "EXC-004" in waivers[0].subject
+
+
+def test_a_waived_instance_stays_waived_after_the_exception_lapses(seeded):
+    """The obligation was discharged while the waiver held."""
+    run_cycle(seeded, date(2026, 5, 15))
+    run_cycle(seeded, date(2026, 8, 1))  # EXC-004 expired 2026-06-19
+    repo = repositories(seeded)
+    assert repo["exceptions"].get("EXC-004").status == "expired"
+    assert repo["instances"].get("CHK-CRYPTO-KEY-HR-2026-Q1").status == "waived"
+
+
+def test_an_expired_waiver_excuses_nothing_new(seeded):
+    """A single cycle after the window leaves the check overdue, not waived."""
+    run_cycle(seeded, END_OF_STORY)
+    instance = repositories(seeded)["instances"].get("CHK-CRYPTO-KEY-HR-2026-Q1")
+    assert instance.status == "overdue"
+
+
+def test_the_fourth_exception_suppresses_no_generation(seeded):
+    _run_the_year(seeded)
+    ids = {i.id for i in repositories(seeded)["instances"].list()}
+    for quarter in ("Q1", "Q2", "Q3", "Q4"):
+        assert f"CHK-CRYPTO-KEY-HR-2026-{quarter}" in ids
+    assert len(ids) == 343
+
+
+def test_waives_and_covers_are_complementary():
+    """Suppression and waiver must never both claim the same obligation."""
+    from sentinelops.stages.trigger import covers, waives
+
+    exception = ComplianceException(
+        id="X", control_id="C", process_area_id="A", rationale="r",
+        approved_by="b", granted_at=date(2026, 5, 11), expires_at=date(2026, 6, 19),
+        status="active",
+    )
+    q1_end, q2_end = date(2026, 3, 31), date(2026, 6, 30)
+    as_of = date(2026, 5, 20)
+
+    assert not covers(exception, "C", "A", q1_end)   # granted after Q1 closed
+    assert waives(exception, "C", "A", q1_end, as_of)
+
+    assert not covers(exception, "C", "A", q2_end)   # Q2 outlives the waiver
+    assert not waives(exception, "C", "A", q2_end, as_of)

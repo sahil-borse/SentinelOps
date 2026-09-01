@@ -2,6 +2,7 @@
 
 import json
 from collections import Counter
+from datetime import timedelta
 from random import Random
 
 import pytest
@@ -289,16 +290,57 @@ def test_the_consistency_pair_is_recorded_in_the_truth_file(corpus):
 
 # --- exceptions ------------------------------------------------------------
 
-def test_three_exceptions_with_one_expiring_mid_year(corpus):
-    assert len(corpus.exceptions) == 3
+def test_four_exceptions_covering_every_path(corpus):
+    assert len(corpus.exceptions) == 4
     assert {e.status for e in corpus.exceptions} == {"active", "revoked"}
-    mid_year = [
-        e
-        for e in COMPLIANCE_EXCEPTIONS
-        if e.status == "active" and e.expires_at.month <= 7
+    by_id = {e.id: e for e in corpus.exceptions}
+
+    # EXC-002 is the lapse that returns a control to the schedule mid-year.
+    assert by_id["EXC-002"].expires_at.isoformat() == "2026-06-30"
+    assert by_id["EXC-002"].status == "active"
+    # EXC-003 was withdrawn rather than served out.
+    assert by_id["EXC-003"].status == "revoked"
+
+
+def test_every_exception_is_fully_documented(corpus):
+    for exception in corpus.exceptions:
+        assert exception.approved_by
+        assert len(exception.rationale) > 40
+        assert exception.granted_at < exception.expires_at
+
+
+def test_the_fourth_exception_arrives_after_its_obligation_is_overdue(corpus):
+    """EXC-004 waives rather than suppresses, so it must miss every period end."""
+    exception = next(e for e in corpus.exceptions if e.id == "EXC-004")
+    assert exception.control_id == "CTRL-CRYPTO-KEY"
+    assert exception.process_area_id == "AREA-HR"
+    assert exception.granted_at.isoformat() == "2026-05-11"
+    assert exception.expires_at.isoformat() == "2026-06-19"
+
+    spec = SPECS_BY_ID[exception.control_id]
+    # granted after 2026-Q1 fell due (31 Mar close + 15 days grace = 15 Apr)
+    q1 = next(p for p in periods_for(spec.frequency, 2026) if p.label == "2026-Q1")
+    assert exception.granted_at > q1.end + timedelta(days=spec.grace_days)
+    # and its window contains no period end, so it cannot suppress anything
+    for period in periods_for(spec.frequency, 2026):
+        assert not (exception.granted_at <= period.end <= exception.expires_at)
+
+
+def test_the_fourth_exception_leaves_the_corpus_untouched(corpus):
+    """Adding it must move no evidence and suppress no period."""
+    suppressed = [
+        r for r in corpus.truth_rows if r["defect_kind"] == "exception_suppressed"
     ]
-    assert len(mid_year) == 1
-    assert mid_year[0].expires_at.isoformat() == "2026-06-30"
+    assert len(suppressed) == 3
+    assert {r["control_id"] for r in suppressed} == {
+        "CTRL-BCP-TEST", "CTRL-THIRD-PARTY-ACCESS"
+    }
+    assert len(corpus.submissions) == 316
+    assert len(corpus.truth_rows) == 352
+
+    # the obligation it waives is genuinely unevidenced
+    filed = {(s.control_id, s.process_area_id, s.period) for s in corpus.submissions}
+    assert ("CTRL-CRYPTO-KEY", "AREA-HR", "2026-Q1") not in filed
 
 
 def test_an_active_exception_suppresses_its_periods_and_the_lapse_restores_them(corpus):

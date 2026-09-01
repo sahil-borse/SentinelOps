@@ -31,28 +31,53 @@
   },
   "exceptions": [
     {
+      "approved_by": "Group Risk Committee",
       "control_id": "CTRL-BCP-TEST",
+      "expected_effect": "suppression",
       "expires_at": "2026-12-31",
       "granted_at": "2026-01-15",
       "id": "EXC-001",
       "process_area_id": "AREA-PLATFORM",
-      "status": "active"
+      "status": "active",
+      "suppresses_periods": [
+        "2026"
+      ]
     },
     {
+      "approved_by": "Chief Procurement Officer",
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
+      "expected_effect": "suppression",
       "expires_at": "2026-06-30",
       "granted_at": "2026-01-01",
       "id": "EXC-002",
       "process_area_id": "AREA-MKTG",
-      "status": "active"
+      "status": "active",
+      "suppresses_periods": [
+        "2026-Q1",
+        "2026-Q2"
+      ]
     },
     {
+      "approved_by": "Finance Control Board",
       "control_id": "CTRL-INCIDENT-PM",
+      "expected_effect": "none",
       "expires_at": "2026-12-31",
       "granted_at": "2026-02-01",
       "id": "EXC-003",
       "process_area_id": "AREA-FINREP",
-      "status": "revoked"
+      "status": "revoked",
+      "suppresses_periods": []
+    },
+    {
+      "approved_by": "Chief Information Security Officer",
+      "control_id": "CTRL-CRYPTO-KEY",
+      "expected_effect": "waiver",
+      "expires_at": "2026-06-19",
+      "granted_at": "2026-05-11",
+      "id": "EXC-004",
+      "process_area_id": "AREA-HR",
+      "status": "active",
+      "suppresses_periods": []
     }
   ],
   "fingerprint": "8ef5f63c47512bdc3e09ed95a4f8e1b619107518526fa8c5ea0f638aa97290b7",

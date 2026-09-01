@@ -143,6 +143,41 @@ def covers(
     )
 
 
+def waives(
+    exception: ComplianceException,
+    control_id: str,
+    area_id: str,
+    period_end: date,
+    as_of: date,
+) -> bool:
+    """Whether an approved deviation excuses an obligation that is already open.
+
+    The complement of `covers`. Suppression answers "should this check ever have
+    been raised?" and is settled at generation; a waiver answers "is this open
+    check excused right now?" and is settled every cycle. EXC-004 is the case
+    that needs it: granted on 11 May, weeks after the 2026-Q1 rotation fell due
+    on 15 April, so there is nothing to suppress — the check is already sitting
+    there, overdue.
+
+    An exception waives a period when the exception is in force today
+    (`granted_at <= as_of <= expires_at`) and the period closed no later than
+    the exception's own expiry. A period ending after the waiver lapses is not
+    excused by it: that obligation outlives the deviation.
+
+    Once expired the exception waives nothing further, which is deliberate — a
+    temporary deviation running out means the control is due again, exactly as
+    it does for EXC-002. Instances already waived stay waived: that period's
+    obligation was formally discharged while the waiver held.
+    """
+    return (
+        exception.status == "active"
+        and exception.control_id == control_id
+        and exception.process_area_id == area_id
+        and period_end <= exception.expires_at
+        and exception.granted_at <= as_of <= exception.expires_at
+    )
+
+
 def _log(repo, notification: Notification, actor: str = "system") -> None:
     repo["audit"].append(
         actor=actor,
@@ -338,19 +373,49 @@ def _advance_states(
         key = (instance.control_id, instance.process_area_id, instance.period)
         period_end = period_ends[(instance.control_id, instance.period)]
 
-        excuse = next(
-            (
-                e
-                for e in exceptions
-                if covers(e, instance.control_id, instance.process_area_id, period_end)
-            ),
-            None,
-        )
-        if excuse is not None:
-            _transition(repo, instance, "waived", "system", area.owner_name,
-                        {"exception_id": excuse.id, "as_of": as_of.isoformat()})
-            result.transitions.append((instance.id, "waived", excuse.id))
-            continue
+        if instance.status in ("pending", "overdue"):
+            excuse = next(
+                (
+                    e
+                    for e in exceptions
+                    if waives(
+                        e, instance.control_id, instance.process_area_id,
+                        period_end, as_of,
+                    )
+                ),
+                None,
+            )
+            if excuse is not None:
+                _transition(
+                    repo, instance, "waived", "system", area.owner_name,
+                    {
+                        "exception_id": excuse.id,
+                        "approved_by": excuse.approved_by,
+                        "granted_at": excuse.granted_at.isoformat(),
+                        "expires_at": excuse.expires_at.isoformat(),
+                        "was_overdue_by_days": max(
+                            (as_of - instance.due_date).days, 0
+                        ),
+                        "as_of": as_of.isoformat(),
+                    },
+                )
+                result.transitions.append((instance.id, "waived", excuse.id))
+                notification = Notification(
+                    kind="waived",
+                    to_team=instance.assigned_team,
+                    to_owner=instance.owner_name,
+                    entity_type="CheckInstance",
+                    entity_id=instance.id,
+                    subject=(
+                        f"{instance.control_id} for {instance.process_area_id}"
+                        f" ({instance.period}) is waived under {excuse.id},"
+                        f" approved by {excuse.approved_by}"
+                    ),
+                    as_of=as_of,
+                )
+                result.notifications.append(notification)
+                _log(repo, notification)
+                continue
 
         submission = arrived.get(key)
         if submission is not None and instance.status != "submitted":
