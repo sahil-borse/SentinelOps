@@ -49,6 +49,16 @@ CREATE TABLE IF NOT EXISTS actions (
     title TEXT NOT NULL, owner_team TEXT NOT NULL, owner_name TEXT NOT NULL,
     due_date TEXT NOT NULL, status TEXT NOT NULL, resolution_note TEXT,
     resolved_at TEXT);
+CREATE TABLE IF NOT EXISTS flags (
+    id TEXT PRIMARY KEY, category TEXT NOT NULL,
+    control_id TEXT NOT NULL REFERENCES control_definitions(id),
+    process_area_id TEXT NOT NULL REFERENCES process_areas(id),
+    severity REAL NOT NULL, severity_band TEXT NOT NULL, rationale TEXT NOT NULL,
+    raised_at TEXT NOT NULL, owner_team TEXT NOT NULL, owner_name TEXT NOT NULL,
+    check_instance_id TEXT REFERENCES check_instances(id),
+    finding_id TEXT REFERENCES findings(id),
+    exception_id TEXT REFERENCES compliance_exceptions(id),
+    status TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS compliance_exceptions (
     id TEXT PRIMARY KEY, control_id TEXT NOT NULL REFERENCES control_definitions(id),
     process_area_id TEXT NOT NULL REFERENCES process_areas(id),

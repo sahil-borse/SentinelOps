@@ -23,6 +23,7 @@ ActionStatus = Literal[
     "escalated",
 ]
 ExceptionStatus = Literal["active", "expired", "revoked"]
+FlagCategory = Literal["gap", "exception", "overdue"]
 Actor = Literal["system", "ai", "user"]
 Frequency = Literal["monthly", "quarterly", "annual"]
 
@@ -142,6 +143,35 @@ class Action:
     status: ActionStatus = "raised"
     resolution_note: str | None = None
     resolved_at: datetime | None = None
+
+
+@dataclass
+class Flag:
+    """One of the statement's three categories, stamped at a point in time.
+
+    Stored rather than derived because severity depends on how long something
+    has been outstanding: recomputing it next week would silently give a
+    different answer, and a flag raised at severity 4.5 needs to still read 4.5
+    when somebody asks why it was escalated.
+
+    `check_instance_id` is set for gap and overdue flags; `exception_id` for a
+    flag raised against a deviation itself. Exactly one of the two.
+    """
+
+    id: str
+    category: FlagCategory
+    control_id: str
+    process_area_id: str
+    severity: float
+    severity_band: str
+    rationale: str
+    raised_at: datetime
+    owner_team: str
+    owner_name: str
+    check_instance_id: str | None = None
+    finding_id: str | None = None
+    exception_id: str | None = None
+    status: str = "open"
 
 
 @dataclass

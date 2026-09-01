@@ -144,3 +144,66 @@ def print_finding(finding, evidence=None) -> None:
         for line in evidence.content.splitlines():
             hit = any(span in line for span in finding.cited_spans)
             print(f"    {'>>' if hit else '  '} {line}")
+
+
+def print_lifecycle(conn, check_instance_id: str) -> None:
+    """One check's whole story, in the order it happened.
+
+    Reads only the audit trail plus the records it points at — which is the
+    claim worth making on camera: the timeline is not assembled by a reporting
+    job, it is what the system wrote down as it went.
+    """
+    from ..repositories import repositories
+
+    repo = repositories(conn)
+    instance = repo["instances"].get(check_instance_id)
+    findings = sorted(
+        repo["findings"].list(check_instance_id=check_instance_id), key=lambda f: f.id
+    )
+    actions = [
+        a for a in repo["actions"].list()
+        if a.id == f"ACT-{check_instance_id.removeprefix('CHK-')}"
+    ]
+
+    _rule(f"LIFECYCLE — {check_instance_id}")
+    print(f"  {instance.control_id} / {instance.process_area_id} / {instance.period}")
+    print(f"  due {instance.due_date}   owner {instance.assigned_team}"
+          f" / {instance.owner_name}   status {instance.status}")
+
+    events = list(repo["audit"].read_for("CheckInstance", check_instance_id))
+    for finding in findings:
+        events += repo["audit"].read_for("Finding", finding.id)
+    for action in actions:
+        events += repo["audit"].read_for("Action", action.id)
+    for flag in repo["flags"].list(check_instance_id=check_instance_id):
+        events += repo["audit"].read_for("Flag", flag.id)
+    for evidence in repo["evidence"].list(check_instance_id=check_instance_id):
+        events += repo["audit"].read_for("Evidence", evidence.id)
+
+    print()
+    print(f"  {'#':>3}  {'actor':<6} {'owner':<22} {'event':<28} detail")
+    print(f"  {'-' * 3}  {'-' * 6} {'-' * 22} {'-' * 28} {'-' * 40}")
+    for number, event in enumerate(sorted(events, key=lambda e: e.id), start=1):
+        print(f"  {number:>3}  {event.actor:<6} {event.owner:<22}"
+              f" {event.action:<28} {_summarise(event)}")
+
+    print()
+    for finding in findings:
+        marker = "superseded by " + (
+            next((f.id for f in findings if f.supersedes_finding_id == finding.id), "-")
+        ) if any(f.supersedes_finding_id == finding.id for f in findings) else "current"
+        print(f"  {finding.id:<44} {finding.verdict:<22} {marker}")
+    for action in actions:
+        print(f"  {action.id:<44} {action.status:<22} due {action.due_date}")
+        if action.resolution_note:
+            print(f"      resolution: {action.resolution_note}")
+
+
+def _summarise(event) -> str:
+    d = event.detail
+    for key in ("subject", "rationale", "resolution_note", "verdict", "category",
+                "superseded_by", "to_status", "evidence_id", "due_date"):
+        if key in d:
+            value = str(d[key])
+            return value if len(value) <= 60 else value[:57] + "..."
+    return ", ".join(f"{k}={v}" for k, v in list(d.items())[:2])[:60]

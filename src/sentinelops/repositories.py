@@ -15,6 +15,7 @@ from typing import Any
 
 from .entities import (
     Action,
+    Flag,
     AuditEvent,
     CheckInstance,
     ComplianceException,
@@ -37,6 +38,7 @@ _SPEC: dict[type, tuple[str, dict[str, str]]] = {
     Finding: ("findings", {"cited_spans": "json", "gaps": "json",
               "needs_human_review": "bool", "assessed_at": "datetime"}),
     Action: ("actions", {"due_date": "date", "resolved_at": "datetime"}),
+    Flag: ("flags", {"raised_at": "datetime"}),
     ComplianceException: ("compliance_exceptions", {"granted_at": "date",
                           "expires_at": "date"}),
     AuditEvent: ("audit_events", {"ts": "datetime", "detail": "json"}),
@@ -238,6 +240,7 @@ def repositories(conn: sqlite3.Connection) -> dict[str, Any]:
         "submissions": Repository(conn, EvidenceSubmission),
         "findings": Repository(conn, Finding),
         "actions": Repository(conn, Action),
+        "flags": Repository(conn, Flag),
         "exceptions": Repository(conn, ComplianceException),
         "audit": AuditLog(conn),
     }
