@@ -87,9 +87,17 @@ CREATE TABLE IF NOT EXISTS token_usage (
 """
 
 
-def connect(path: str | Path = "sentinelops.db") -> sqlite3.Connection:
-    """Open a connection with the schema applied and foreign keys on."""
-    conn = sqlite3.connect(str(path))
+def connect(
+    path: str | Path = "sentinelops.db", *, check_same_thread: bool = True
+) -> sqlite3.Connection:
+    """Open a connection with the schema applied and foreign keys on.
+
+    `check_same_thread=False` is for the dashboard only: Streamlit reruns the
+    script on a different thread each interaction, and a cached connection would
+    otherwise raise. It is safe there because the demo is single-user and SQLite
+    serialises writes itself; nothing else should pass it.
+    """
+    conn = sqlite3.connect(str(path), check_same_thread=check_same_thread)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
