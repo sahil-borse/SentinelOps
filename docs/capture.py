@@ -24,7 +24,12 @@ VIEWPORT = {"width": 1600, "height": 1000}
 
 #: Streamlit repaints asynchronously; this is how long we let it settle before
 #: the shutter. Generous, because a slow frame makes a misleading screenshot.
-SETTLE_MS = 2500
+#:
+#: Raised from 2.5s when the corpus grew to eighteen months and eleven units: a
+#: single cycle now creates, screens and assesses several hundred instances, and
+#: the old wait photographed the page mid-repaint — which produced screenshots
+#: of a walkthrough that had not actually advanced.
+SETTLE_MS = 9000
 
 
 def settle(page, ms: int = SETTLE_MS) -> None:
@@ -38,16 +43,57 @@ def shoot(page, name: str, *, full: bool = False) -> None:
     print(f"  captured {path.name}")
 
 
+#: How long to keep looking for a button before giving up on it.
+#:
+#: Polling rather than sleeping, because the two things that make a button
+#: appear late — seeding an eighteen-month corpus on first load, and running a
+#: cycle over five hundred instances — take a length of time that depends on the
+#: machine. A fixed sleep is either too short on a slow one or wastes minutes on
+#: a fast one, and when it is too short the shutter fires on a page that has not
+#: advanced, which is worse than failing.
+WAIT_MS = 90_000
+POLL_MS = 500
+
+
+def wait_for_button(page, label: str, *, timeout_ms: int = WAIT_MS):
+    """Return the button once it exists, or None once we stop waiting."""
+    waited = 0
+    while waited < timeout_ms:
+        button = page.get_by_role("button", name=label, exact=True).first
+        if button.count() > 0:
+            return button
+        page.wait_for_timeout(POLL_MS)
+        waited += POLL_MS
+    return None
+
+
 def click(page, label: str, *, settle_ms: int = SETTLE_MS) -> bool:
-    """Press a button by its visible text. Returns False if it is not there."""
-    button = page.get_by_role("button", name=label, exact=True).first
-    if button.count() == 0:
+    """Press a button by its visible text. Returns False if it never appears."""
+    button = wait_for_button(page, label)
+    if button is None:
         print(f"  ! no button labelled {label!r}")
         return False
     button.scroll_into_view_if_needed()
     button.click()
     settle(page, settle_ms)
     return True
+
+
+def reset(page) -> None:
+    """Start from a fresh demo, so the walkthrough is at step one.
+
+    The database persists between runs, so without this the second capture
+    photographs a walkthrough somebody already finished — and the guide then
+    shows step 3 with step 5's data in it.
+    """
+    button = wait_for_button(page, "Start over")
+    if button is None:
+        print("  ! no Start over button; the shots may not begin at step one")
+        return
+    button.click()
+    settle(page, SETTLE_MS)
+    if wait_for_button(page, "Raise the checks that are due") is None:
+        print("  ! the walkthrough did not return to step one")
 
 
 def main() -> int:
@@ -57,6 +103,7 @@ def main() -> int:
         page.goto(URL, wait_until="networkidle")
         settle(page, 6000)
 
+        reset(page)
         shoot(page, "01-first-open", full=True)
 
         print("step 1 — raise the checks")
@@ -100,6 +147,35 @@ def main() -> int:
         page.get_by_text("Submit evidence", exact=True).first.scroll_into_view_if_needed()
         settle(page, 1200)
         shoot(page, "11-upload-and-actions")
+
+        print("patterns across the portfolio")
+        page.get_by_text(
+            "Patterns across the portfolio", exact=True
+        ).first.scroll_into_view_if_needed()
+        settle(page, 1200)
+        shoot(page, "14-recurrence-and-brief")
+
+        # The brief is one model call, so it is taken on demand rather than
+        # rendered on load — press the button the way a reader would.
+        try:
+            page.get_by_role("button", name="Write the brief").first.click()
+            settle(page, 3000)
+            page.get_by_text(
+                "Patterns across the portfolio", exact=True
+            ).first.scroll_into_view_if_needed()
+            settle(page, 1200)
+            shoot(page, "15-prioritisation-brief")
+        except Exception as error:  # pragma: no cover - capture is best effort
+            print(f"  brief not captured: {error}")
+
+        try:
+            page.get_by_text(
+                "Portfolio analytics", exact=False
+            ).first.click()
+            settle(page, 2500)
+            shoot(page, "16-portfolio-analytics")
+        except Exception as error:  # pragma: no cover
+            print(f"  analytics not captured: {error}")
 
         page.get_by_text("Audit", exact=True).last.scroll_into_view_if_needed()
         settle(page, 1200)

@@ -105,6 +105,190 @@ _FINDING_ROW = re.compile(
 )
 
 
+#: Keyword rules standing in for a classifier. Ordered: the first that matches
+#: wins, so the more specific phrasings come before the general ones. This is a
+#: stub and it is wrong on descriptions that avoid its vocabulary — which is the
+#: entire reason section 2 justifies a model here, and why
+#: `tests/test_intelligence.py` measures the stub against the corpus rather than
+#: assuming it.
+_CATEGORY_RULES: list[tuple[str, str]] = [
+    ("access_not_revoked",
+     r"(still held|retained active|remained enabled|remained active|not revoked|"
+     r"left active|revocation .{0,20}(pending|not)|still enabled|"
+     r"never revoked|past the engagement)"),
+    ("third_party_due_diligence",
+     r"(due diligence|supplier|vendor|questionnaire|third[- ]party)"),
+    ("change_not_authorised",
+     r"(without the .{0,30}(review|approval)|not authorised|unapproved|"
+     r"who approved|release gate|went to production)"),
+    ("training_not_completed",
+     r"(training|awareness)"),
+    ("data_retention_or_privacy",
+     r"(retention period|personal data|privacy|dpia|data protection impact)"),
+    ("documentation_out_of_date",
+     r"(manual|procedure|controlled document|out of date|versions behind|"
+     r"past their review date)"),
+    ("access_not_recertified",
+     r"(recertif|access review|privileged account)"),
+    ("evidence_not_retained",
+     r"(could not produce|cannot be relied|no record of|logs for|"
+     r"cannot be produced|not evidenced|never approved|sat in draft)"),
+    ("periodic_review_overdue",
+     r"(last reviewed|no entry in the risk register|risk register|"
+     r"was not reviewed|reconcil)"),
+    ("control_not_performed",
+     r"(was not (carried out|performed|run)|appears to have been signed off|"
+     r"never)"),
+]
+
+_SEVERE = re.compile(
+    r"(privileged|production|settlement|payments|customer|personal data|"
+    r"critical|used after|still enabled|four accounts)",
+    re.IGNORECASE,
+)
+_MILD = re.compile(
+    r"(no discrepancy|no unapproved|was identified|observation|"
+    r"worth fixing|no exception was raised)",
+    re.IGNORECASE,
+)
+
+
+def _canned_triage(prompt: str) -> dict:
+    """Pick a category by keyword and a severity by tone. Heuristics, not a model."""
+    description = prompt.split("description:\n", 1)[-1]
+    lowered = description.lower()
+    category = "control_not_performed"
+    matched = ""
+    for name, pattern in _CATEGORY_RULES:
+        found = re.search(pattern, lowered)
+        if found:
+            category, matched = name, found.group(0)
+            break
+
+    if _MILD.search(description):
+        severity = "Observation"
+    elif _SEVERE.search(description):
+        severity = "Major"
+    else:
+        severity = "Minor"
+    return {
+        "category": category,
+        "suggested_severity": severity,
+        "confidence": 0.82 if matched else 0.45,
+        "rationale": (
+            f"Classified as {category} on the phrase {matched!r}."
+            if matched else
+            "No distinguishing phrase found; defaulted to control_not_performed."
+        ),
+    }
+
+
+#: Two descriptions recur when they share enough distinctive vocabulary. A real
+#: model reads meaning; this counts words, and the tests say how often that is
+#: the same answer.
+_STOPWORDS = frozenset(
+    "the a an and or of to in for was were is are be been at on by with that "
+    "this it its their they them not no had has have from as but which who "
+    "when out up over into than then there here all any some each".split()
+)
+
+
+def _keywords(text: str) -> set[str]:
+    return {
+        w for w in re.findall(r"[a-z]{4,}", text.lower()) if w not in _STOPWORDS
+    }
+
+
+def _canned_recurrence(prompt: str) -> dict:
+    blocks = prompt.split("EARLIER FINDINGS", 1)
+    if len(blocks) < 2 or "(none)" in blocks[1]:
+        return {"recurrences": []}
+    target = _keywords(blocks[0])
+    out = []
+    for line in blocks[1].splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("- "):
+            continue
+        ident = stripped[2:].split(" |", 1)[0].strip()
+        # the description is the indented line that follows
+        out.append((ident, stripped))
+    matches = []
+    lines = blocks[1].splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith("- "):
+            continue
+        ident = stripped[2:].split(" |", 1)[0].strip()
+        description = lines[index + 1] if index + 1 < len(lines) else ""
+        shared = target & _keywords(description)
+        if len(shared) >= 4:
+            matches.append({
+                "finding_id": ident,
+                "confidence": min(0.5 + 0.1 * len(shared), 0.95),
+                "reason": (
+                    "Both describe the same failure; shared terms: "
+                    + ", ".join(sorted(shared)[:5])
+                ),
+            })
+    matches.sort(key=lambda m: -m["confidence"])
+    return {"recurrences": matches[:3]}
+
+
+def _canned_brief(facts: str) -> dict:
+    """A brief that cites, because an uncited one is withheld."""
+    rows = []
+    lines = facts.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith("- ") or " | " not in stripped:
+            continue
+        parts = [p.strip() for p in stripped[2:].split(" | ")]
+        rows.append(parts)
+    if not rows:
+        return {"brief": "", "cited_finding_ids": []}
+
+    def field(row, marker, default=""):
+        for part in row:
+            if marker in part:
+                return part
+        return default
+
+    ids = [r[0] for r in rows]
+    top = ids[:3]
+    open_count = next(
+        (l.split(":", 1)[1].strip() for l in lines if l.startswith("open findings:")),
+        str(len(ids)),
+    )
+    units = {}
+    for row in rows:
+        if len(row) > 1:
+            units.setdefault(row[1], []).append(row[0])
+    heaviest, heaviest_ids = max(units.items(), key=lambda kv: len(kv[1]))
+
+    sentences = [
+        f"{open_count} findings are open at this cycle.",
+        f"The most urgent are [{', '.join(top)}], which combine the highest "
+        f"severities with the longest time past target.",
+    ]
+    if len(heaviest_ids) > 1:
+        sentences.append(
+            f"{heaviest} carries {len(heaviest_ids)} of the ranked items "
+            f"[{', '.join(heaviest_ids[:4])}], which is where attention would "
+            f"go furthest."
+        )
+    chased = [r[0] for r in rows if "chased" in " ".join(r) and
+              any(p.startswith("chased") and not p.endswith("0x") for p in r)]
+    if chased:
+        sentences.append(
+            f"Several have been chased more than once without evidence arriving "
+            f"[{', '.join(chased[:4])}]."
+        )
+    return {
+        "brief": " ".join(sentences),
+        "cited_finding_ids": ids,
+    }
+
+
 def _canned_report(facts: str) -> dict:
     """A summary paragraph that cites, because an uncited one is rejected.
 
@@ -249,8 +433,15 @@ class FakeModelClient:
 
     def complete(self, request: LlmRequest) -> LlmResponse:
         user_text = "\n".join(m["content"] for m in request.messages)
-        if user_text.lstrip().startswith("AUDIT\n"):
+        head = user_text.lstrip()
+        if head.startswith("AUDIT\n"):
             payload = _canned_report(user_text)
+        elif head.startswith("CATEGORIES\n"):
+            payload = _canned_triage(user_text)
+        elif head.startswith("FINDING\n"):
+            payload = _canned_recurrence(user_text)
+        elif head.startswith("PORTFOLIO\n"):
+            payload = _canned_brief(user_text)
         else:
             payload = _canned(_evidence_text(user_text))
         if request.response_schema:

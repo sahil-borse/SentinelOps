@@ -203,6 +203,28 @@ BAND_TO_SEVERITY: dict[str, str] = {
 }
 
 
+def describe(control: ControlDefinition, instance: CheckInstance,
+             assessment: Assessment) -> str:
+    """What this finding is, in words that distinguish it from the next one.
+
+    An earlier version used the assessment's rationale alone. That reads fine on
+    one finding and is useless across a portfolio: the rationale is generated
+    from a small set of phrasings, so eighty findings shared four sentences
+    between them. Anything that compares findings — recurrence detection above
+    all — was then comparing boilerplate and matching everything to everything.
+
+    So the description names the obligation, the period and the specific gaps
+    the assessment recorded. That is what an auditor would have written, and it
+    is what makes two findings comparable or not.
+    """
+    gaps = [g for g in assessment.gaps if g]
+    detail = " ".join(gaps) if gaps else assessment.rationale
+    return (
+        f"{control.title} — {instance.period}, {instance.assigned_team}. "
+        f"{detail}".strip()
+    )
+
+
 def raise_finding(
     repo,
     people,
@@ -211,6 +233,7 @@ def raise_finding(
     assessment: Assessment,
     unit,
     as_of: date,
+    control: ControlDefinition | None = None,
 ) -> Finding:
     """Raise the finding, suggest a severity, and let the auditor decide it.
 
@@ -227,7 +250,8 @@ def raise_finding(
         source="activity_assessment",
         auditable_unit_id=instance.auditable_unit_id,
         description=(
-            assessment.rationale
+            describe(control, instance, assessment) if control is not None
+            else assessment.rationale
             or f"{flag.category} on {instance.control_id} for {instance.period}"
         ),
         raised_by=ASSESSOR_IDENTITY,
@@ -361,7 +385,8 @@ def _run(conn, as_of: date) -> FlagReport:
         finding_id = f"FND-{instance.id.removeprefix('CHK-')}"
         if finding_id not in raised_already:
             raised = raise_finding(
-                repo, people, flag, instance, finding, area, as_of
+                repo, people, flag, instance, finding, area, as_of,
+                control=control,
             )
             raised_already.add(raised.id)
             report.findings_raised.append(raised.id)

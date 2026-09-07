@@ -17,6 +17,46 @@ from typing import Any
 from sentinelops.llm.providers.fake import MODEL as FAKE_MODEL
 
 
+
+def _recurrence_lines(analytics: dict) -> str:
+    """One line per recurring set. Sets, not pairs — A->B->C happened three
+    times in one continuing story, and calling it two links overstates it."""
+    recurring = analytics["recurring"]
+    if not recurring["count"]:
+        return "_None detected in this run._"
+
+    lines = ["| category | links | units | furthest apart |", "|---|---|---|---|"]
+    for name, row in recurring["by_category"].items():
+        lines.append(
+            f"| {name.replace('_', ' ')} | {row['links']} | {row['units']} | "
+            f"{row['max_months_apart']} months |"
+        )
+    if recurring["longest_chains"]:
+        lines.append("")
+        lines.append(
+            "**On the link counts.** `control_not_performed` is "
+            "over-represented, and the reason is the stub rather than the "
+            "corpus: `FakeModelClient` compares descriptions by shared "
+            "vocabulary, so two findings naming the same control in different "
+            "units look alike to it whether or not the same thing went wrong. "
+            "A real model reads the sentence. Treat the *shape* — recurrence "
+            "exists, it crosses units, it spans months — as the durable claim, "
+            "and the per-category counts as a stub artefact until the real "
+            "provider has run."
+        )
+        lines.append("")
+        lines.append("The chains that read as one continuing problem:")
+        lines.append("")
+        for chain in recurring["longest_chains"]:
+            lines.append(
+                f"- **{(chain['category'] or 'unclassified').replace('_', ' ')}** "
+                f"— {' → '.join(chain['findings'])} across "
+                f"{', '.join(chain['units'])}, spanning "
+                f"{chain['months_spanned']} months"
+            )
+    return "\n".join(lines)
+
+
 def _pct(value: float) -> str:
     return f"{value:.1%}"
 
@@ -80,6 +120,7 @@ def write_results(evaluation, corpus, truth: dict[str, Any], path: Path) -> str:
     result = b["result"]
     is_fake = result.model == "FakeModelClient" or FAKE_MODEL in str(result.model)
     counts = truth["counts"]["by_defect_kind"]
+    a = p["analytics"]
 
     model_warning = (
         "> **These runs used `FakeModelClient`, not a language model.** The stub is a\n"
@@ -281,6 +322,54 @@ a team.
 deterministic and all from the severity table. That is the number a human would
 have had to produce by remembering; it is not a measure of accuracy, and it is
 not claimed as one.
+
+---
+
+## Section 8 — the portfolio, computed
+
+Every figure below is arithmetic over rows the pipeline wrote. No model is
+involved in any of it, which is asserted two ways in `tests/test_analytics.py`:
+statically, that `analytics.py` imports nothing from `llm/`, and at runtime, by
+rigging `get_client` to raise and computing the whole portfolio anyway.
+
+{_table([
+    ("Open / closed",
+     f"{a['open_vs_closed']['open']} / {a['open_vs_closed']['closed']} "
+     f"({a['open_vs_closed']['closed_pct']}% closed)"),
+    ("Severity mix",
+     ", ".join(f"{k} {v}" for k, v in a['severity_mix']['overall'].items())),
+    ("Overdue, aged",
+     ", ".join(f"{k}: {v}" for k, v in a['overdue_ageing']['buckets'].items())),
+    ("Oldest overdue", f"{a['overdue_ageing']['oldest_days']} days"),
+    ("Recurrence links",
+     f"{a['recurring']['count']} across "
+     f"{a['recurring']['findings_involved']} findings, "
+     f"{a['recurring']['spanning_units']} of them between different units"),
+    ("Needing more than one evidence round", str(a['effort']['multi_round'])),
+    ("Most rounds on one finding", str(a['effort']['worst_rounds'])),
+    ("Needing more than one reminder", str(a['effort']['multi_reminder'])),
+    ("Median days to closure",
+     str(a['closure']['overall']['median_days'])),
+    ("Due in the next 30 days",
+     f"{len(a['upcoming']['audits'])} audit(s), "
+     f"{a['upcoming']['activity_total']} activities"),
+], ("", "value"))}
+
+**Findings by audit kind.** The two scheduled things section 1 keeps apart, kept
+apart in the data:
+
+{_table([
+    (kind.replace("_", " "), str(count))
+    for kind, count in a['by_dimension']['by_audit_kind'].items()
+], ("source", "findings"))}
+
+**Recurrence is the figure that needed eighteen months.** Over a single quarter
+there is nothing to find. Each link below is one finding that resembles an
+earlier one in a different unit or period — the stakeholder's own definition of
+recurring, and the comparison nobody holds in their head across a year and a
+half:
+
+{_recurrence_lines(a)}
 
 ---
 

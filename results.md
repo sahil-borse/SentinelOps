@@ -1,6 +1,6 @@
 # SentinelOps — evaluation results
 
-Generated 2026-09-07 23:28 · corpus seed `20260831` ·
+Generated 2026-09-08 01:36 · corpus seed `20260831` ·
 fingerprint `836a9a93fc6ba563` · 21 scheduled cycles
 
 > **These runs used `FakeModelClient`, not a language model.** The stub is a
@@ -207,6 +207,64 @@ not claimed as one.
 
 ---
 
+## Section 8 — the portfolio, computed
+
+Every figure below is arithmetic over rows the pipeline wrote. No model is
+involved in any of it, which is asserted two ways in `tests/test_analytics.py`:
+statically, that `analytics.py` imports nothing from `llm/`, and at runtime, by
+rigging `get_client` to raise and computing the whole portfolio anyway.
+
+|  | value |
+|---|---|
+| Open / closed | 21 / 73 (77.7% closed) |
+| Severity mix | Major 31, Minor 40, Observation 23 |
+| Overdue, aged | 0-30: 0, 31-60: 0, 61-90: 0, 90+: 21 |
+| Oldest overdue | 596 days |
+| Recurrence links | 132 across 79 findings, 104 of them between different units |
+| Needing more than one evidence round | 16 |
+| Most rounds on one finding | 3 |
+| Needing more than one reminder | 31 |
+| Median days to closure | 31 |
+| Due in the next 30 days | 1 audit(s), 0 activities |
+
+**Findings by audit kind.** The two scheduled things section 1 keeps apart, kept
+apart in the data:
+
+| source | findings |
+|---|---|
+| compliance activity | 77 |
+| internal audit | 6 |
+| qarev | 4 |
+| release audit | 4 |
+| document review | 3 |
+
+**Recurrence is the figure that needed eighteen months.** Over a single quarter
+there is nothing to find. Each link below is one finding that resembles an
+earlier one in a different unit or period — the stakeholder's own definition of
+recurring, and the comparison nobody holds in their head across a year and a
+half:
+
+| category | links | units | furthest apart |
+|---|---|---|---|
+| control not performed | 91 | 10 | 13 months |
+| access not recertified | 12 | 6 | 9 months |
+| training not completed | 12 | 6 | 6 months |
+| third party due diligence | 10 | 5 | 9 months |
+| data retention or privacy | 5 | 3 | 12 months |
+| access not revoked | 2 | 2 | 7 months |
+
+**On the link counts.** `control_not_performed` is over-represented, and the reason is the stub rather than the corpus: `FakeModelClient` compares descriptions by shared vocabulary, so two findings naming the same control in different units look alike to it whether or not the same thing went wrong. A real model reads the sentence. Treat the *shape* — recurrence exists, it crosses units, it spans months — as the durable claim, and the per-category counts as a stub artefact until the real provider has run.
+
+The chains that read as one continuing problem:
+
+- **access not revoked** — FND-IA-2026-H1-01 → FND-IA-2026-H2-01 → FND-QA-2027-Q1-01 across IT Services, Payments Processing, spanning 11 months
+- **control not performed** — FND-INCIDENT-PM-ITSVC-2026-01 → FND-INCIDENT-PM-PLATFORM-2026-01 → FND-REL-2027-04-02 across IT Services, Platform Engineering, spanning 14 months
+- **control not performed** — FND-INCIDENT-PM-ITSVC-2026-01 → FND-INCIDENT-PM-PLATFORM-2026-01 → FND-INCIDENT-PM-PLATFORM-2026-02 across IT Services, Platform Engineering, spanning 1 months
+- **control not performed** — FND-INCIDENT-PM-ITSVC-2026-01 → FND-INCIDENT-PM-PLATFORM-2026-01 → FND-INCIDENT-PM-PLATFORM-2026-05 across IT Services, Platform Engineering, spanning 5 months
+- **control not performed** — FND-INCIDENT-PM-ITSVC-2026-01 → FND-INCIDENT-PM-FINREP-2026-02 → FND-CRYPTO-KEY-PAYMENTS-2026-Q2 across Financial Reporting, IT Services, Payments Processing, spanning 6 months
+
+---
+
 ## The manual baseline is a model, not a measurement
 
 Nobody ran a spreadsheet-based control programme alongside this system for a
@@ -263,5 +321,5 @@ simulation seed (4242). The corpus fingerprint
 `836a9a93fc6ba563` pins the exact evidence these numbers were
 measured on; if it changes, they were measured on something else.
 
-Audit chain over the whole run: **OK - 5122 entries, chain intact**
-(5,122 events).
+Audit chain over the whole run: **OK - 5296 entries, chain intact**
+(5,296 events).

@@ -475,9 +475,15 @@ with actions:
                 st.session_state["closure"] = {"ok": ok, "message": message}
                 st.rerun()
     elif rows:
+        role_reads = {
+            "unit_owner": "a unit owner",
+            "management": "management",
+            "pa_infosec": "PA/InfoSec",
+        }
         st.caption(
             f"Closing a finding is reserved for PA/InfoSec. "
-            f"{actor['name']} is a {actor['role'].replace('_', '/')}."
+            f"{actor['name']} is "
+            f"{role_reads.get(actor['role'], actor['role'])}."
         )
 
     # Anything drawn immediately before st.rerun() is discarded, so the result
@@ -491,6 +497,168 @@ with actions:
         with st.expander(f"{len(closed)} closed", expanded=False):
             for row in closed:
                 st.markdown(f"**{row['action']}** — {row['note']}")
+
+st.divider()
+
+# ------------------------------------------------------------- the long view --
+# The two panels that justify the pitch. Everything above this line is one
+# finding at a time; these are the things no human holds in their head across
+# eighteen months, six functions and several project teams.
+st.subheader("Patterns across the portfolio")
+pattern = st.columns([3, 2])
+
+with pattern[0]:
+    st.markdown("**This has happened before**")
+    links = service.recurrence_links(conn)
+    if not links:
+        st.info(
+            "No recurrences suggested yet. Run a cycle — findings are "
+            "classified and compared as they are raised."
+        )
+    else:
+        crossing = [r for r in links if r["crosses_units"]]
+        st.caption(
+            f"{len(links)} suggested link(s), {len(crossing)} of them between "
+            f"different units. Advisory: a link points at an earlier finding "
+            f"and merges nothing."
+        )
+        for row in links[:6]:
+            with st.container(border=True):
+                st.markdown(
+                    f"**{row['finding']}** · {row['unit']} · "
+                    f"{row['raised']}  \n"
+                    f"{view.rich(row['description'][:220])}",
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f"<span class='meta'>resembles <b>{row['prior']}</b> · "
+                    f"{row['prior_unit']} · {row['prior_raised']} · "
+                    f"{row['months_apart']} months earlier</span>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f"<span class='meta'>{view.rich(row['prior_description'][:220])}"
+                    f"</span>",
+                    unsafe_allow_html=True,
+                )
+                if row["reason"]:
+                    st.caption(row["reason"])
+
+with pattern[1]:
+    st.markdown("**Prioritisation brief**")
+    st.caption(
+        "One model call per cycle over the ranked findings and the metrics. "
+        "Advisory — it changes no state."
+    )
+    if st.button("Write the brief", use_container_width=True):
+        st.session_state["brief"] = service.brief(conn)
+        st.rerun()
+    written = st.session_state.get("brief")
+    if written is not None:
+        if written.text:
+            st.markdown(view.rich(written.text), unsafe_allow_html=True)
+            st.caption(
+                f"as of {written.as_of} · cites {len(written.cited)} finding(s) "
+                f"· {written.model_calls} model call"
+            )
+        else:
+            st.warning(
+                "The drafted brief made a statement it could not attribute to a "
+                "finding, so it was withheld. The metrics below are unaffected — "
+                "none of them came from the model."
+            )
+        metrics = written.metrics
+        st.markdown(
+            f"<span class='meta'>open {metrics['open']} · closed "
+            f"{metrics['closed']} · overdue {metrics['overdue']} · escalated "
+            f"{metrics['escalated']} · needing more than one round "
+            f"{metrics['multi_round']}</span>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("**Ageing of open findings**")
+        st.dataframe(
+            [{"Bucket (days past target)": k, "Findings": v}
+             for k, v in metrics["ageing"].items()],
+            use_container_width=True, hide_index=True, height=180,
+        )
+
+st.divider()
+
+# ---------------------------------------------------------------- analytics --
+# Section 2 lists analytics under never-AI, and this panel is arithmetic over
+# rows the pipeline already wrote. The cost meter does not move when it renders.
+with st.expander("Portfolio analytics — section 8, all deterministic", expanded=False):
+    stats = service.portfolio_analytics(conn)
+    top = st.columns(4)
+    top[0].metric("Open", stats["open_vs_closed"]["open"])
+    top[1].metric("Closed", f"{stats['open_vs_closed']['closed_pct']}%")
+    top[2].metric("Overdue", stats["overdue_ageing"]["total"])
+    top[3].metric("Recurrence links", stats["recurring"]["count"])
+
+    grid = st.columns(2)
+    with grid[0]:
+        st.markdown("**Open vs closed, per unit**")
+        st.dataframe(
+            [
+                {"Unit": unit, "Open": row["open"], "Closed": row["closed"],
+                 "Closed %": row["closed_pct"]}
+                for unit, row in stats["open_vs_closed"]["by_unit"].items()
+            ],
+            use_container_width=True, hide_index=True, height=240,
+        )
+        st.markdown("**Ageing of overdue findings**")
+        st.dataframe(
+            [{"Days past target": k, "Findings": v}
+             for k, v in stats["overdue_ageing"]["buckets"].items()],
+            use_container_width=True, hide_index=True, height=180,
+        )
+        st.markdown("**Closure performance**")
+        st.dataframe(
+            [
+                {"Severity": k, "Closed": v["closed"],
+                 "Mean days": v["mean_days"], "Median days": v["median_days"]}
+                for k, v in stats["closure"].items()
+            ],
+            use_container_width=True, hide_index=True, height=180,
+        )
+    with grid[1]:
+        st.markdown("**Open findings by month**")
+        trend = stats["trend"]
+        # Named x, or the axis reads 0,1,2,3 and a chart of open findings over
+        # time becomes a chart of nothing in particular.
+        st.line_chart(
+            [{"month": p["month"], "open": p["open"]} for p in trend],
+            x="month", y="open", height=200,
+        )
+        st.caption(
+            f"{trend[0]['month']} to {trend[-1]['month']}, replayed from raise "
+            f"and closure dates rather than sampled from today's state."
+        )
+        st.markdown("**By gap category**")
+        st.dataframe(
+            [{"Category": k.replace("_", " "), "Findings": v}
+             for k, v in stats["by_dimension"]["by_category"].items()],
+            use_container_width=True, hide_index=True, height=220,
+        )
+        st.markdown("**Evidence rounds per finding**")
+        st.dataframe(
+            [{"Rounds": k, "Findings": v}
+             for k, v in stats["effort"]["rounds"].items()],
+            use_container_width=True, hide_index=True, height=180,
+        )
+
+    st.markdown("**Due in the next 30 days**")
+    upcoming = stats["upcoming"]
+    if upcoming["audits"]:
+        for audit in upcoming["audits"]:
+            st.markdown(
+                f"- **{audit['id']}** · {audit['kind'].replace('_', ' ')} · "
+                f"in {audit['days_away']} days · {', '.join(audit['scope'])}"
+            )
+    st.caption(
+        f"{upcoming['activity_total']} compliance activities also fall due in "
+        f"the window."
+    )
 
 st.divider()
 

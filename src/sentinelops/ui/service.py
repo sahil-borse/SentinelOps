@@ -22,6 +22,7 @@ from ..repositories import repositories, simulated_clock
 from ..stages.assess import run as assess
 from ..stages.flag import run as flag_stage
 from ..stages.followup import run as followup_stage
+from ..stages import intelligence
 from ..stages.prescreen import run as prescreen
 from ..stages.remediation import reassess as reassess_instance
 from ..stages.remediation import reassess_all
@@ -49,6 +50,8 @@ class TickResult:
     findings_raised: int = 0
     reminders_sent: int = 0
     escalations: int = 0
+    classified: int = 0
+    recurrences_found: int = 0
     remediations_closed: int = 0
 
     def summary(self) -> str:
@@ -57,6 +60,8 @@ class TickResult:
             f"exception · {self.resolved_by_rule} decided by rule · "
             f"{self.assessed} assessed by model ({self.model_calls} calls) · "
             f"{self.flags} flagged · {self.findings_raised} findings raised · "
+            f"{self.classified} classified · "
+            f"{self.recurrences_found} recurrence link(s) · "
             f"{self.reminders_sent} chased · {self.escalations} escalated · "
             f"{self.remediations_closed} remediations closed"
         )
@@ -125,6 +130,18 @@ def tick(conn, as_of: date, *, client=None) -> TickResult:
     result.escalations += len(chase.escalated)
 
     result.remediations_closed = len(reassess_all(conn, as_of, client=client))
+
+    # Section 2's advisory uses, last, because nothing downstream reads them.
+    # Both are idempotent: a finding already classified is skipped, and one
+    # already linked is not re-examined, so a second tick on the same day
+    # spends nothing on either.
+    triage = intelligence.classify(conn, as_of, client=client)
+    result.classified = len(triage.classified)
+    result.model_calls += triage.model_calls
+
+    recurrence = intelligence.detect_recurrence(conn, as_of, client=client)
+    result.recurrences_found = len(recurrence.linked)
+    result.model_calls += recurrence.model_calls
     return result
 
 
@@ -311,6 +328,65 @@ def open_rounds(conn, finding_id: str) -> list[dict[str, Any]]:
         }
         for r in rounds_module.rounds_for(repositories(conn), finding_id)
     ]
+
+
+def brief(conn, *, client=None):
+    """The prioritisation brief for the current cycle. One call, advisory."""
+    from ..stages import intelligence as intel
+
+    return intel.prioritisation_brief(conn, current_date(conn), client=client)
+
+
+def recurrence_links(conn) -> list[dict[str, Any]]:
+    """Findings that resemble something raised earlier somewhere else."""
+    from .. import directory
+    from ..repositories import repositories
+
+    repo = repositories(conn)
+    people = directory.load(conn)
+    units = {u.id: u.name for u in repo["units"].list()}
+    reasons: dict[str, dict[str, str]] = {}
+    for event in repo["audit"].read_all():
+        if event.action == "recurrence_examined":
+            reasons[event.entity_id] = event.detail.get("reasons", {}) or {}
+
+    rows = []
+    for finding in repo["findings"].list():
+        for prior_id in finding.recurrence_of:
+            prior = repo["findings"].get(prior_id)
+            if prior is None:
+                continue
+            rows.append({
+                "finding": finding.id,
+                "unit": units.get(finding.auditable_unit_id, ""),
+                "raised": finding.raised_at.date(),
+                "category": finding.gap_category,
+                "description": finding.description,
+                "prior": prior.id,
+                "prior_unit": units.get(prior.auditable_unit_id, ""),
+                "prior_raised": prior.raised_at.date(),
+                "prior_description": prior.description,
+                "months_apart": max(
+                    (finding.raised_at - prior.raised_at).days // 30, 0
+                ),
+                "reason": reasons.get(finding.id, {}).get(prior_id, ""),
+                "crosses_units": (
+                    prior.auditable_unit_id != finding.auditable_unit_id
+                ),
+            })
+    return sorted(rows, key=lambda r: (-r["months_apart"], r["finding"]))
+
+
+def portfolio_analytics(conn) -> dict[str, Any]:
+    """Section 8 in one call. Deterministic — no model is involved."""
+    from datetime import date as _date
+
+    from .. import analytics
+
+    as_of = current_date(conn)
+    return analytics.portfolio(
+        conn, as_of, window=(_date(START_DATE.year, 1, 1), as_of)
+    )
 
 
 def counts(conn) -> dict[str, Any]:

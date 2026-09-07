@@ -203,8 +203,10 @@ means it is with the owner, 1 a department head, 2 Group Compliance.
 
 ![Upload and open findings](images/11-upload-and-actions.png)
 
-Every non-compliant assessment raises a **finding** against the owning unit. A
-finding is Open or Closed and nothing else. Its target date is derived from the
+Every non-compliant assessment raises a **finding** against the owning unit, and
+so does every audit — findings are children of audits, and both kinds are chased
+and closed by exactly the same machinery. A finding is Open or Closed and nothing
+else. Its target date is derived from the
 severity — three days for an urgent Major, twenty-eight for an Observation —
 and *Chased* counts how many times the owner has been reminded or sent back for
 more evidence.
@@ -212,6 +214,65 @@ more evidence.
 Owner progress (*acknowledged*, *action in progress*, *implemented*) is
 self-reported and advisory: it never closes anything. Closed findings are listed
 under the expander with the auditor who closed them and their remarks.
+
+---
+
+### Patterns across the portfolio
+
+Everything above this point on the screen is one finding at a time. This section
+is the part that is worth a system rather than a spreadsheet.
+
+![Recurrence across units and months](images/14-recurrence-and-brief.png)
+
+**This has happened before.** Every finding is classified into a gap category —
+by a model, because the auditors who wrote the descriptions share no vocabulary
+and section 1 says plainly that no standard taxonomy exists. Findings in the same
+category, in a *different unit or a different period*, are then compared, and the
+ones that describe the same underlying failure are linked.
+
+On the demo corpus this connects privileged access left with three leavers in
+Payments (March 2026), contractor accounts left active in IT Services
+(November), and a partner API credential never revoked in Payments again
+(February 2027). Three units, eleven months, and not one word in common. That
+comparison is the claim this project rests on: nobody holds it in their head.
+
+The link is **advisory**. It points at the earlier finding and merges nothing —
+both stay open on their own, with their own owners and their own target dates.
+
+Most of the work here is not the model's. Which findings are even eligible is
+decided in code — same category, different unit or period, raised earlier — and
+on the demo corpus twelve of seventeen findings have no eligible candidate at
+all, so no model call is made for them.
+
+![The prioritisation brief](images/15-prioritisation-brief.png)
+
+**Prioritisation brief.** One model call per cycle, over a ranking the code
+computed and the metrics underneath it. The ranking is deterministic on purpose:
+a model that ordered the queue would be making the prioritisation decision, and
+section 2 does not let it. It interprets the order; it does not choose it.
+
+Every claim in the brief cites the findings it rests on. If the drafted brief
+makes a statement it cannot attribute, the brief is withheld and you see the
+metrics without it — the same rule the audit report follows, and for the same
+reason: a sentence nobody can trace is a sentence nobody can check.
+
+### Portfolio analytics
+
+![Portfolio analytics](images/16-portfolio-analytics.png)
+
+Expand **Portfolio analytics** for everything in section 8 of the spec: open
+versus closed with percentages per unit, severity mix, overdue findings bucketed
+by age, findings by unit and by gap category and by audit kind, the recurrence
+rollup, the distribution of evidence rounds, closure performance by severity, the
+open-findings trend by month, and what falls due in the next thirty days.
+
+**None of it goes near a model.** That is asserted two ways in the test suite:
+statically, that `analytics.py` imports nothing from `llm/`, and at runtime, by
+rigging the provider factory to raise and computing the whole portfolio anyway.
+Watch the cost meter while you expand the panel — it does not move.
+
+The trend line is replayed from raise and closure dates rather than sampled from
+today's state, so each month shows what was actually true then.
 
 ---
 

@@ -350,13 +350,27 @@ def _code_only(path: Path) -> str:
 
 #: The stages that may spend. Every other one is rules, permanently.
 #:
-#: This is an allow-list and it is meant to be hard to add to. `assess.py` is S3.
-#: `audits.py` joined it in slice 10d because section 6 asks for a generated
-#: narrative summary — one call per audit, over structured findings, with every
-#: statement citing finding ids. Widening the list was a deliberate decision
-#: recorded here rather than a test quietly relaxed to go green; anything else
-#: added to it should come with the same paragraph.
-SPENDING_STAGES = {"assess.py", "audits.py"}
+#: This is an allow-list and it is meant to be hard to add to. Each entry is a
+#: decision recorded here rather than a test quietly relaxed to go green, and
+#: anything added to it should come with the same paragraph.
+#:
+#: `assess.py` is S3 — section 2's use 3, reading evidence against criteria.
+#:
+#: `audits.py` joined in slice 10d because section 6 asks for a generated
+#: narrative summary: one call per audit, over structured findings, with every
+#: statement citing finding ids.
+#:
+#: `intelligence.py` joined in slice 10e and carries section 2's remaining three
+#: uses — classifying a gap where no taxonomy exists, detecting recurrence
+#: across eighteen months of free text, and one prioritisation brief per cycle.
+#: They are in one module rather than three because they share a shape: they
+#: read *findings* rather than evidence, and none of them may change a status.
+#:
+#: The list stops here. Scheduling, applicability, due dates, reminder and
+#: escalation timing, status transitions, closure decisions, permission checks
+#: and analytics are named in section 2 as never-AI, and every one of them lives
+#: in a module this test still guards.
+SPENDING_STAGES = {"assess.py", "audits.py", "intelligence.py"}
 
 
 def test_only_the_spending_stages_can_reach_a_model():
@@ -388,10 +402,30 @@ def test_the_spending_stages_do_reach_a_model():
 
 def test_the_allow_list_is_small_and_named():
     """A list that grows silently stops being a control."""
-    assert SPENDING_STAGES == {"assess.py", "audits.py"}, (
+    assert SPENDING_STAGES == {"assess.py", "audits.py", "intelligence.py"}, (
         "adding a stage that spends is a decision; record it in the comment "
         "above SPENDING_STAGES and update this test on purpose"
     )
+
+
+def test_the_never_ai_stages_are_still_guarded():
+    """Section 2 names what may never use a model. These are those modules.
+
+    Named explicitly so that moving a decision into a spending module — say,
+    letting the classifier also set a due date — has to get past a test that
+    knows which stages are supposed to be rules.
+    """
+    never = {
+        "applicability.py",   # applicability
+        "trigger.py",         # scheduling, due dates
+        "followup.py",        # reminder and escalation timing, closure
+        "flag.py",            # status transitions, routing
+        "prescreen.py",       # the rules tier
+        "rounds.py",          # the review loop
+    }
+    for name in never:
+        assert name not in SPENDING_STAGES, name
+        assert (SRC / "stages" / name).exists(), f"{name} has moved or gone"
 
 
 def test_that_guard_would_actually_fire(tmp_path):

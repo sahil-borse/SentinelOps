@@ -83,6 +83,22 @@ def _require_matching_truth(corpus, truth: dict[str, Any]) -> None:
         )
 
 
+def _section_eight(conn) -> dict[str, Any]:
+    """Section 8's figures over the finished run. Deterministic, no model."""
+    from sentinelops import analytics
+    from sentinelops.stages import intelligence
+
+    as_of = CYCLE_DATES[-1]
+    # Classification and recurrence are what make "by gap category" and
+    # "recurring findings" answerable at all, so they run before the analytics
+    # rather than being reported as empty.
+    intelligence.classify(conn, as_of)
+    intelligence.detect_recurrence(conn, as_of)
+    return analytics.portfolio(
+        conn, as_of, window=(CYCLE_DATES[0], as_of)
+    )
+
+
 def run_pipeline(conn, corpus, *, client=None) -> dict[str, Any]:
     """S0 through S4, once per cycle date, then close the loop."""
     from sentinelops.synth import seed_database
@@ -138,6 +154,7 @@ def evaluate(
         "tokens": metrics_module.token_usage(conn),
         "actions": metrics_module.action_closure(conn),
         "gap_detection": metrics_module.score_gap_detection(verdicts, truth_rows),
+        "analytics": _section_eight(conn),
         "chain": repositories(conn)["audit"].verify_chain(),
         "audit_events": len(repositories(conn)["audit"].read_all()),
     }
