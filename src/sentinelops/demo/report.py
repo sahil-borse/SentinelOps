@@ -1,8 +1,8 @@
 """Console rendering of a slice-1 run. Print statements only, no logic.
 
 This is a placeholder for the slice-9 dashboard, which renders the same five
-record sets: the finding with its cited spans, the action with its owner, the
-audit timeline, and the live token meter.
+record sets: the assessment with its cited spans, the finding with its owner and
+severity, the audit timeline, and the live token meter.
 """
 
 from __future__ import annotations
@@ -15,10 +15,10 @@ def _rule(title: str) -> None:
 
 
 def print_run(result: dict[str, Any]) -> None:
-    finding = result["finding"]
-    action = result["action"]
+    finding = result["assessment"]
+    raised = result["finding"]
 
-    _rule("FINDING")
+    _rule("ASSESSMENT")
     print(f"  {finding.id}  verdict={finding.verdict}  "
           f"confidence={finding.confidence}  "
           f"needs_human_review={finding.needs_human_review}")
@@ -29,16 +29,21 @@ def print_run(result: dict[str, Any]) -> None:
         print(f"  gap           : {gap}")
     print(f"  supersedes    : {finding.supersedes_assessment_id}")
 
-    _rule("ACTION")
-    print(f"  {action.id}  status={action.status}  due {action.due_date}")
-    print(f"  {action.title}")
-    print(f"  assigned to   : {action.owner_team} / {action.owner_name}")
-    print(f"  raised from   : {action.assessment_id}")
+    _rule("FINDING")
+    print(f"  {raised.id}  status={raised.status}  target {raised.target_date}")
+    print(f"  {raised.description}")
+    print(f"  owned by      : {raised.owner_identity} "
+          f"({raised.auditable_unit_id})")
+    print(f"  severity      : {raised.severity} "
+          f"(suggested {raised.suggested_severity}, "
+          f"assigned by {raised.severity_assigned_by})")
+    print(f"  agreed plan   : {raised.agreed_action_plan}")
+    print(f"  raised from   : {raised.check_instance_id}")
 
     _rule("AUDIT TRAIL")
     for event in result["audit_events"]:
         print(
-            f"  {event.ts:%Y-%m-%d %H:%M:%S}  {event.actor:<6}  {event.owner:<10}"
+            f"  {event.ts:%Y-%m-%d %H:%M:%S}  {event.actor_kind:<6}  {event.owner:<10}"
             f"  {event.action:<24} {event.entity_type}:{event.entity_id}"
         )
         print(f"  {'':>22}{'':>20}detail: {event.detail}")
@@ -160,9 +165,9 @@ def print_lifecycle(conn, check_instance_id: str) -> None:
     findings = sorted(
         repo["assessments"].list(check_instance_id=check_instance_id), key=lambda f: f.id
     )
-    actions = [
-        a for a in repo["actions"].list()
-        if a.id == f"ACT-{check_instance_id.removeprefix('CHK-')}"
+    raised = [
+        f for f in repo["findings"].list()
+        if f.id == f"FND-{check_instance_id.removeprefix('CHK-')}"
     ]
 
     _rule(f"LIFECYCLE — {check_instance_id}")
@@ -173,8 +178,8 @@ def print_lifecycle(conn, check_instance_id: str) -> None:
     events = list(repo["audit"].read_for("CheckInstance", check_instance_id))
     for finding in findings:
         events += repo["audit"].read_for("Assessment", finding.id)
-    for action in actions:
-        events += repo["audit"].read_for("Action", action.id)
+    for record in raised:
+        events += repo["audit"].read_for("Finding", record.id)
     for flag in repo["flags"].list(check_instance_id=check_instance_id):
         events += repo["audit"].read_for("Flag", flag.id)
     for evidence in repo["evidence"].list(check_instance_id=check_instance_id):
@@ -184,7 +189,7 @@ def print_lifecycle(conn, check_instance_id: str) -> None:
     print(f"  {'#':>3}  {'actor':<6} {'owner':<22} {'event':<28} detail")
     print(f"  {'-' * 3}  {'-' * 6} {'-' * 22} {'-' * 28} {'-' * 40}")
     for number, event in enumerate(sorted(events, key=lambda e: e.id), start=1):
-        print(f"  {number:>3}  {event.actor:<6} {event.owner:<22}"
+        print(f"  {number:>3}  {event.actor_kind:<6} {event.owner:<22}"
               f" {event.action:<28} {_summarise(event)}")
 
     print()
@@ -193,16 +198,20 @@ def print_lifecycle(conn, check_instance_id: str) -> None:
             next((f.id for f in findings if f.supersedes_assessment_id == finding.id), "-")
         ) if any(f.supersedes_assessment_id == finding.id for f in findings) else "current"
         print(f"  {finding.id:<44} {finding.verdict:<22} {marker}")
-    for action in actions:
-        print(f"  {action.id:<44} {action.status:<22} due {action.due_date}")
-        if action.resolution_note:
-            print(f"      resolution: {action.resolution_note}")
+    for record in raised:
+        chased = f"chased {record.follow_up_count}x"
+        print(
+            f"  {record.id:<44} {record.status:<10} "
+            f"{record.severity or '?':<12} target {record.target_date}  {chased}"
+        )
+        if record.closure_remarks:
+            print(f"      closed by {record.closed_by}: {record.closure_remarks}")
 
 
 def _summarise(event) -> str:
     d = event.detail
-    for key in ("subject", "rationale", "resolution_note", "verdict", "category",
-                "superseded_by", "to_status", "evidence_id", "due_date"):
+    for key in ("subject", "rationale", "closure_remarks", "verdict", "category",
+                "superseded_by", "progress", "evidence_id", "target_date"):
         if key in d:
             value = str(d[key])
             return value if len(value) <= 60 else value[:57] + "..."

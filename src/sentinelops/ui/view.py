@@ -308,38 +308,57 @@ def overdue_queue(conn, as_of: date) -> list[dict[str, Any]]:
 
 
 def open_actions(conn) -> list[dict[str, Any]]:
+    """The open findings, oldest target date first — the chase list.
+
+    Kept under its UI name because that is what the screen calls the panel; the
+    rows are v3 Findings, with the severity the *auditor* assigned and the
+    follow-up count that says how many times this one has been chased.
+    """
     repo = repositories(conn)
+    people = directory.load(conn)
+    units = {u.id: u for u in repo["units"].list()}
     raised = {
         event.entity_id: event.ts
         for event in repo["audit"].read_all()
-        if event.action == "action_raised"
+        if event.action == "finding_raised"
     }
     rows = []
-    for action in repo["actions"].list():
-        if action.status == "resolved":
+    for finding in repo["findings"].list():
+        if finding.status != "open":
             continue
+        unit = units.get(finding.auditable_unit_id)
         rows.append({
-            "action": action.id,
-            "title": action.title,
-            "team": action.owner_team,
-            "owner": action.owner_name,
-            "due": action.due_date,
-            "status": action.status,
-            "finding": action.assessment_id,
-            "raised": raised.get(action.id),
+            "action": finding.id,
+            "title": finding.agreed_action_plan or finding.description,
+            "team": unit.name if unit else finding.auditable_unit_id,
+            "owner": people.name(finding.owner_identity),
+            "due": finding.target_date,
+            "status": finding.owner_progress or "awaiting acknowledgement",
+            "severity": finding.severity or finding.suggested_severity or "",
+            "chased": finding.follow_up_count,
+            "finding": finding.check_instance_id or finding.audit_id or "",
+            "raised": raised.get(finding.id),
         })
     return sorted(rows, key=lambda r: (r["due"], r["action"]))
 
 
 def resolved_actions(conn) -> list[dict[str, Any]]:
+    """Closed findings — closed by an auditor, with the remarks that did it."""
     repo = repositories(conn)
+    people = directory.load(conn)
+    units = {u.id: u for u in repo["units"].list()}
     return sorted(
         (
             {
-                "action": a.id, "team": a.owner_team, "owner": a.owner_name,
-                "resolved": a.resolved_at, "note": a.resolution_note,
+                "action": f.id,
+                "team": (units[f.auditable_unit_id].name
+                         if f.auditable_unit_id in units else f.auditable_unit_id),
+                "owner": people.name(f.owner_identity),
+                "resolved": f.closed_at,
+                "closed_by": people.name(f.closed_by) if f.closed_by else "",
+                "note": f.closure_remarks,
             }
-            for a in repo["actions"].list() if a.status == "resolved"
+            for f in repo["findings"].list() if f.status == "closed"
         ),
         key=lambda r: r["action"],
     )

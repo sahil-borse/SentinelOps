@@ -18,6 +18,7 @@ from sentinelops.db import connect
 from sentinelops.repositories import repositories
 from sentinelops.stages.assess import run as assess
 from sentinelops.stages.flag import run as flag_stage
+from sentinelops.stages.followup import run as followup
 from sentinelops.stages.prescreen import run as prescreen
 from sentinelops.stages.remediation import reassess_all
 from sentinelops.stages.trigger import run_cycle
@@ -57,6 +58,8 @@ def run_pipeline(conn, corpus, *, client=None) -> dict[str, Any]:
     screened = 0
     assessed = 0
     remediated = 0
+    reminders = 0
+    escalations = 0
     for as_of in CYCLE_DATES:
         run_cycle(conn, as_of)
         screen = prescreen(conn, as_of)
@@ -65,10 +68,18 @@ def run_pipeline(conn, corpus, *, client=None) -> dict[str, Any]:
             report = assess(conn, screen.to_assess, as_of, client=client)
             assessed += len(report.assessed)
         flag_stage(conn, as_of)
+        # the chase runs every cycle, because a measurement of follow-up that
+        # skips the follow-up measures nothing
+        chase = followup(conn, as_of)
+        reminders += len(chase.reminded)
+        escalations += len(chase.escalated)
         # remediation is picked up on the cycle after it is filed, not all at
         # the end — otherwise time-to-resolution measures the harness
         remediated += len(reassess_all(conn, as_of, client=client))
-    return {"screened": screened, "assessed": assessed, "remediated": remediated}
+    return {
+        "screened": screened, "assessed": assessed, "remediated": remediated,
+        "reminders": reminders, "escalations": escalations,
+    }
 
 
 def evaluate(

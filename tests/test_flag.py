@@ -8,10 +8,8 @@ from sentinelops.entities import ControlDefinition
 from sentinelops.repositories import repositories
 from sentinelops.stages.assess import run as assess
 from sentinelops.stages.flag import (
-    ACTION_ESCALATE_AFTER_DAYS,
-    ACTION_SLA_DAYS,
+    BAND_TO_SEVERITY,
     CRITICALITY_WEIGHT,
-    OPEN_ACTION_STATUSES,
     OVERDUE_CAP_DAYS,
     VERDICT_WEIGHT,
     categorise,
@@ -22,6 +20,7 @@ from sentinelops.stages.flag import (
 )
 from sentinelops.stages.flag import run as flag_run
 from sentinelops.stages.prescreen import run as prescreen
+from sentinelops.stages import followup
 from sentinelops.stages.trigger import run_cycle
 from sentinelops.synth import generate_corpus, seed_database
 
@@ -205,107 +204,112 @@ def test_every_flag_lands_in_a_band(flagged):
         assert flag.severity_band == severity_band(flag.severity)
 
 
-# --- actions ----------------------------------------------------------------
+# --- findings ---------------------------------------------------------------
 
-def test_every_gap_and_overdue_raises_an_action(flagged):
+def test_every_gap_and_overdue_raises_a_finding(flagged):
     conn, report = flagged
     expected = report.by_category["gap"] + report.by_category["overdue"]
-    assert len(report.actions_raised) == expected
+    assert len(report.findings_raised) == expected
 
 
-def test_an_approved_deviation_raises_no_action(flagged):
+def test_an_approved_deviation_raises_no_finding(flagged):
     conn, _ = flagged
     repo = repositories(conn)
-    actioned = {a.id for a in repo["actions"].list()}
+    raised = {f.id for f in repo["findings"].list()}
     for flag in repo["flags"].list():
         if flag.category == "exception" and flag.check_instance_id:
             assert (
-                f"ACT-{flag.check_instance_id.removeprefix('CHK-')}" not in actioned
+                f"FND-{flag.check_instance_id.removeprefix('CHK-')}" not in raised
             )
 
 
-def test_an_action_is_assigned_to_the_owning_team(flagged, corpus):
+def test_a_finding_is_owned_by_the_unit_owner(flagged, corpus):
     conn, _ = flagged
     repo = repositories(conn)
-    teams = {a.id: a.name for a in corpus.areas}
+    owners = {u.id: u.owner_identity for u in corpus.areas}
     for flag in repo["flags"].list():
         if flag.category == "exception":
             continue
-        action = repo["actions"].get(
-            f"ACT-{flag.check_instance_id.removeprefix('CHK-')}"
+        finding = repo["findings"].get(
+            f"FND-{flag.check_instance_id.removeprefix('CHK-')}"
         )
         instance = repo["instances"].get(flag.check_instance_id)
-        assert action.owner_team == teams[instance.auditable_unit_id]
+        assert finding.owner_identity == owners[instance.auditable_unit_id]
+        assert finding.auditable_unit_id == instance.auditable_unit_id
 
 
-def test_the_due_date_tightens_with_severity(flagged):
+def test_a_finding_is_open_and_only_open(flagged):
+    """Section 4: the authoritative status is binary."""
+    conn, _ = flagged
+    for finding in repositories(conn)["findings"].list():
+        assert finding.status in ("open", "closed")
+        assert finding.is_open == (finding.status == "open")
+
+
+def test_the_target_date_tightens_with_severity(flagged):
     conn, _ = flagged
     repo = repositories(conn)
+    units = {u.id: u for u in repo["units"].list()}
     for flag in repo["flags"].list():
         if flag.category == "exception":
             continue
-        action = repo["actions"].get(
-            f"ACT-{flag.check_instance_id.removeprefix('CHK-')}"
+        finding = repo["findings"].get(
+            f"FND-{flag.check_instance_id.removeprefix('CHK-')}"
         )
-        assert action.due_date == END_OF_STORY + timedelta(
-            days=ACTION_SLA_DAYS[flag.severity_band]
+        instance = repo["instances"].get(flag.check_instance_id)
+        criticality = units[instance.auditable_unit_id].attributes["criticality"]
+        assert finding.target_date == followup.target_date_for(
+            END_OF_STORY, finding.severity, criticality
         )
-    assert ACTION_SLA_DAYS["critical"] < ACTION_SLA_DAYS["low"]
+    assert (
+        followup.SEVERITY_RULES["Major"].target_days
+        < followup.SEVERITY_RULES["Observation"].target_days
+    )
 
 
-def test_raising_records_both_raised_and_assigned(flagged):
+def test_the_computed_band_is_a_suggestion_the_auditor_signs_off(flagged):
+    """Section 2: the model suggests a severity; the auditor assigns it."""
     conn, report = flagged
     repo = repositories(conn)
-    action_id = report.actions_raised[0]
-    actions = [
-        e.action for e in repo["audit"].read_for("Action", action_id)
-    ]
-    assert actions[:2] == ["action_raised", "action_assigned"]
-    assert repo["actions"].get(action_id).status == "assigned"
+    finding_id = report.findings_raised[0]
+    finding = repo["findings"].get(finding_id)
 
+    assert finding.suggested_severity in BAND_TO_SEVERITY.values()
+    assert finding.severity is not None, "an unassigned severity is not a decision"
+    assert finding.severity_assigned_by, "somebody has to put their name to it"
 
-def test_actions_escalate_on_their_own_timer(flagged):
-    """Separate from the check's escalation, with a different owner."""
-    conn, first = flagged
-    assert first.actions_escalated == [], "nothing is late on the day it is raised"
+    actions = [e.action for e in repo["audit"].read_for("Finding", finding_id)]
+    assert actions[:2] == ["finding_raised", "finding_severity_assigned"]
 
-    second = flag_run(conn, LATER)
-    assert second.actions_escalated
-
-    repo = repositories(conn)
-    action_id = second.actions_escalated[0]
-    event = [
-        e for e in repo["audit"].read_for("Action", action_id)
-        if e.action == "action_escalated"
+    assigned = [
+        e for e in repo["audit"].read_for("Finding", finding_id)
+        if e.action == "finding_severity_assigned"
     ][0]
-    assert event.owner == "Group Compliance"
-    assert event.detail["threshold_days"] == ACTION_ESCALATE_AFTER_DAYS
-    assert event.detail["days_past_action_due_date"] >= ACTION_ESCALATE_AFTER_DAYS
-    assert "independently of the check" in event.detail["reason"]
+    assert "overrode_suggestion" in assigned.detail
 
 
-def test_an_action_does_not_escalate_before_its_own_deadline(flagged):
-    """The tightest SLA plus the grace, less a day: still nothing.
+def test_the_severity_decision_names_a_pa_infosec_identity(flagged):
+    conn, report = flagged
+    repo = repositories(conn)
+    auditors = {
+        i.id for i in repo["identities"].list() if i.role == "pa_infosec"
+    }
+    finding = repo["findings"].get(report.findings_raised[0])
+    assert finding.severity_assigned_by in auditors
 
-    The shortest SLA governs, not the longest — a critical action due in seven
-    days is already nine days late by the time a low-severity one falls due, so
-    testing at the 60-day mark would prove the opposite of what it looks like.
+
+def test_flagging_no_longer_runs_its_own_escalation_clock(flagged):
+    """Escalation belongs to follow-up, which is severity-driven.
+
+    S4 raises the finding and stops. Two clocks on one object, set by two
+    different modules, is how a finding ends up chased twice and closed once.
     """
-    conn, _ = flagged
-    soonest = min(ACTION_SLA_DAYS.values())
-    just_before = END_OF_STORY + timedelta(
-        days=soonest + ACTION_ESCALATE_AFTER_DAYS - 1
-    )
-    assert flag_run(conn, just_before).actions_escalated == []
+    import sentinelops.stages.flag as flag_module
 
-    on_the_day = END_OF_STORY + timedelta(days=soonest + ACTION_ESCALATE_AFTER_DAYS)
-    escalated = flag_run(conn, on_the_day).actions_escalated
-    assert escalated, "the critical-band actions escalate first"
-
-
-def test_open_action_statuses_exclude_resolved():
-    assert "resolved" not in OPEN_ACTION_STATUSES
-    assert "escalated" in OPEN_ACTION_STATUSES
+    assert not hasattr(flag_module, "ACTION_SLA_DAYS")
+    assert not hasattr(flag_module, "OPEN_ACTION_STATUSES")
+    assert not hasattr(flag_module, "transition")
+    assert not hasattr(flag_module, "resolve")
 
 
 # --- idempotency and the trail ----------------------------------------------
@@ -314,7 +318,7 @@ def test_running_the_stage_twice_flags_nothing_new(flagged):
     conn, first = flagged
     second = flag_run(conn, END_OF_STORY)
     assert second.flags == []
-    assert second.actions_raised == []
+    assert second.findings_raised == []
     assert len(repositories(conn)["flags"].list()) == len(first.flags)
 
 
@@ -322,7 +326,9 @@ def test_every_flag_records_its_owner(flagged):
     conn, _ = flagged
     repo = repositories(conn)
     for event in repo["audit"].read_all():
-        if event.action in ("flag_raised", "action_raised", "action_assigned"):
+        if event.action in (
+            "flag_raised", "finding_raised", "finding_severity_assigned"
+        ):
             assert event.owner
             assert event.entity_id
 
@@ -398,7 +404,7 @@ def test_a_waiver_after_the_fact_excuses_an_already_assessed_failure(conn, corpu
     assert repo["instances"].get(target).status == "assessed"
     finding = repo["assessments"].list(check_instance_id=target)[0]
     assert finding.verdict == "insufficient_evidence"
-    assert repo["actions"].get("ACT-CRYPTO-KEY-HR-2026-Q1").status == "assigned"
+    assert repo["findings"].get("FND-CRYPTO-KEY-HR-2026-Q1").status == "open"
 
     # EXC-004 is in force from 11 May
     run_cycle(conn, date(2026, 5, 28))
@@ -423,7 +429,7 @@ def test_the_waiver_leaves_the_finding_standing(conn, corpus):
     assert findings[0].supersedes_assessment_id is None
 
 
-def test_the_waiver_closes_the_flag_and_resolves_the_action(conn, corpus):
+def test_the_waiver_closes_the_flag_and_closes_the_finding(conn, corpus):
     seed_database(conn, corpus)
     repo = repositories(conn)
     for month in (1, 2, 3, 4, 5):
@@ -437,11 +443,12 @@ def test_the_waiver_closes_the_flag_and_resolves_the_action(conn, corpus):
     assert flags["overdue"].status == "closed"
     assert flags["exception"].status == "open"
 
-    action = repo["actions"].get("ACT-CRYPTO-KEY-HR-2026-Q1")
-    assert action.status == "resolved"
-    assert "waived" in action.resolution_note
-    assert "the finding it arose from stands" in action.resolution_note.lower()
-    assert report.actions_resolved_by_waiver == [action.id]
+    finding = repo["findings"].get("FND-CRYPTO-KEY-HR-2026-Q1")
+    assert finding.status == "closed"
+    assert finding.closed_by, "somebody closed it, and the trail says who"
+    assert "waived" in finding.closure_remarks
+    assert "the assessment it arose from stands" in finding.closure_remarks.lower()
+    assert report.findings_closed_by_waiver == [finding.id]
 
 
 def test_the_waiver_records_who_approved_it_on_the_transition(conn, corpus):

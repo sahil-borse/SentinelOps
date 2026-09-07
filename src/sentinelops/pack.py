@@ -1,7 +1,7 @@
 """The Audit Evidence Pack — reconstructed from the audit log and nothing else.
 
 **The constraint is the product.** This module touches exactly one table,
-`audit_events`. It never reads `findings`, `actions`, `check_instances`,
+`audit_events`. It never reads `findings`, `assessments`, `check_instances`,
 `flags`, `evidence`, `compliance_exceptions` or any other record of current
 state, and `tests/test_pack.py` proves it two ways: statically, by asserting
 this file names no live-state table and imports no repository; and at runtime,
@@ -60,17 +60,18 @@ KNOWN_ACTIONS = (
     "assessment_superseded",
     "flag_raised",
     "flag_closed",
-    "action_raised",
-    "action_assigned",
-    "action_in_progress",
-    "action_remediation_submitted",
-    "action_reassessed",
-    "action_resolved",
-    "action_escalated",
+    "finding_raised",
+    "finding_severity_assigned",
+    "finding_progress_recorded",
+    "finding_reminder_sent",
+    "finding_escalated",
+    "evidence_found_insufficient",
+    "finding_closed",
     "notification_logged",
     "prescreen_completed",
     "assessment_completed",
     "flagging_completed",
+    "followup_completed",
     "applicability_evaluated",
 )
 
@@ -282,19 +283,26 @@ def build(
             if event.entity_id in findings:
                 findings[event.entity_id]["superseded_by"] = detail.get("superseded_by")
 
-        elif event.action == "action_raised":
+        elif event.action == "finding_raised":
             actions[event.entity_id] = {
                 "id": event.entity_id,
                 "instance_id": detail.get("check_instance_id", ""),
                 "assessment_id": detail.get("assessment_id", ""),
                 "category": detail.get("category", "?"),
-                "severity": detail.get("severity", ""),
-                "band": detail.get("severity_band", ""),
+                "severity": detail.get("suggested_severity", ""),
+                "suggested_severity": detail.get("suggested_severity", ""),
+                "assigned_severity": "",
+                "severity_overridden": False,
+                "band": detail.get("computed_severity_score", ""),
                 "raised_at": event.ts,
                 "owner": event.owner,
-                "team": "",
-                "due_date": detail.get("due_date", ""),
-                "status": "raised",
+                "team": detail.get("auditable_unit_id", ""),
+                "due_date": detail.get("target_date", ""),
+                "status": "open",
+                "progress": "",
+                "reminders": 0,
+                "escalations": 0,
+                "insufficient_rounds": 0,
                 "remediation_evidence": None,
                 "reassessed_verdict": None,
                 "resolution_note": None,
@@ -302,20 +310,44 @@ def build(
                 "history": [(event.ts, "raised", event.owner)],
             }
 
-        elif event.action.startswith("action_") and event.entity_id in actions:
+        elif event.entity_type == "Finding" and event.entity_id in actions:
             record = actions[event.entity_id]
-            state = event.action.removeprefix("action_")
-            record["status"] = state
-            record["history"].append((event.ts, state, event.owner))
-            if state == "assigned":
-                record["team"] = detail.get("owner_team", record["team"])
-            elif state == "remediation_submitted":
-                record["remediation_evidence"] = detail.get("evidence_id")
-            elif state == "reassessed":
-                record["reassessed_verdict"] = detail.get("verdict")
-            elif state == "resolved":
-                record["resolution_note"] = detail.get("resolution_note")
+            if event.action == "finding_severity_assigned":
+                record["assigned_severity"] = detail.get("severity", "")
+                record["severity"] = detail.get("severity", record["severity"])
+                record["severity_overridden"] = bool(
+                    detail.get("overrode_suggestion")
+                )
+                record["due_date"] = detail.get("new_target_date", record["due_date"])
+                record["history"].append(
+                    (event.ts, f"severity {record['severity']}", event.owner)
+                )
+            elif event.action == "finding_progress_recorded":
+                record["progress"] = detail.get("progress", "")
+                if detail.get("evidence_id"):
+                    record["remediation_evidence"] = detail["evidence_id"]
+                record["history"].append(
+                    (event.ts, f"owner: {record['progress']}", event.owner)
+                )
+            elif event.action == "finding_reminder_sent":
+                record["reminders"] += 1
+            elif event.action == "finding_escalated":
+                record["escalations"] += 1
+                record["history"].append(
+                    (event.ts, f"escalated L{detail.get('level', '?')}", event.owner)
+                )
+            elif event.action == "evidence_found_insufficient":
+                record["insufficient_rounds"] += 1
+                record["reassessed_verdict"] = "insufficient"
+                record["history"].append(
+                    (event.ts, "evidence insufficient", event.owner)
+                )
+            elif event.action == "finding_closed":
+                record["status"] = "closed"
+                record["resolution_note"] = detail.get("closure_remarks")
                 record["resolved_at"] = event.ts
+                record["reassessed_verdict"] = "accepted"
+                record["history"].append((event.ts, "closed", event.owner))
 
     for instance in instances.values():
         key = (instance["area_id"], instance["control_id"])
@@ -358,7 +390,7 @@ def build(
         "exceptions": len(pack.exceptions),
         "actions": len(pack.actions),
         "actions_resolved": len(
-            [a for a in pack.actions if a["status"] == "resolved"]
+            [a for a in pack.actions if a["status"] == "closed"]
         ),
     }
     return pack
@@ -435,7 +467,7 @@ def render_markdown(pack: AuditPack) -> str:
         ("Flagged for human review", "human_review"),
         ("Decided without a model call", "decided_without_a_model"),
         ("Exceptions on register", "exceptions"),
-        ("Actions raised", "actions"), ("Actions resolved", "actions_resolved"),
+        ("Findings raised", "actions"), ("Findings closed", "actions_resolved"),
     ):
         add(f"| {label} | {pack.totals[key]:,} |")
     add("")
@@ -502,22 +534,29 @@ def render_markdown(pack: AuditPack) -> str:
             )
         add("")
 
-    add("## 4. Action register")
+    add("## 4. Finding register")
     add("")
     for action in pack.actions:
         add(f"### {action['id']} — {action['status']}")
         add("")
-        add(
-            f"- **Raised** {action['raised_at']:%Y-%m-%d} from {action['assessment_id']} "
-            f"({action['category']}, severity {action['severity']} "
-            f"{action['band']})  \n"
-            f"- **Owner** {action['owner']} ({action['team']}) · due "
-            f"{action['due_date']}"
+        severity = action["severity"] or "unassigned"
+        note = (
+            " (auditor overrode the suggestion)" if action["severity_overridden"]
+            else ""
         )
+        add(
+            f"- **Raised** {action['raised_at']:%Y-%m-%d} · {action['category']} · "
+            f"severity **{severity}**{note}  \n"
+            f"- **Owner** {action['owner']} ({action['team']}) · target "
+            f"{action['due_date']}  \n"
+            f"- **Chased** {action['reminders']} reminder(s) · "
+            f"{action['escalations']} escalation(s) · "
+            f"{action['insufficient_rounds']} insufficient round(s)"
+        )
+        if action["progress"]:
+            add(f"- **Owner progress** {action['progress']} (self-reported)")
         if action["remediation_evidence"]:
             add(f"- **Remediation submitted** {action['remediation_evidence']}")
-        if action["reassessed_verdict"]:
-            add(f"- **Re-assessed** {action['reassessed_verdict']}")
         if action["resolution_note"]:
             add(
                 f"- **Closed** {action['resolved_at']:%Y-%m-%d} — "
@@ -614,7 +653,7 @@ def render_html(pack: AuditPack) -> str:
         ("Flagged for human review", "human_review"),
         ("Decided without a model call", "decided_without_a_model"),
         ("Exceptions on register", "exceptions"),
-        ("Actions raised", "actions"), ("Actions resolved", "actions_resolved"),
+        ("Findings raised", "actions"), ("Findings closed", "actions_resolved"),
     ):
         out.append(f"<tr><th>{label}</th><td>{pack.totals[key]:,}</td></tr>")
     out.append("</table>")
@@ -677,19 +716,23 @@ def render_html(pack: AuditPack) -> str:
                 f"criteria <code>{e(finding['criteria_hash'])}</code> · evidence "
                 f"<code>{e(finding['evidence_hash'])}</code></p>"
             )
-    out.append("<h2>4. Action register</h2><table><tr><th>Action</th><th>Found</th>"
-               "<th>Owner</th><th>Raised</th><th>Due</th><th>Remediation</th>"
-               "<th>Re-assessed</th><th>Closed</th></tr>")
+    out.append("<h2>4. Finding register</h2><table><tr><th>Finding</th>"
+               "<th>Category / severity</th><th>Owner</th><th>Raised</th>"
+               "<th>Target</th><th>Chased</th><th>Progress</th>"
+               "<th>Closure remarks</th></tr>")
     for action in pack.actions:
         out.append(
             f"<tr><td>{e(action['id'])}<br><span class='meta'>{e(action['status'])}"
             f"</span></td>"
-            f"<td>{e(action['category'])} · severity {action['severity']}"
-            f"<br><span class='meta'>{e(action['assessment_id'])}</span></td>"
+            f"<td>{e(action['category'])} · {e(action['severity'] or 'unassigned')}"
+            f"<br><span class='meta'>"
+            f"{'overrode suggestion' if action['severity_overridden'] else ''}"
+            f"</span></td>"
             f"<td>{e(action['owner'])}<br><span class='meta'>{e(action['team'])}</span></td>"
-            f"<td>{action['raised_at']:%Y-%m-%d}</td><td>{action['due_date']}</td>"
-            f"<td>{e(str(action['remediation_evidence'] or '—'))}</td>"
-            f"<td>{e(str(action['reassessed_verdict'] or '—'))}</td>"
+            f"<td>{action['raised_at']:%Y-%m-%d}</td><td>{e(str(action['due_date']))}</td>"
+            f"<td>{action['reminders']}r / {action['escalations']}e / "
+            f"{action['insufficient_rounds']}i</td>"
+            f"<td>{e(action['progress'] or '—')}</td>"
             f"<td>{e(str(action['resolution_note'] or '—'))}</td></tr>"
         )
     out.append("</table>")

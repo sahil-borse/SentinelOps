@@ -1,24 +1,27 @@
-"""Slice 1's single path: area -> ... -> finding -> action -> audit -> usage."""
+"""Slice 1's single path: unit -> ... -> assessment -> finding -> audit -> usage."""
 
 from sentinelops.main import run
 
 
 def test_one_path_writes_every_record(tmp_path):
     result = run(str(tmp_path / "e2e.db"))
-    finding, action = result["finding"], result["action"]
+    assessment, finding = result["assessment"], result["finding"]
 
-    assert finding.verdict in {"compliant", "partial", "gap", "insufficient_evidence"}
-    assert finding.cited_spans, "an uncited compliance verdict is a bug"
-    assert action.assessment_id == finding.id
-    assert action.status == "raised"
-    assert action.owner_team == "Customer Operations"
+    assert assessment.verdict in {
+        "compliant", "partial", "gap", "insufficient_evidence"
+    }
+    assert assessment.cited_spans, "an uncited compliance verdict is a bug"
+    assert finding.check_instance_id == "CHK-0001"
+    assert finding.status == "open", "a finding starts open and only an auditor closes it"
+    assert finding.auditable_unit_id == "AREA-CUSTOPS"
+    assert finding.severity and finding.severity_assigned_by
 
     actions = [e.action for e in result["audit_events"]]
     assert actions == [
         "check_instance_created",
         "evidence_submitted",
         "assessment_recorded",
-        "action_raised",
+        "finding_raised",
     ]
     assert {e.actor_kind for e in result["audit_events"]} == {"system", "user", "ai"}
 
@@ -31,8 +34,10 @@ def test_one_path_writes_every_record(tmp_path):
 def test_the_path_is_reproducible(tmp_path):
     a = run(str(tmp_path / "a.db"))
     b = run(str(tmp_path / "b.db"))
-    assert a["finding"].verdict == b["finding"].verdict
-    assert a["finding"].cited_spans == b["finding"].cited_spans
+    assert a["assessment"].verdict == b["assessment"].verdict
+    assert a["assessment"].cited_spans == b["assessment"].cited_spans
+    assert a["finding"].severity == b["finding"].severity
+    assert a["finding"].target_date == b["finding"].target_date
     assert dict(a["token_usage"][0])["input_tokens"] == (
         dict(b["token_usage"][0])["input_tokens"]
     )

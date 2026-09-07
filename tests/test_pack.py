@@ -17,6 +17,7 @@ from sentinelops.pack import (
 )
 from sentinelops.stages.assess import run as assess
 from sentinelops.stages.flag import run as flag_stage
+from sentinelops.stages.followup import run as followup
 from sentinelops.stages.prescreen import run as prescreen
 from sentinelops.stages.remediation import reassess_all
 from sentinelops.stages.trigger import run_cycle
@@ -34,7 +35,7 @@ LIVE_STATE_TABLES = (
     "evidence_submissions",
     "evidence",
     "assessments",
-    "actions",
+    "findings",
     "flags",
     "compliance_exceptions",
     "token_usage",
@@ -58,6 +59,7 @@ def run_conn(corpus):
         if screen.to_assess:
             assess(conn, screen.to_assess, as_of)
         flag_stage(conn, as_of)
+        followup(conn, as_of)
         reassess_all(conn, as_of)
     yield conn
     conn.close()
@@ -167,10 +169,10 @@ def test_the_pack_matches_what_the_live_tables_say(pack, run_conn):
     repo = repositories(run_conn)
     assert pack.totals["due"] == len(repo["instances"].list())
     assert pack.totals["assessments"] == len(repo["assessments"].list())
-    assert pack.totals["actions"] == len(repo["actions"].list())
+    assert pack.totals["actions"] == len(repo["findings"].list())
     assert pack.totals["exceptions"] == len(repo["exceptions"].list())
     assert pack.totals["actions_resolved"] == len(
-        [a for a in repo["actions"].list() if a.status == "resolved"]
+        [f for f in repo["findings"].list() if f.status == "closed"]
     )
 
 
@@ -244,44 +246,59 @@ def test_superseded_findings_are_shown_as_superseded(pack):
         assert finding["verdict"] != "compliant"
 
 
-def test_the_action_register_tells_the_whole_story(pack):
-    """Two ways an action closes, and the register distinguishes them.
+def test_the_finding_register_tells_the_whole_story(pack):
+    """Two ways a finding closes, and the register distinguishes them.
 
-    Most close because somebody fixed the thing and the fix was re-assessed.
-    One closes because the obligation was waived — no evidence was submitted,
-    none was owed. Demanding remediation evidence of that one would be wrong.
+    Most close because somebody fixed the thing and an auditor accepted the
+    fix. One closes because the obligation was waived — no evidence was
+    submitted, none was owed. Demanding remediation evidence of that one would
+    be wrong.
     """
-    resolved = [a for a in pack.actions if a["status"] == "resolved"]
-    assert resolved
+    closed = [a for a in pack.actions if a["status"] == "closed"]
+    assert closed
 
-    for action in resolved:
-        assert action["assessment_id"], "what was found"
-        assert action["owner"] and action["team"], "who owned it"
-        assert action["raised_at"], "when raised"
-        assert action["resolution_note"], "how closed"
-        assert action["resolved_at"]
+    for finding in closed:
+        assert finding["owner"] and finding["team"], "who owned it"
+        assert finding["raised_at"], "when raised"
+        assert finding["severity"], "what the auditor called it"
+        assert finding["resolution_note"], "the closure remarks"
+        assert finding["resolved_at"]
 
-    remediated = [a for a in resolved if a["remediation_evidence"]]
-    waived = [a for a in resolved if not a["remediation_evidence"]]
+    remediated = [a for a in closed if a["remediation_evidence"]]
+    waived = [a for a in closed if not a["remediation_evidence"]]
     assert len(remediated) == 6
     assert len(waived) == 1
 
-    for action in remediated:
-        assert action["reassessed_verdict"] == "compliant", "when re-assessed"
-        assert "supersedes" in action["resolution_note"]
-    for action in waived:
-        assert "waived" in action["resolution_note"]
-        assert "stands" in action["resolution_note"].lower()
+    for finding in remediated:
+        assert "supersedes" in finding["resolution_note"]
+    for finding in waived:
+        assert "waived" in finding["resolution_note"]
+        assert "stands" in finding["resolution_note"].lower()
 
 
-def test_action_history_is_a_full_state_sequence(pack):
-    resolved = next(a for a in pack.actions if a["status"] == "resolved")
-    states = [state for _, state, _ in resolved["history"]]
-    assert states == [
-        "raised", "assigned", "in_progress", "remediation_submitted",
-        "reassessed", "resolved",
-    ]
-    assert all(owner for _, _, owner in resolved["history"])
+def test_finding_history_is_a_full_state_sequence(pack):
+    closed = next(a for a in pack.actions if a["status"] == "closed")
+    states = [state for _, state, _ in closed["history"]]
+    assert states[0] == "raised"
+    assert states[-1] == "closed"
+    assert any(s.startswith("severity ") for s in states), (
+        "the severity decision is on the record, not implied"
+    )
+    assert any(s.startswith("owner: ") for s in states), (
+        "what the owner reported is on the record too"
+    )
+    assert all(owner for _, _, owner in closed["history"])
+
+
+def test_the_register_reports_how_hard_each_finding_was_to_close(pack):
+    """`follow_up_count` reconstructed from the trail, not read from a table."""
+    for finding in pack.actions:
+        assert finding["reminders"] >= 0
+        assert finding["escalations"] >= 0
+        assert finding["insufficient_rounds"] >= 0
+    assert any(f["reminders"] for f in pack.actions), (
+        "a corpus in which nothing was ever chased is not this corpus"
+    )
 
 
 def test_the_chronological_trail_is_complete_and_ordered(pack):
@@ -371,7 +388,7 @@ def test_markdown_contains_every_required_section(pack):
     text = render_markdown(pack)
     for heading in ("# Audit Evidence Pack", "## 1. Coverage",
                     "## 2. Exception register", "## 3. Findings register",
-                    "## 4. Action register", "## 5. Method note",
+                    "## 4. Finding register", "## 5. Method note",
                     "## 6. Chronological trail"):
         assert heading in text
     assert "Cited evidence" in text
@@ -383,7 +400,7 @@ def test_html_is_self_contained_and_renders_the_same_facts(pack):
     assert page.startswith("<!doctype html>")
     assert "<style>" in page and "http" not in page.split("<style>")[1][:400]
     for heading in ("1. Coverage", "2. Exception register", "3. Findings register",
-                    "4. Action register", "5. Method note",
+                    "4. Finding register", "5. Method note",
                     "6. Chronological trail"):
         assert heading in page
     assert "no current-state table was read" in page

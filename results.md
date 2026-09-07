@@ -1,7 +1,7 @@
 # SentinelOps — evaluation results
 
-Generated 2026-09-02 03:49 · corpus seed `20260831` ·
-fingerprint `7e7ee16b4e1eebd9` · 15 scheduled cycles
+Generated 2026-09-07 22:12 · corpus seed `20260831` ·
+fingerprint `8052c437f2062b93` · 15 scheduled cycles
 
 > **These runs used `FakeModelClient`, not a language model.** The stub is a
 > deterministic keyword heuristic; `tests/test_fake_accuracy.py` measures it at
@@ -24,8 +24,8 @@ fingerprint `7e7ee16b4e1eebd9` · 15 scheduled cycles
 | Gap-detection recall | 71.4% | 93.4% | - |
 | False-positive rate | 5.8% | 1.6% | - |
 | Resolved with zero model calls | n/a | 41.1% | - |
-| Tokens per audit cycle | 216,146 | 147,791 | 1.5x fewer |
-| Actions raised / resolved | n/a | 154 / 7 | MTTR 24.1 days |
+| Tokens per audit cycle | 216,233 | 147,870 | 1.5x fewer |
+| Findings raised / closed | n/a | 154 / 7 | mean 25.1 days to closure |
 
 ---
 
@@ -112,7 +112,7 @@ findings were reached by rule, not by a model.
 
 By tier:
 
-| decided_by | findings |
+| decided_by | assessments |
 |---|---|
 | no_evidence | 33 |
 | s3_model | 202 |
@@ -134,15 +134,15 @@ the generator varies every document, so no control ever files byte-identical
 evidence in two periods. The rule is implemented and tested; this corpus simply
 never triggers it.
 
-### 6. Tokens per audit cycle — 147,791 vs 216,146 (1.5x)
+### 6. Tokens per audit cycle — 147,870 vs 216,233 (1.5x)
 
 |  | Naive baseline | SentinelOps | Difference |
 |---|---|---|---|
 | Model calls | 309 | 205 | 1.5x fewer |
-| Input tokens | 195,786 | 133,445 |  |
+| Input tokens | 195,873 | 133,524 |  |
 | Output tokens | 20,360 | 14,346 |  |
-| Total tokens | 216,146 | 147,791 | 1.5x fewer |
-| Characters sent to model | 296,652 | - |  |
+| Total tokens | 216,233 | 147,870 | 1.5x fewer |
+| Characters sent to model | 297,009 | - |  |
 
 **What the baseline is.** A competent naive implementation, not a strawman. It
 skips instances with no evidence — there is nothing to read — and caches by
@@ -179,21 +179,28 @@ responds correctly to prompt size. They are still an approximation of a real
 tokenizer's output. Exact token and cost figures need the real provider; the
 *ratio* is the durable part.
 
-### 7. Actions raised vs resolved — 154 / 7
+### 7. Findings raised vs closed — 154 / 7
 
 |  | count |
 |---|---|
 | Raised | 154 |
-| Resolved | 7 |
+| Closed by an auditor | 7 |
 | Still open | 147 |
-| Escalated | 140 |
-| Resolution rate | 4.5% |
-| Mean days to resolution | 24.1 |
+| Escalated | 151 |
+| Closure rate | 4.5% |
+| Mean days to closure | 25.1 |
+| Mean follow-ups per closure | 0.7 |
 
-The resolution rate is low because the corpus contains remediation evidence for
+The closure rate is low because the corpus contains remediation evidence for
 only 6 of the failures — the rest are left open on purpose, so the
 queue in the dashboard is not empty. It measures the corpus, not the diligence of
 a team.
+
+**What the chase did.** Across the same run the follow-up engine sent
+1,083 reminders and raised 302 escalations, all
+deterministic and all from the severity table. That is the number a human would
+have had to produce by remembering; it is not a measure of accuracy, and it is
+not claimed as one.
 
 ---
 
@@ -250,8 +257,8 @@ python -m evaluation
 
 Deterministic given the corpus seed (`20260831`) and the manual
 simulation seed (4242). The corpus fingerprint
-`7e7ee16b4e1eebd9` pins the exact evidence these numbers were
+`8052c437f2062b93` pins the exact evidence these numbers were
 measured on; if it changes, they were measured on something else.
 
-Audit chain over the whole run: **OK - 2466 entries, chain intact**
-(2,466 events).
+Audit chain over the whole run: **OK - 5703 entries, chain intact**
+(5,703 events).

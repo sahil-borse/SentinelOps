@@ -47,11 +47,17 @@ CREATE TABLE IF NOT EXISTS assessments (
     carried_forward_from TEXT REFERENCES assessments(id),
     decided_by TEXT NOT NULL, criteria_hash TEXT NOT NULL,
     prompt_version TEXT NOT NULL, evidence_hash TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS actions (
-    id TEXT PRIMARY KEY, assessment_id TEXT NOT NULL REFERENCES assessments(id),
-    title TEXT NOT NULL, owner_team TEXT NOT NULL, owner_name TEXT NOT NULL,
-    due_date TEXT NOT NULL, status TEXT NOT NULL, resolution_note TEXT,
-    resolved_at TEXT);
+CREATE TABLE IF NOT EXISTS findings (
+    id TEXT PRIMARY KEY, source TEXT NOT NULL,
+    auditable_unit_id TEXT NOT NULL REFERENCES auditable_units(id),
+    description TEXT NOT NULL, raised_by TEXT NOT NULL, raised_at TEXT NOT NULL,
+    owner_identity TEXT NOT NULL, target_date TEXT NOT NULL,
+    audit_id TEXT, check_instance_id TEXT REFERENCES check_instances(id),
+    gap_category TEXT NOT NULL, severity TEXT, suggested_severity TEXT,
+    severity_assigned_by TEXT NOT NULL, agreed_action_plan TEXT NOT NULL,
+    status TEXT NOT NULL, owner_progress TEXT, follow_up_count INTEGER NOT NULL,
+    recurrence_of TEXT NOT NULL, closed_by TEXT NOT NULL, closed_at TEXT,
+    closure_remarks TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS flags (
     id TEXT PRIMARY KEY, category TEXT NOT NULL,
     control_id TEXT NOT NULL REFERENCES control_definitions(id),

@@ -20,15 +20,20 @@ from typing import Any, Literal
 EvidenceKind = Literal["document", "structured"]
 Verdict = Literal["compliant", "partial", "gap", "insufficient_evidence"]
 CheckStatus = Literal["pending", "submitted", "assessed", "overdue", "waived"]
-ActionStatus = Literal[
-    "raised",
-    "assigned",
-    "in_progress",
-    "remediation_submitted",
-    "reassessed",
-    "resolved",
-    "escalated",
-]
+#: Section 4 is unambiguous: the authoritative status is binary. A finding is
+#: open until the auditor is satisfied, and nothing the owner does moves it.
+FindingStatus = Literal["open", "closed"]
+
+#: What the owner says they have done. Advisory, self-reported, and deliberately
+#: separate from `status` — an owner marking work "implemented" does not close
+#: anything. That separation is the whole point of the v3 lifecycle.
+OwnerProgress = Literal["acknowledged", "action_in_progress", "implemented"]
+
+#: Assigned by the auditor, not computed. `suggested_severity` carries the
+#: model's advice alongside it so an override is visible rather than lost.
+Severity = Literal["Major", "Minor", "Observation"]
+
+FindingSource = Literal["audit", "activity_assessment", "self_identified"]
 ExceptionStatus = Literal["active", "expired", "revoked"]
 FlagCategory = Literal["gap", "exception", "overdue"]
 Actor = Literal["system", "ai", "user"]
@@ -174,16 +179,58 @@ class Assessment:
 
 
 @dataclass
-class Action:
+class Finding:
+    """The central tracked object.
+
+    A gap, from wherever it came: an audit, an activity assessment whose
+    evidence failed, or somebody noticing. Both of its origins are nullable
+    because a finding can outlive either — a finding raised in an audit has no
+    check instance, and one raised from a periodic activity has no audit.
+
+    Two fields carry the authority split that defines v3. `status` is binary and
+    only an auditor moves it; `owner_progress` is what the owning team says
+    about its own work and moves nothing. An owner who has done everything and
+    submitted evidence still has an open finding until the auditor accepts it.
+    """
+
     id: str
-    assessment_id: str
-    title: str
-    owner_team: str
-    owner_name: str
-    due_date: date
-    status: ActionStatus = "raised"
-    resolution_note: str | None = None
-    resolved_at: datetime | None = None
+    source: FindingSource
+    auditable_unit_id: str
+    description: str
+    raised_by: str
+    raised_at: datetime
+    owner_identity: str
+    target_date: date
+
+    #: Where it came from. Exactly one of these is normally set, and both may be
+    #: empty for a self-identified finding.
+    audit_id: str | None = None
+    check_instance_id: str | None = None
+
+    #: AI-classified in a later slice, and always overridable by the auditor.
+    gap_category: str = ""
+    #: Assigned by the auditor. `suggested_severity` is advisory only.
+    severity: Severity | None = None
+    suggested_severity: Severity | None = None
+    severity_assigned_by: str = ""
+
+    agreed_action_plan: str = ""
+    status: FindingStatus = "open"
+    owner_progress: OwnerProgress | None = None
+
+    #: Increments on every reminder *and* every insufficient-evidence round —
+    #: section 5. It is the measure of how much chasing a finding has taken.
+    follow_up_count: int = 0
+    #: Prior findings this one resembles. Filled by recurrence detection.
+    recurrence_of: list[str] = field(default_factory=list)
+
+    closed_by: str = ""
+    closed_at: datetime | None = None
+    closure_remarks: str = ""
+
+    @property
+    def is_open(self) -> bool:
+        return self.status == "open"
 
 
 @dataclass

@@ -47,10 +47,18 @@ DEMO_CONTROL = ControlDefinition(
     severity_weight=3.0,
 )
 
+#: Shaped like a corpus document — one numbered response per criterion —
+#: because that is what the assessor reads and what `FakeModelClient` judges,
+#: clause by clause. Prose that answers the criteria in an unnumbered
+#: paragraph gives the stub nothing to fail on, and the skeleton then
+#: "proves" a near-miss compliant.
 DEMO_EVIDENCE_TEXT = (
     "Privileged Access Review - Customer Operations - Q1\n"
     "Reviewer: R. Mehta. Date: 2026-03-28.\n"
-    "All 14 privileged accounts were listed from the IAM export.\n"
-    "Two dormant accounts were identified but revocation is still pending with "
-    "the platform team; no justification has been recorded for them."
+    "1. All 14 privileged accounts were listed from the IAM export and "
+    "reviewed against current role assignments.\n"
+    "2. The reviewer and the review date are recorded above.\n"
+    "3. Two dormant accounts were identified. Revocation is still pending "
+    "with the platform team and no justification has been recorded for "
+    "either account.\n"
 )

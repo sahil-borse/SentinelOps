@@ -56,8 +56,8 @@ def _has_overdue(conn) -> bool:
     Deliberately not "has a check escalated". In the full pipeline a check with
     no evidence is settled by the pre-screen in the same tick that marks it
     overdue, so it never climbs the check-level ladder — what escalates is the
-    *action* raised from it, on its own clock. Progress here is measured by the
-    calendar, which is what the step is actually about.
+    *finding* raised from it, on the severity clock. Progress here is measured
+    by the calendar, which is what the step is actually about.
     """
     return service.current_date(conn) >= service.START_DATE + timedelta(days=60)
 
@@ -127,8 +127,8 @@ STEPS: tuple[Step, ...] = (
         title="5 · Fix one, and prove it is fixed",
         why=(
             "Assessment a problem is half the job. The team files corrected evidence, "
-            "it is re-checked against the same criteria, and the action closes — "
-            "with the original failure still on the record, not overwritten."
+            "it is re-checked against the same criteria, and an auditor closes the "
+            "finding — with the original failure still on the record."
         ),
         button="File a correction and re-check it",
         done=_has_remediation,
@@ -269,8 +269,11 @@ def run(conn, key: str) -> Outcome:
         for _ in range(3):
             service.advance(conn, 30)
         queue = view.overdue_queue(conn, service.current_date(conn))
-        actions = repositories(conn)["actions"].list()
-        escalated = [a for a in actions if a.status == "escalated"]
+        findings = repositories(conn)["findings"].list()
+        escalated = {
+            e.entity_id for e in repositories(conn)["audit"].read_all()
+            if e.action == "finding_escalated"
+        }
         detail = [
             f"It is now **{service.current_date(conn):%B %Y}**. "
             f"**{len(queue)} checks are outstanding** and nobody had to notice "
@@ -278,10 +281,11 @@ def run(conn, key: str) -> Outcome:
         ]
         if escalated:
             detail.append(
-                f"Each one raised a piece of work with an owner and a deadline of "
-                f"its own, and **{len(escalated)} of those have now been escalated "
-                "to Group Compliance** — automatically, because they went "
-                "unanswered past their own due date."
+                f"Each one raised a finding with an owner and a target date, and "
+                f"**{len(escalated)} of those have now been escalated up the "
+                "reporting line and to PA/InfoSec** — automatically, because they "
+                "went past their target date. The reminders did not stop when the "
+                "escalation went out; the owner still owes the evidence."
             )
         detail.append(
             "This is the first claim: a check cannot be missed because somebody "
@@ -365,16 +369,18 @@ def run(conn, key: str) -> Outcome:
         ]
         if result.resolved:
             detail.append(
-                "The action closed automatically. **Both findings are kept:** the "
-                "failure is marked superseded rather than deleted, so the record "
-                "still shows what was wrong and when."
+                "An auditor closed the finding, with remarks naming the assessment "
+                "that cleared it. **Both assessments are kept:** the failure is "
+                "marked superseded rather than deleted, so the record still shows "
+                "what was wrong and when."
             )
         else:
             detail.append(
-                "The action stayed open — the correction did not clear the "
-                "finding. A fix that does not fix it is not a resolution."
+                "The finding **stayed open** — the correction did not satisfy the "
+                "auditor, and the round was counted. A finding stays open until "
+                "the auditor is satisfied, and nothing else moves that."
             )
-        return Outcome("Assessment → action → correction → re-check → closed.", detail,
+        return Outcome("Assessment → finding → correction → re-check → closed.", detail,
                        focus=target)
 
     if key == "prove":

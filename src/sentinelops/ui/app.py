@@ -416,27 +416,28 @@ with upload:
             (st.success if posted["ok"] else st.error)(posted["message"])
 
 with actions:
-    st.subheader("Open actions")
+    st.subheader("Open findings")
     rows = view.open_actions(conn)
     if not rows:
-        st.info("No open actions.")
+        st.info("No open findings.")
     else:
         st.dataframe(
             [
                 {
-                    "Action": r["action"], "Status": r["status"],
-                    "Owner": r["owner"], "Team": r["team"],
-                    "Due": r["due"].isoformat(), "From": r["finding"],
+                    "Finding": r["action"], "Severity": r["severity"],
+                    "Owner progress": r["status"], "Owner": r["owner"],
+                    "Unit": r["team"], "Target": r["due"].isoformat(),
+                    "Chased": r["chased"],
                 }
                 for r in rows[:40]
             ],
             use_container_width=True, hide_index=True, height=260,
         )
         st.caption(f"{len(rows)} open. "
-                   f"{totals['actions_resolved']} resolved to date.")
+                   f"{totals['actions_resolved']} closed by an auditor to date.")
     closed = view.resolved_actions(conn)
     if closed:
-        with st.expander(f"{len(closed)} resolved", expanded=False):
+        with st.expander(f"{len(closed)} closed", expanded=False):
             for row in closed:
                 st.markdown(f"**{row['action']}** — {row['note']}")
 

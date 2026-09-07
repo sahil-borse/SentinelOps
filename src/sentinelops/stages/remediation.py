@@ -1,6 +1,6 @@
 """Closing the loop: remediation evidence, re-assessment, resolution.
 
-    finding -> action -> remediation submitted -> re-assessed -> resolved
+    finding raised -> owner acts -> evidence filed -> re-assessed -> closed
 
 `reassess(conn, check_instance_id)` is the on-demand entry point. A team that
 fixes something on Tuesday should not wait until the next scheduled cycle to be
@@ -13,9 +13,10 @@ only difference is bookkeeping: the new Assessment records `supersedes_assessmen
 so the trail keeps both the failure and the fix rather than overwriting one with
 the other.
 
-If the new verdict passes, the Action resolves with a note naming the finding
-that cleared it. If it does not, the Action stays open and the loop is still
-open — a remediation that did not work is not a resolution.
+If the new verdict passes, an auditor closes the finding with remarks naming the
+assessment that cleared it. If it does not, the finding **stays open** and
+`follow_up_count` goes up by one, which is section 4 exactly: the finding remains
+open until the auditor is satisfied, and a round that failed is still a round.
 """
 
 from __future__ import annotations
@@ -24,10 +25,10 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
-from ..entities import Action, Evidence, Assessment
+from ..entities import Evidence, Assessment
 from ..periods import periods_for
 from .assess import assess_one, AssessmentReport
-from .flag import resolve, transition
+from . import followup
 from .prescreen import bind_evidence, evaluate_thresholds, evidence_age_days
 
 #: Verdicts that count as the problem having been fixed.
@@ -42,8 +43,8 @@ class ReassessmentResult:
     new_assessment_id: str | None = None
     verdict: str | None = None
     decided_by: str | None = None
-    action_id: str | None = None
-    action_status: str | None = None
+    finding_id: str | None = None
+    finding_status: str | None = None
     resolved: bool = False
     reason: str = ""
 
@@ -146,15 +147,8 @@ def _reassess(
         result.reason = "no unbound remediation evidence for this instance"
         return result
 
-    action = next(
-        (a for a in repo["actions"].list(assessment_id=superseded.id)), None
-    ) or next(
-        (
-            a
-            for a in repo["actions"].list()
-            if a.id == f"ACT-{instance.id.removeprefix('CHK-')}"
-        ),
-        None,
+    finding_record = repo["findings"].get(
+        f"FND-{instance.id.removeprefix('CHK-')}"
     )
 
     # --- the owning team files a fix --------------------------------------
@@ -175,16 +169,13 @@ def _reassess(
             "submitted_at": submission.submitted_at.isoformat(),
         },
     )
-    if action is not None:
-        result.action_id = action.id
-        if action.status in ("raised", "assigned"):
-            transition(
-                repo, action, "in_progress", actor="user", owner=submission.author,
-                detail={"trigger": "remediation evidence filed"},
-            )
-        transition(
-            repo, action, "remediation_submitted", actor="user",
-            owner=submission.author,
+    if finding_record is not None:
+        result.finding_id = finding_record.id
+        # Owner progress is self-reported and advisory. Filing evidence says the
+        # owner believes the work is done; it does not make the finding closed,
+        # and section 4 is emphatic that only the auditor moves that.
+        followup.set_progress(
+            repo, finding_record, "implemented", by=submission.author,
             detail={"evidence_id": evidence.id, "submission_id": submission.id},
         )
 
@@ -227,29 +218,40 @@ def _reassess(
     result.verdict = finding.verdict
     result.decided_by = finding.decided_by
 
-    # --- did it work? -----------------------------------------------------
-    if action is not None:
-        transition(
-            repo, action, "reassessed", actor="system", owner=instance.owner_name,
-            detail={
-                "assessment_id": finding.id,
-                "verdict": finding.verdict,
-                "supersedes_assessment_id": superseded.id,
-            },
-        )
+    # --- did it work? The auditor decides, always --------------------------
+    if finding_record is not None:
+        from .. import directory
+
+        people = directory.load(conn)
+        auditors = people.by_role("pa_infosec")
+        auditor = auditors[0].id if auditors else "ID-SYSTEM"
         if finding.verdict in PASSING:
-            note = (
-                f"Remediation accepted. {finding.id} supersedes {superseded.id}: "
-                f"{superseded.verdict} -> {finding.verdict}, decided by "
-                f"{finding.decided_by}."
+            followup.close_on_repo(
+                repo, finding_record, by=auditor,
+                remarks=(
+                    f"Remediation accepted. {finding.id} supersedes "
+                    f"{superseded.id}: {superseded.verdict} -> {finding.verdict}, "
+                    f"decided by {finding.decided_by}."
+                ),
+                as_of=as_of,
             )
-            resolve(repo, action, note, as_of, owner=instance.owner_name)
             result.resolved = True
         else:
+            # Insufficient. The finding stays open, another round is expected,
+            # and the count of rounds is what makes "what did this cost to
+            # close?" answerable later.
+            followup.record_insufficient_round(
+                repo, finding_record, by=auditor,
+                remarks=(
+                    f"Evidence does not clear the finding: still "
+                    f"{finding.verdict}. {finding.recommended_action}".strip()
+                ),
+                assessment_id=finding.id,
+            )
             result.reason = (
                 f"remediation did not clear the finding: still {finding.verdict}"
             )
-        result.action_status = action.status
+        result.finding_status = finding_record.status
 
     for flag in repo["flags"].list(check_instance_id=instance.id):
         if result.resolved and flag.status == "open":

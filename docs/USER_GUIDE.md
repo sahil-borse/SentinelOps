@@ -90,13 +90,15 @@ Press **Advance three months**. This runs three monthly cycles.
 
 ![Three months later](images/03-time-passes.png)
 
-Checks fall due, go unanswered, and the work raised from them escalates to
-Group Compliance on its own timer. Nobody had to notice a deadline.
+Checks fall due, go unanswered, and the findings raised from them are chased and
+then escalated on a severity-driven timer. Nobody had to notice a deadline.
 
-> **A note on escalation.** Two clocks run here. A check that is never answered
-> is closed by the pre-screen as *no evidence submitted*, and the **action**
-> raised from it is what climbs the management chain. The wording in this panel
-> describes the ladder that actually fires.
+> **A note on escalation.** Two clocks run on every open finding: a reminder
+> cadence and an escalation timer, both set by the severity the auditor
+> assigned. A Major finding is escalated three days past its target date, an
+> Observation seven — never more than a week in any case. Escalation goes up
+> the owner's own reporting line *and* to PA/InfoSec, and the reminders keep
+> going afterwards: escalating is not a way of handing the problem on.
 
 ### Step 3 — Find the report that looks fine and is not
 
@@ -148,9 +150,11 @@ Press **File a correction and re-check it**.
 
 A corrected report is filed and goes through **the same** pre-screen and the
 same assessment as the original — same criteria, same citation rule. If it
-passes, the action closes.
+passes, an auditor closes the finding with remarks naming the assessment that
+cleared it. If it does not, the finding **stays open** and the round is counted:
+a finding is only ever closed by an auditor who is satisfied.
 
-**Both findings are kept.** The failure is marked superseded rather than
+**Both assessments are kept.** The failure is marked superseded rather than
 deleted, so the record still shows what was wrong and when. In *Assessment detail*
 the **Assessment history** panel lists both.
 
@@ -195,13 +199,19 @@ stored on every flag, so the number can be checked rather than trusted.
 **Overdue and escalation queue** — what is late, worst first. *Escalation* 0
 means it is with the owner, 1 a department head, 2 Group Compliance.
 
-### Open actions
+### Open findings
 
-![Upload and open actions](images/11-upload-and-actions.png)
+![Upload and open findings](images/11-upload-and-actions.png)
 
-Every non-compliant finding raises an action against the owning team with a due
-date that tightens as severity rises — seven days for critical, sixty for low.
-Resolved actions are listed under the expander with the note that closed them.
+Every non-compliant assessment raises a **finding** against the owning unit. A
+finding is Open or Closed and nothing else. Its target date is derived from the
+severity — three days for an urgent Major, twenty-eight for an Observation —
+and *Chased* counts how many times the owner has been reminded or sent back for
+more evidence.
+
+Owner progress (*acknowledged*, *action in progress*, *implemented*) is
+self-reported and advisory: it never closes anything. Closed findings are listed
+under the expander with the auditor who closed them and their remarks.
 
 ---
 
@@ -220,7 +230,7 @@ In **Submit evidence**:
 7. Press **Submit evidence**.
 
 The confirmation names the record it created, its size, the verdict it reached
-and whether the action closed.
+and whether the finding closed.
 
 > Uploaded documents are not a special case. They land in the same table as the
 > generated corpus and take the same path through the pre-screen and the
@@ -244,7 +254,7 @@ panel taller — not the page longer.
 
 The pack contains a cover, a coverage summary, the exception register with
 approvers and rationales, the findings register **with the cited excerpts
-inline**, the action register from finding to closure, a method note, and the
+inline**, the finding register from raising to closure, a method note, and the
 full chronological trail.
 
 It is assembled from the audit log and nothing else. If the log could not

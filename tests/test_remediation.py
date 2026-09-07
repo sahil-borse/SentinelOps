@@ -77,31 +77,56 @@ def test_a_new_finding_supersedes_the_one_that_failed(remediated):
         assert repo["assessments"].get(old.id).verdict == old.verdict
 
 
-def test_the_action_resolves_with_a_note_naming_the_finding(remediated):
+def test_the_finding_closes_with_remarks_naming_the_assessment(remediated):
     conn, results = remediated
     repo = repositories(conn)
     for result in results:
-        action = repo["actions"].get(result.action_id)
-        assert action.status == "resolved"
-        assert action.resolved_at is not None
-        assert result.new_assessment_id in action.resolution_note
-        assert result.superseded_assessment_id in action.resolution_note
+        finding = repo["findings"].get(result.finding_id)
+        assert finding.status == "closed"
+        assert finding.closed_at is not None
+        assert result.new_assessment_id in finding.closure_remarks
+        assert result.superseded_assessment_id in finding.closure_remarks
 
 
-def test_the_action_walks_the_whole_lifecycle_in_order(remediated):
+def test_only_an_auditor_closes_the_finding(remediated):
+    """Section 7: closure is a pa_infosec action and nobody else's."""
+    conn, results = remediated
+    repo = repositories(conn)
+    auditors = {
+        i.id for i in repo["identities"].list() if i.role == "pa_infosec"
+    }
+    for result in results:
+        finding = repo["findings"].get(result.finding_id)
+        assert finding.closed_by in auditors
+        assert finding.closed_by != finding.owner_identity
+
+
+def test_the_finding_walks_the_whole_lifecycle_in_order(remediated):
     conn, results = remediated
     repo = repositories(conn)
     actions = [
-        e.action for e in repo["audit"].read_for("Action", results[0].action_id)
+        e.action for e in repo["audit"].read_for("Finding", results[0].finding_id)
     ]
     assert actions == [
-        "action_raised",
-        "action_assigned",
-        "action_in_progress",
-        "action_remediation_submitted",
-        "action_reassessed",
-        "action_resolved",
+        "finding_raised",
+        "finding_severity_assigned",
+        "finding_progress_recorded",
+        "finding_closed",
     ]
+
+
+def test_owner_progress_never_closes_anything(remediated):
+    """Advisory, and the trail says so in as many words."""
+    conn, results = remediated
+    repo = repositories(conn)
+    progress = [
+        e for e in repo["audit"].read_for("Finding", results[0].finding_id)
+        if e.action == "finding_progress_recorded"
+    ]
+    assert progress
+    assert progress[0].detail["status"] == "open"
+    assert progress[0].detail["progress"] == "implemented"
+    assert "stays open" in progress[0].detail["note"]
 
 
 def test_remediation_creates_a_new_evidence_record(remediated):
@@ -196,10 +221,20 @@ def test_a_failed_remediation_leaves_the_action_open(flagged):
     assert result.resolved is False
     assert result.verdict == "insufficient_evidence"
     assert "did not clear the finding" in result.reason
-    action = repo["actions"].get(result.action_id)
-    assert action.status == "reassessed"
-    assert action.resolution_note is None
-    assert action.resolved_at is None
+    finding = repo["findings"].get(result.finding_id)
+    assert finding.status == "open", (
+        "the finding stays open until the auditor is satisfied"
+    )
+    assert finding.closure_remarks == ""
+    assert finding.closed_at is None
+    # A round that did not land is still a round, and it is counted.
+    assert finding.follow_up_count >= 1
+    insufficient = [
+        e for e in repo["audit"].read_for("Finding", finding.id)
+        if e.action == "evidence_found_insufficient"
+    ]
+    assert len(insufficient) == 1
+    assert insufficient[0].detail["status"] == "open"
 
 
 def test_a_failed_remediation_still_supersedes_and_still_records(flagged):
@@ -299,9 +334,9 @@ def test_the_whole_lifecycle_is_reconstructable(remediated):
     assert "check_instance_created" in instance_events
     assert "remediation_submitted" in instance_events
 
-    action_events = repo["audit"].read_for("Action", result.action_id)
-    assert action_events[-1].action == "action_resolved"
-    assert all(e.owner for e in action_events)
+    finding_events = repo["audit"].read_for("Finding", result.finding_id)
+    assert finding_events[-1].action == "finding_closed"
+    assert all(e.owner for e in finding_events)
 
     superseded = repo["audit"].read_for("Assessment", result.superseded_assessment_id)
     assert any(e.action == "assessment_superseded" for e in superseded)
@@ -311,10 +346,10 @@ def test_every_transition_records_who(remediated):
     conn, results = remediated
     repo = repositories(conn)
     for result in results:
-        for event in repo["audit"].read_for("Action", result.action_id):
+        for event in repo["audit"].read_for("Finding", result.finding_id):
             assert event.owner
             assert event.actor_kind in ("system", "ai", "user")
-            assert "from_status" in event.detail or event.action == "action_raised"
+            assert event.actor_identity, "every transition names an identity"
 
 
 def test_the_person_who_filed_the_fix_is_named(remediated):
@@ -331,12 +366,12 @@ def test_the_person_who_filed_the_fix_is_named(remediated):
         assert submitted[0].detail["supersedes_assessment_id"] == result.superseded_assessment_id
 
 
-def test_actions_raised_versus_resolved_is_answerable(remediated):
-    """The metric section 6 asks for, straight out of the data."""
+def test_findings_open_versus_closed_is_answerable(remediated):
+    """The metric section 8 asks for, straight out of the data."""
     conn, results = remediated
-    actions = repositories(conn)["actions"].list()
-    raised = len(actions)
-    resolved = len([a for a in actions if a.status == "resolved"])
+    findings = repositories(conn)["findings"].list()
+    raised = len(findings)
+    closed = len([f for f in findings if f.status == "closed"])
     assert raised > 0
-    assert resolved == len(results)
-    assert 0 < resolved / raised < 1
+    assert closed == len(results)
+    assert 0 < closed / raised < 1

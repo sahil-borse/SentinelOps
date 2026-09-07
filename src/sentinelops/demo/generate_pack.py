@@ -15,6 +15,7 @@ from ..db import connect
 from ..pack import build, load_events, render_html, render_markdown
 from ..stages.assess import run as assess
 from ..stages.flag import run as flag_stage
+from ..stages.followup import run as followup
 from ..stages.prescreen import run as prescreen
 from ..stages.remediation import reassess_all
 from ..stages.trigger import run_cycle
@@ -35,6 +36,7 @@ def main() -> None:
         if screen.to_assess:
             assess(conn, screen.to_assess, as_of)
         flag_stage(conn, as_of)
+        followup(conn, as_of)
         reassess_all(conn, as_of)
 
     events = load_events(conn, since=date(2026, 1, 1), until=date(2027, 3, 31))

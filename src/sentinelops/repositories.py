@@ -17,7 +17,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from .entities import (
-    Action,
+    Finding,
     Flag,
     AuditEvent,
     CheckInstance,
@@ -42,7 +42,8 @@ _SPEC: dict[type, tuple[str, dict[str, str]]] = {
                          "is_remediation": "bool"}),
     Assessment: ("assessments", {"cited_spans": "json", "gaps": "json",
                  "needs_human_review": "bool", "assessed_at": "datetime"}),
-    Action: ("actions", {"due_date": "date", "resolved_at": "datetime"}),
+    Finding: ("findings", {"target_date": "date", "raised_at": "datetime",
+              "closed_at": "datetime", "recurrence_of": "json"}),
     Flag: ("flags", {"raised_at": "datetime"}),
     ComplianceException: ("compliance_exceptions", {"granted_at": "date",
                           "expires_at": "date"}),
@@ -405,7 +406,7 @@ def repositories(conn: sqlite3.Connection) -> dict[str, Any]:
         "evidence": WriteOnceRepository(conn, Evidence),
         "submissions": Repository(conn, EvidenceSubmission),
         "assessments": Repository(conn, Assessment),
-        "actions": Repository(conn, Action),
+        "findings": Repository(conn, Finding),
         "flags": Repository(conn, Flag),
         "exceptions": Repository(conn, ComplianceException),
         "audit": AuditLog(conn),

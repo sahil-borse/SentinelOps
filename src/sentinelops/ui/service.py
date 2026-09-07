@@ -21,6 +21,7 @@ from ..pack import load_events, render_html, render_markdown
 from ..repositories import repositories, simulated_clock
 from ..stages.assess import run as assess
 from ..stages.flag import run as flag_stage
+from ..stages.followup import run as followup_stage
 from ..stages.prescreen import run as prescreen
 from ..stages.remediation import reassess as reassess_instance
 from ..stages.remediation import reassess_all
@@ -45,8 +46,9 @@ class TickResult:
     assessed: int = 0
     model_calls: int = 0
     flags: int = 0
-    actions_raised: int = 0
-    actions_escalated: int = 0
+    findings_raised: int = 0
+    reminders_sent: int = 0
+    escalations: int = 0
     remediations_closed: int = 0
 
     def summary(self) -> str:
@@ -54,8 +56,8 @@ class TickResult:
             f"{self.created} checks raised · {self.suppressed} suppressed by "
             f"exception · {self.resolved_by_rule} decided by rule · "
             f"{self.assessed} assessed by model ({self.model_calls} calls) · "
-            f"{self.flags} flagged · {self.actions_raised} actions raised · "
-            f"{self.actions_escalated} escalated · "
+            f"{self.flags} flagged · {self.findings_raised} findings raised · "
+            f"{self.reminders_sent} chased · {self.escalations} escalated · "
             f"{self.remediations_closed} remediations closed"
         )
 
@@ -100,7 +102,7 @@ def tick(conn, as_of: date, *, client=None) -> TickResult:
     cycle = run_cycle(conn, as_of, trigger="manual", actor="user")
     result.created = len(cycle.created)
     result.suppressed = len(cycle.suppressed)
-    result.actions_escalated = len(cycle.escalations)
+    result.escalations = len(cycle.escalations)
 
     screen = prescreen(conn, as_of)
     result.screened = screen.considered
@@ -113,8 +115,14 @@ def tick(conn, as_of: date, *, client=None) -> TickResult:
 
     flags = flag_stage(conn, as_of)
     result.flags = len(flags.flags)
-    result.actions_raised = len(flags.actions_raised)
-    result.actions_escalated += len(flags.actions_escalated)
+    result.findings_raised = len(flags.findings_raised)
+
+    # The chasing engine. It runs every tick because that is the whole point of
+    # it: a system that never forgets to follow up only earns that if it looks
+    # every single cycle.
+    chase = followup_stage(conn, as_of)
+    result.reminders_sent = len(chase.reminded)
+    result.escalations += len(chase.escalated)
 
     result.remediations_closed = len(reassess_all(conn, as_of, client=client))
     return result
@@ -244,10 +252,10 @@ def counts(conn) -> dict[str, Any]:
         "flags_overdue": len([f for f in flags if f.category == "overdue"]),
         "flags_exception": len([f for f in flags if f.category == "exception"]),
         "actions_open": len(
-            [a for a in repo["actions"].list() if a.status != "resolved"]
+            [f for f in repo["findings"].list() if f.status == "open"]
         ),
         "actions_resolved": len(
-            [a for a in repo["actions"].list() if a.status == "resolved"]
+            [f for f in repo["findings"].list() if f.status == "closed"]
         ),
         "audit_events": len(repo["audit"].read_all()),
     }

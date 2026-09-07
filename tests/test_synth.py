@@ -409,7 +409,7 @@ def test_the_corpus_loads_into_sqlite(conn, corpus):
 def test_seeding_creates_no_findings_actions_or_instances(conn, corpus):
     """The generator supplies inputs; the pipeline produces judgements."""
     seed_database(conn, corpus)
-    for table in ("check_instances", "evidence", "assessments", "actions"):
+    for table in ("check_instances", "evidence", "assessments", "findings"):
         assert conn.execute(f"SELECT COUNT(*) c FROM {table}").fetchone()["c"] == 0
 
 

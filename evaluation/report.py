@@ -61,10 +61,10 @@ def headline_table(evaluation) -> str:
              f"{b['result'].total_tokens:,}",
              f"{p['tokens']['total_tokens']:,}",
              f"{c['token_reduction_factor']:.1f}x fewer"),
-            ("Actions raised / resolved",
+            ("Findings raised / closed",
              "n/a",
              f"{p['actions']['raised']} / {p['actions']['resolved']}",
-             f"MTTR {p['actions']['mean_days_to_resolution']} days"),
+             f"mean {p['actions']['mean_days_to_resolution']} days to closure"),
         ],
         ("Metric", "Manual (simulated)", "SentinelOps", "Difference"),
     )
@@ -254,21 +254,29 @@ responds correctly to prompt size. They are still an approximation of a real
 tokenizer's output. Exact token and cost figures need the real provider; the
 *ratio* is the durable part.
 
-### 7. Actions raised vs resolved — {p['actions']['raised']} / {p['actions']['resolved']}
+### 7. Findings raised vs closed — {p['actions']['raised']} / {p['actions']['resolved']}
 
 {_table([
     ("Raised", str(p['actions']['raised'])),
-    ("Resolved", str(p['actions']['resolved'])),
+    ("Closed by an auditor", str(p['actions']['resolved'])),
     ("Still open", str(p['actions']['open'])),
     ("Escalated", str(p['actions']['escalated'])),
-    ("Resolution rate", _pct(p['actions']['resolution_rate'])),
-    ("Mean days to resolution", str(p['actions']['mean_days_to_resolution'])),
+    ("Closure rate", _pct(p['actions']['resolution_rate'])),
+    ("Mean days to closure", str(p['actions']['mean_days_to_resolution'])),
+    ("Mean follow-ups per closure",
+     str(p['actions']['mean_follow_ups_to_close'])),
 ], ("", "count"))}
 
-The resolution rate is low because the corpus contains remediation evidence for
+The closure rate is low because the corpus contains remediation evidence for
 only {p['remediated']} of the failures — the rest are left open on purpose, so the
 queue in the dashboard is not empty. It measures the corpus, not the diligence of
 a team.
+
+**What the chase did.** Across the same run the follow-up engine sent
+{p['reminders']:,} reminders and raised {p['escalations']:,} escalations, all
+deterministic and all from the severity table. That is the number a human would
+have had to produce by remembering; it is not a measure of accuracy, and it is
+not claimed as one.
 
 ---
 

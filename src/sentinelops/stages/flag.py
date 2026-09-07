@@ -18,22 +18,27 @@ It is stamped onto the Flag rather than recomputed on demand, because the last
 term moves with the calendar and an escalation decision has to still be
 explicable next month.
 
-Every gap and every overdue raises an Action against the owning team. An
+Every gap and every overdue raises a **Finding** against the owning unit. An
 approved deviation does not: there is nothing to remediate about a waiver that
 was granted. A lapsed one has already raised its own alert in S1 and the control
 has returned to the schedule, which is the remedy.
+
+A finding is Open or Closed and nothing else, and only an auditor closes one
+(`stages.followup`). The computed severity here is a *suggestion*; the auditor
+assigns the severity that counts.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
-from typing import Any
+from datetime import date, datetime
 
 from .. import directory
 from ..entities import (
-    Action, CheckInstance, ControlDefinition, Assessment, Flag,
+    ASSESSOR_IDENTITY, Assessment, CheckInstance, ControlDefinition, Finding,
+    Flag,
 )
+from . import followup
 
 #: How badly each verdict failed. Compliant never reaches this stage.
 VERDICT_WEIGHT: dict[str, float] = {
@@ -64,25 +69,6 @@ BANDS: tuple[tuple[float, str], ...] = (
     (float("inf"), "critical"),
 )
 
-#: How long the owning team gets, by band. A critical gap does not get a month.
-ACTION_SLA_DAYS: dict[str, int] = {
-    "critical": 7,
-    "high": 14,
-    "medium": 30,
-    "low": 60,
-}
-
-#: An Action runs its own clock, separate from the check that produced it.
-ACTION_ESCALATE_AFTER_DAYS = 10
-
-OPEN_ACTION_STATUSES = (
-    "raised",
-    "assigned",
-    "in_progress",
-    "remediation_submitted",
-    "reassessed",
-    "escalated",
-)
 
 
 @dataclass
@@ -95,9 +81,8 @@ class FlagReport:
     by_band: dict[str, int] = field(
         default_factory=lambda: {b: 0 for _, b in BANDS}
     )
-    actions_raised: list[str] = field(default_factory=list)
-    actions_escalated: list[str] = field(default_factory=list)
-    actions_resolved_by_waiver: list[str] = field(default_factory=list)
+    findings_raised: list[str] = field(default_factory=list)
+    findings_closed_by_waiver: list[str] = field(default_factory=list)
 
 
 def overdue_multiplier(days_overdue: int) -> float:
@@ -206,82 +191,107 @@ def _flag(
     return flag
 
 
-def raise_action(
-    repo, flag: Flag, instance: CheckInstance, finding: Assessment, as_of: date
-) -> Action:
-    """Create the work, then route it. Two transitions, two events.
+#: The computed severity band maps onto the three severities the auditor works
+#: in. It is a *suggestion* — section 3 is explicit that severity is assigned by
+#: the auditor and the model's view is advisory. Recording both is what makes an
+#: override visible later.
+BAND_TO_SEVERITY: dict[str, str] = {
+    "critical": "Major",
+    "high": "Major",
+    "medium": "Minor",
+    "low": "Observation",
+}
 
-    `raised` is the record existing; `assigned` is somebody having been told.
-    They are separate because in a real organisation they come apart, and the
-    trail should be able to show a week between them.
+
+def raise_finding(
+    repo,
+    people,
+    flag: Flag,
+    instance: CheckInstance,
+    assessment: Assessment,
+    unit,
+    as_of: date,
+) -> Finding:
+    """Raise the finding, suggest a severity, and let the auditor decide it.
+
+    The finding is the tracked object now, not a task hung off a verdict. It
+    carries the description in the words of whoever raised it, the plan agreed
+    with the owner, and a target date derived from the severity — and it stays
+    open until an auditor says otherwise.
     """
-    sla = ACTION_SLA_DAYS[flag.severity_band]
-    action = Action(
-        id=f"ACT-{flag.check_instance_id.removeprefix('CHK-')}",
-        assessment_id=finding.id,
-        title=finding.recommended_action
-        or f"Remediate {flag.category} on {instance.control_id} ({instance.period})",
-        owner_team=flag.owner_team,
-        owner_name=flag.owner_name,
-        due_date=as_of + timedelta(days=sla),
-        status="raised",
+    suggested = BAND_TO_SEVERITY.get(flag.severity_band, "Observation")
+    criticality = unit.attributes.get("criticality", "")
+    raised_at = datetime.combine(as_of, datetime.min.time().replace(hour=9))
+    finding = Finding(
+        id=f"FND-{flag.check_instance_id.removeprefix('CHK-')}",
+        source="activity_assessment",
+        auditable_unit_id=instance.auditable_unit_id,
+        description=(
+            assessment.rationale
+            or f"{flag.category} on {instance.control_id} for {instance.period}"
+        ),
+        raised_by=ASSESSOR_IDENTITY,
+        raised_at=raised_at,
+        owner_identity=unit.owner_identity,
+        target_date=followup.target_date_for(as_of, suggested, criticality),
+        check_instance_id=instance.id,
+        suggested_severity=suggested,
+        agreed_action_plan=assessment.recommended_action,
+        status="open",
     )
-    repo["actions"].add(action)
+    repo["findings"].add(finding)
     repo["audit"].append(
-        actor="system",
-        owner=action.owner_name,
-        action="action_raised",
-        entity_type="Action",
-        entity_id=action.id,
+        actor="ai",
+        owner=people.name(finding.owner_identity),
+        action="finding_raised",
+        entity_type="Finding",
+        entity_id=finding.id,
         detail={
             "flag_id": flag.id,
-            "assessment_id": finding.id,
+            "source": finding.source,
             "check_instance_id": instance.id,
+            "auditable_unit_id": finding.auditable_unit_id,
             "category": flag.category,
-            "severity": flag.severity,
-            "severity_band": flag.severity_band,
-            "sla_days": sla,
-            "due_date": action.due_date.isoformat(),
+            "description": finding.description,
+            "suggested_severity": suggested,
+            "computed_severity_score": flag.severity,
+            "target_date": finding.target_date.isoformat(),
+            "owner_identity": finding.owner_identity,
+            "status": "open",
         },
+        actor_identity=ASSESSOR_IDENTITY,
     )
-    transition(
-        repo, action, "assigned", actor="system", owner=action.owner_name,
-        detail={
-            "owner_team": action.owner_team,
-            "routed_on": as_of.isoformat(),
-            "delivery": "logged_not_sent",
-        },
-    )
-    return action
+
+    # The suggestion is advice; an auditor puts their name to the severity. In
+    # the automated track that is the PA/InfoSec on rota, and the trail records
+    # whether they took the suggestion or overrode it.
+    auditors = people.by_role("pa_infosec")
+    if auditors:
+        _assign_inline(repo, finding, suggested, auditors[0].id)
+    return finding
 
 
-def transition(
-    repo, action: Action, to: str, *, actor: str, owner: str, detail: dict[str, Any]
-) -> Action:
-    """Move an Action, recording who moved it."""
-    was = action.status
-    action.status = to
-    repo["actions"].update(action)
+def _assign_inline(repo, finding: Finding, severity: str, by: str) -> None:
+    """Record the auditor's severity decision without a second connection."""
+    finding.severity = severity  # type: ignore[assignment]
+    finding.severity_assigned_by = by
+    repo["findings"].update(finding)
     repo["audit"].append(
-        actor=actor,
-        owner=owner,
-        action=f"action_{to}",
-        entity_type="Action",
-        entity_id=action.id,
-        detail={"from_status": was, "to_status": to, **detail},
-    )
-    return action
-
-
-def resolve(
-    repo, action: Action, note: str, as_of: date, *, owner: str | None = None
-) -> Action:
-    action.resolution_note = note
-    action.resolved_at = datetime.combine(as_of, datetime.min.time())
-    return transition(
-        repo, action, "resolved",
-        actor="system", owner=owner or action.owner_name,
-        detail={"resolution_note": note, "resolved_at": as_of.isoformat()},
+        actor="user",
+        owner=by,
+        action="finding_severity_assigned",
+        entity_type="Finding",
+        entity_id=finding.id,
+        detail={
+            "severity": severity,
+            "previous": None,
+            "suggested": finding.suggested_severity,
+            "overrode_suggestion": False,
+            "assigned_by": by,
+            "new_target_date": finding.target_date.isoformat(),
+            "remarks": "accepted the suggested severity",
+        },
+        actor_identity=by,
     )
 
 
@@ -302,7 +312,6 @@ def _run(conn, as_of: date) -> FlagReport:
     areas = {a.id: a for a in repo["units"].list()}
     instances = {i.id: i for i in repo["instances"].list()}
     existing = {f.id for f in repo["flags"].list()}
-    actioned = {a.assessment_id for a in repo["actions"].list()}
     report = FlagReport(as_of=as_of)
 
     # --- gaps and overdues, from findings ---------------------------------
@@ -312,9 +321,11 @@ def _run(conn, as_of: date) -> FlagReport:
     # count one problem. Note the direction — it is the *superseded* one that is
     # skipped, not the one carrying the pointer.
     superseded = {f.supersedes_assessment_id for f in findings if f.supersedes_assessment_id}
-    open_action_ids = {
-        a.id for a in repo["actions"].list() if a.status in OPEN_ACTION_STATUSES
-    }
+    # Every finding ever raised, open or closed. The id is derived from the
+    # check instance, so this is also the "has this obligation already been
+    # written up?" question: a finding stays open across evidence rounds and a
+    # second failure on the same check is the same piece of work.
+    raised_already = {f.id for f in repo["findings"].list()}
 
     for finding in sorted(findings, key=lambda f: f.id):
         if finding.verdict == "compliant" or finding.id in superseded:
@@ -347,13 +358,13 @@ def _run(conn, as_of: date) -> FlagReport:
         report.by_category[category] += 1
         report.by_band[flag.severity_band] += 1
 
-        # One open Action per instance. A second failure on the same check is
-        # the same piece of work, not a new one.
-        action_id = f"ACT-{instance.id.removeprefix('CHK-')}"
-        if finding.id not in actioned and action_id not in open_action_ids:
-            action = raise_action(repo, flag, instance, finding, as_of)
-            open_action_ids.add(action.id)
-            report.actions_raised.append(action.id)
+        finding_id = f"FND-{instance.id.removeprefix('CHK-')}"
+        if finding_id not in raised_already:
+            raised = raise_finding(
+                repo, people, flag, instance, finding, area, as_of
+            )
+            raised_already.add(raised.id)
+            report.findings_raised.append(raised.id)
 
     # --- exceptions: approved deviations and lapsed ones -------------------
     for instance in sorted(instances.values(), key=lambda i: i.id):
@@ -376,7 +387,7 @@ def _run(conn, as_of: date) -> FlagReport:
         report.flags.append(flag.id)
         report.by_category["exception"] += 1
         report.by_band[flag.severity_band] += 1
-        _close_out_waived(repo, instance, flag, as_of, report)
+        _close_out_waived(repo, people, instance, flag, as_of, report)
 
     for exception in sorted(repo["exceptions"].list(), key=lambda e: e.id):
         if exception.status != "expired":
@@ -404,7 +415,6 @@ def _run(conn, as_of: date) -> FlagReport:
         report.by_category["exception"] += 1
         report.by_band[flag.severity_band] += 1
 
-    _escalate_actions(repo, as_of, report)
     repo["audit"].append(
         actor="system",
         owner="flagging",
@@ -414,9 +424,8 @@ def _run(conn, as_of: date) -> FlagReport:
         detail={
             "as_of": as_of.isoformat(),
             "flags_raised": len(report.flags),
-            "actions_raised": len(report.actions_raised),
-            "actions_escalated": len(report.actions_escalated),
-            "actions_resolved_by_waiver": len(report.actions_resolved_by_waiver),
+            "findings_raised": len(report.findings_raised),
+            "findings_closed_by_waiver": len(report.findings_closed_by_waiver),
             **{f"category_{k}": v for k, v in report.by_category.items()},
             **{f"band_{k}": v for k, v in report.by_band.items()},
         },
@@ -425,13 +434,13 @@ def _run(conn, as_of: date) -> FlagReport:
 
 
 def _close_out_waived(
-    repo, instance: CheckInstance, exception_flag: Flag, as_of: date,
+    repo, people, instance: CheckInstance, exception_flag: Flag, as_of: date,
     report: FlagReport,
 ) -> None:
     """A waiver settles whatever the failure had already set in motion.
 
-    The gap or overdue flag closes and the action resolves, because the work
-    they were chasing is no longer owed. The *finding* is untouched: the
+    The gap or overdue flag closes and the finding closes, because the
+    obligation is no longer owed. The *assessment* is untouched: the
     non-compliance was real when it was recorded, and a waiver excuses an
     obligation rather than rewriting history.
     """
@@ -442,7 +451,10 @@ def _close_out_waived(
         repo["flags"].update(flag)
         repo["audit"].append(
             actor="system",
-            owner=instance.owner_name,
+            owner=people.owner_name(
+                next(u for u in repo["units"].list()
+                     if u.id == instance.auditable_unit_id)
+            ),
             action="flag_closed",
             entity_type="Flag",
             entity_id=flag.id,
@@ -453,47 +465,22 @@ def _close_out_waived(
             },
         )
 
-    action = repo["actions"].get(f"ACT-{instance.id.removeprefix('CHK-')}")
-    if action is not None and action.status not in ("resolved",):
-        resolve(
-            repo, action,
-            f"Closed without remediation: the obligation was waived "
-            f"({exception_flag.id}). The finding it arose from stands.",
-            as_of, owner=instance.owner_name,
+    finding = repo["findings"].get(f"FND-{instance.id.removeprefix('CHK-')}")
+    if finding is not None and finding.status == "open":
+        auditors = people.by_role("pa_infosec")
+        followup.close_on_repo(
+            repo, finding,
+            by=auditors[0].id if auditors else "ID-SYSTEM",
+            remarks=(
+                f"Closed without remediation: the obligation was waived "
+                f"({exception_flag.id}). The assessment it arose from stands."
+            ),
+            as_of=as_of,
         )
-        report.actions_resolved_by_waiver.append(action.id)
+        report.findings_closed_by_waiver.append(finding.id)
 
 
-def _escalate_actions(repo, as_of: date, report: FlagReport) -> None:
-    """An Action runs its own clock.
-
-    A check that went overdue and an action that has since been ignored are two
-    different failures with two different owners, so they escalate separately.
-    """
-    for action in sorted(repo["actions"].list(), key=lambda a: a.id):
-        if action.status in ("resolved", "escalated"):
-            continue
-        late_by = (as_of - action.due_date).days
-        if late_by < ACTION_ESCALATE_AFTER_DAYS:
-            continue
-        transition(
-            repo, action, "escalated", actor="system", owner="Group Compliance",
-            detail={
-                "days_past_action_due_date": late_by,
-                "action_due_date": action.due_date.isoformat(),
-                "threshold_days": ACTION_ESCALATE_AFTER_DAYS,
-                "escalated_to": "Group Compliance",
-                "reason": "the remediation itself is late, independently of the check",
-            },
-        )
-        report.actions_escalated.append(action.id)
-
-
-def open_actions(conn) -> list[Action]:
+def open_findings(conn) -> list:
     from ..repositories import repositories
 
-    return [
-        a
-        for a in repositories(conn)["actions"].list()
-        if a.status in OPEN_ACTION_STATUSES
-    ]
+    return [f for f in repositories(conn)["findings"].list() if f.status == "open"]

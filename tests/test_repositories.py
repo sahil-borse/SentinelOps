@@ -3,11 +3,11 @@
 from datetime import date, datetime
 
 from sentinelops.entities import (
-    Action,
     CheckInstance,
     ComplianceException,
     ControlDefinition,
     Evidence,
+    Finding,
     Assessment,
     AuditableUnit,
 )
@@ -52,7 +52,7 @@ def test_check_instance_dates_and_update(repo):
     assert repo["instances"].get("I1").status == "assessed"
 
 
-def test_evidence_and_finding_and_action_round_trip(repo):
+def test_evidence_assessment_and_finding_round_trip(repo):
     _seed(repo)
     evidence = Evidence(
         "E1", "I1", "document", "access_review_report", "text", "abc123",
@@ -82,12 +82,37 @@ def test_evidence_and_finding_and_action_round_trip(repo):
     repo["assessments"].add(superseding)
     assert repo["assessments"].get("ASM-2").supersedes_assessment_id == "ASM-1"
 
-    action = Action(
-        "ACT1", "ASM-1", "Revoke", "Finance Ops", "K. Rao", date(2026, 5, 15)
+    # The v3 central object. Named rather than positional for the same reason.
+    finding = Finding(
+        id="FND-1", source="activity_assessment", auditable_unit_id="A1",
+        description="Privileged accounts were not reviewed for Q1.",
+        raised_by="ID-PA-KAUR", raised_at=datetime(2026, 4, 20, 9, 0),
+        owner_identity="ID-RAO", target_date=date(2026, 5, 15),
+        check_instance_id="I1", suggested_severity="Minor", severity="Major",
+        severity_assigned_by="ID-PA-KAUR",
+        agreed_action_plan="Revoke and re-certify.",
     )
-    repo["actions"].add(action)
-    assert repo["actions"].get("ACT1") == action
-    assert repo["actions"].get("ACT1").resolved_at is None
+    repo["findings"].add(finding)
+    loaded = repo["findings"].get("FND-1")
+    assert loaded == finding
+    assert loaded.status == "open" and loaded.is_open
+    assert loaded.closed_at is None
+    assert loaded.recurrence_of == []
+
+    # Severity is the auditor's, and the suggestion is kept beside it so an
+    # override stays visible after the fact.
+    assert (loaded.severity, loaded.suggested_severity) == ("Major", "Minor")
+
+    finding.status = "closed"
+    finding.closed_by = "ID-PA-KAUR"
+    finding.closed_at = datetime(2026, 5, 10, 12, 0)
+    finding.closure_remarks = "Re-certification evidence accepted."
+    finding.recurrence_of = ["FND-0"]
+    repo["findings"].update(finding)
+    reloaded = repo["findings"].get("FND-1")
+    assert reloaded.is_open is False
+    assert reloaded.recurrence_of == ["FND-0"]
+    assert reloaded.closed_at == datetime(2026, 5, 10, 12, 0)
 
 
 def test_compliance_exception_round_trip(repo):

@@ -238,28 +238,41 @@ def token_usage(conn) -> dict[str, Any]:
 
 
 def action_closure(conn) -> dict[str, Any]:
-    """Raised versus resolved, and how long the ones that closed took."""
+    """Findings raised versus closed, and how long the closed ones took.
+
+    Closure means an auditor said so — there is no other way for a finding to
+    leave the open set, so this metric is measuring the real decision rather
+    than a status a workflow moved on its own.
+    """
     repo = repositories(conn)
-    actions = repo["actions"].list()
+    findings = repo["findings"].list()
     raised_at = {
         e.entity_id: e.ts
         for e in repo["audit"].read_all()
-        if e.action == "action_raised"
+        if e.action == "finding_raised"
     }
-    resolved = [a for a in actions if a.status == "resolved"]
+    escalated = {
+        e.entity_id for e in repo["audit"].read_all()
+        if e.action == "finding_escalated"
+    }
+    closed = [f for f in findings if f.status == "closed"]
     durations = [
-        (a.resolved_at - raised_at[a.id]).days
-        for a in resolved
-        if a.id in raised_at and a.resolved_at
+        (f.closed_at - raised_at[f.id]).days
+        for f in closed
+        if f.id in raised_at and f.closed_at
     ]
     return {
-        "raised": len(actions),
-        "resolved": len(resolved),
-        "open": len([a for a in actions if a.status != "resolved"]),
-        "escalated": len([a for a in actions if a.status == "escalated"]),
-        "resolution_rate": len(resolved) / len(actions) if actions else 0.0,
+        "raised": len(findings),
+        "resolved": len(closed),
+        "open": len([f for f in findings if f.status == "open"]),
+        "escalated": len(escalated & {f.id for f in findings}),
+        "resolution_rate": len(closed) / len(findings) if findings else 0.0,
         "mean_days_to_resolution": (
             round(statistics.mean(durations), 1) if durations else None
+        ),
+        "mean_follow_ups_to_close": (
+            round(statistics.mean([f.follow_up_count for f in closed]), 1)
+            if closed else None
         ),
     }
 

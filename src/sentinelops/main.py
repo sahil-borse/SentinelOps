@@ -19,7 +19,9 @@ from .db import connect
 from .demo import (
     DEMO_AREA, DEMO_CONTROL, DEMO_EVIDENCE_TEXT, DEMO_OWNER, print_run,
 )
-from .entities import Action, CheckInstance, ControlDefinition, Evidence, Assessment, AuditableUnit
+from .entities import (
+    ASSESSOR_IDENTITY, CheckInstance, ControlDefinition, Evidence, Assessment, AuditableUnit, Finding,
+)
 from .llm import TokenMeter, get_client
 from .llm.prompts import ASSESSMENT_SYSTEM_V1, assessment_schema_v1, assessment_user_v1
 from .llm.protocol import LlmRequest
@@ -136,30 +138,43 @@ def run(
         },
     )
 
-    # --- a non-compliant finding raises an Action against the owning team.
-    # --- Slice 7 carries it through remediation to resolution.
-    action = Action(
-        id="ACT-0001",
-        assessment_id=finding.id,
-        title=finding.recommended_action or f"Remediate {control.title}",
-        owner_team=instance.assigned_team,
-        owner_name=instance.owner_name,
-        due_date=instance.due_date + timedelta(days=30),
-        status="raised",
+    # --- a failing assessment raises a Finding against the owning unit. It is
+    # --- Open until an auditor closes it, and nothing else moves that.
+    raised = Finding(
+        id="FND-0001",
+        source="activity_assessment",
+        auditable_unit_id=area.id,
+        description=finding.rationale,
+        raised_by=ASSESSOR_IDENTITY,
+        raised_at=datetime(2026, 4, 20, 9, 0),
+        owner_identity=area.owner_identity,
+        target_date=instance.due_date + timedelta(days=14),
+        check_instance_id=instance.id,
+        suggested_severity="Minor",
+        severity="Minor",
+        severity_assigned_by=ASSESSOR_IDENTITY,
+        agreed_action_plan=finding.recommended_action or f"Remediate {control.title}",
+        status="open",
     )
-    repo["actions"].add(action)
+    repo["findings"].add(raised)
     audit.append(
-        actor="system",
-        owner=action.owner_name,
-        action="action_raised",
-        entity_type="Action",
-        entity_id=action.id,
-        detail={"finding": finding.id, "owner_team": action.owner_team},
+        actor="ai",
+        owner=instance.owner_name,
+        action="finding_raised",
+        entity_type="Finding",
+        entity_id=raised.id,
+        detail={
+            "assessment_id": finding.id,
+            "auditable_unit_id": raised.auditable_unit_id,
+            "suggested_severity": raised.suggested_severity,
+            "status": "open",
+        },
+        actor_identity=ASSESSOR_IDENTITY,
     )
 
     return {
-        "finding": repo["assessments"].get(finding.id),
-        "action": repo["actions"].get(action.id),
+        "assessment": repo["assessments"].get(finding.id),
+        "finding": repo["findings"].get(raised.id),
         "audit_events": audit.read_all(),
         "token_usage": conn.execute("SELECT * FROM token_usage").fetchall(),
         "conn": conn,

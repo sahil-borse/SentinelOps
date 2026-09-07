@@ -294,7 +294,7 @@ def test_results_md_is_written_with_its_qualifiers(evaluation):
     # and the numbers themselves
     assert "Missed-check rate" in text
     assert "Tokens per audit cycle" in text
-    assert "Mean days to resolution" in text
+    assert "Mean days to closure" in text
 
 
 def test_results_md_names_the_corpus_it_was_measured_on(evaluation):

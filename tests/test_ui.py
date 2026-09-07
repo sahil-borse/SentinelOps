@@ -154,14 +154,21 @@ def test_the_overdue_queue_is_worst_first(live):
         assert 0 <= row["escalation"] <= 2
 
 
-def test_open_actions_carry_owner_due_date_and_status(live):
+def test_open_findings_carry_owner_target_severity_and_chase_count(live):
     rows = view.open_actions(live)
     assert rows
     for row in rows:
         assert row["owner"] and row["team"] and row["due"]
-        assert row["status"] != "resolved"
+        assert row["severity"] in ("Major", "Minor", "Observation")
+        assert row["chased"] >= 0
         assert row["finding"]
     assert [r["due"] for r in rows] == sorted(r["due"] for r in rows)
+
+
+def test_closed_findings_name_the_auditor_who_closed_them(live):
+    for row in view.resolved_actions(live):
+        assert row["closed_by"], "a closure without a name is not a decision"
+        assert row["note"]
 
 
 def test_finding_detail_returns_the_current_finding_not_a_superseded_one(live):
@@ -212,7 +219,7 @@ def test_a_tick_runs_the_whole_pipeline(conn, corpus):
     assert result.resolved_by_rule > 0
     assert result.assessed > 0
     assert result.flags > 0
-    assert result.actions_raised > 0
+    assert result.findings_raised > 0
     assert "checks raised" in result.summary()
 
 
@@ -344,7 +351,7 @@ def test_counts_agree_with_the_records(live):
     repo = repositories(live)
     assert totals["instances"] == len(repo["instances"].list())
     assert totals["actions_open"] + totals["actions_resolved"] == len(
-        repo["actions"].list()
+        repo["findings"].list()
     )
     assert totals["audit_events"] == len(repo["audit"].read_all())
 
@@ -371,7 +378,7 @@ def test_every_required_control_is_present_on_the_screen():
         "Compliance status by process area",
         "Overdue and escalation queue",
         "cited spans highlighted",
-        "Open actions",
+        "Open findings",
         "Audit timeline",
         "Run cycle now",
         "Re-assess this check now",
@@ -420,7 +427,7 @@ def test_the_dashboard_renders_end_to_end(tmp_path, monkeypatch, app_cache_clear
     headings = [element.value for element in app.subheader]
     for expected in ("Compliance status by process area",
                      "Overdue and escalation queue", "Assessment detail",
-                     "Submit evidence", "Open actions", "Audit"):
+                     "Submit evidence", "Open findings", "Audit"):
         assert expected in headings
 
     labels = {button.label for button in app.button}
@@ -516,11 +523,12 @@ def test_step_two_reports_escalations_that_actually_happened(live):
     outcome = story.run(live, "time")
     joined = " ".join(outcome.detail)
     assert "outstanding" in joined
-    assert "escalated" in joined and "Group Compliance" in joined
+    assert "escalated" in joined and "PA/InfoSec" in joined
 
-    escalated = [
-        a for a in repositories(live)["actions"].list() if a.status == "escalated"
-    ]
+    escalated = {
+        e.entity_id for e in repositories(live)["audit"].read_all()
+        if e.action == "finding_escalated"
+    }
     assert escalated, "the claim in the narrative must be true of the data"
     assert str(len(escalated)) in joined
 
