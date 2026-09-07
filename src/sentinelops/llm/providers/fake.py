@@ -97,6 +97,77 @@ def _clause_lines(evidence: str) -> list[str]:
     ]
 
 
+#: `- FND-X | unit: … | severity: … | category: …`
+_FINDING_ROW = re.compile(
+    r"^- (?P<id>\S+) \| unit: (?P<unit>[^|]+)\| severity: (?P<severity>[^|]+)\|"
+    r" category: (?P<category>[^|]+)\|",
+    re.MULTILINE,
+)
+
+
+def _canned_report(facts: str) -> dict:
+    """A summary paragraph that cites, because an uncited one is rejected.
+
+    Written the way the real prompt asks: a count, then the weight of the
+    findings with their ids attached, then the pattern if there is one. It reads
+    stiffly on purpose — this is a stub standing in for a writer, and a stub
+    that read well would invite somebody to mistake it for the real output.
+    """
+    rows = [m.groupdict() for m in _FINDING_ROW.finditer(facts)]
+    if not rows:
+        return {"summary": "", "cited_finding_ids": []}
+
+    for row in rows:
+        for key in ("unit", "severity", "category"):
+            row[key] = row[key].strip()
+
+    by_severity: dict[str, list[str]] = {}
+    by_unit: dict[str, list[str]] = {}
+    by_category: dict[str, list[str]] = {}
+    for row in rows:
+        by_severity.setdefault(row["severity"], []).append(row["id"])
+        by_unit.setdefault(row["unit"], []).append(row["id"])
+        by_category.setdefault(row["category"], []).append(row["id"])
+
+    def cite(ids):
+        return "[" + ", ".join(sorted(ids)) + "]"
+
+    sentences = [
+        f"This audit raised {len(rows)} finding(s) across "
+        f"{len(by_unit)} auditable unit(s)."
+    ]
+    major = by_severity.get("Major", [])
+    if major:
+        sentences.append(
+            f"The weight of the audit sits in {len(major)} Major finding(s) "
+            f"{cite(major)}, which carry the shortest target dates."
+        )
+    heaviest_unit, heaviest_ids = max(by_unit.items(), key=lambda kv: len(kv[1]))
+    if len(heaviest_ids) > 1:
+        sentences.append(
+            f"{heaviest_unit} accounts for {len(heaviest_ids)} of them "
+            f"{cite(heaviest_ids)}."
+        )
+    repeated = {c: ids for c, ids in by_category.items() if len(ids) > 1}
+    if repeated:
+        category, ids = max(repeated.items(), key=lambda kv: len(kv[1]))
+        sentences.append(
+            f"The same gap category, {category}, appears more than once "
+            f"{cite(ids)}, which is the pattern worth attention here."
+        )
+    else:
+        rest = [r["id"] for r in rows if r["id"] not in major][:4]
+        if rest:
+            sentences.append(
+                f"The remainder are individually scoped and separately owned "
+                f"{cite(rest)}."
+            )
+    return {
+        "summary": " ".join(sentences),
+        "cited_finding_ids": sorted(r["id"] for r in rows),
+    }
+
+
 def _canned(evidence: str) -> dict:
     """Pick a verdict clause by clause. Heuristics, not a model.
 
@@ -178,7 +249,10 @@ class FakeModelClient:
 
     def complete(self, request: LlmRequest) -> LlmResponse:
         user_text = "\n".join(m["content"] for m in request.messages)
-        payload = _canned(_evidence_text(user_text))
+        if user_text.lstrip().startswith("AUDIT\n"):
+            payload = _canned_report(user_text)
+        else:
+            payload = _canned(_evidence_text(user_text))
         if request.response_schema:
             payload = validate(payload, request.response_schema)
         text = json.dumps(payload)

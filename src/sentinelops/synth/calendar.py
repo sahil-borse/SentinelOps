@@ -1,4 +1,4 @@
-"""The twelve-month simulated calendar, and where "now" sits in it.
+"""The eighteen-month simulated calendar, and where "now" sits in it.
 
 Period arithmetic itself moved to `sentinelops.periods` in slice 4 — S1 needs it
 at runtime and must not import the test-data package to get it. This module
@@ -10,14 +10,18 @@ from __future__ import annotations
 
 from datetime import date
 
-from ..periods import Period, all_periods, due_date, periods_for
+from ..periods import (
+    Period, all_periods, due_date, period_from_label, periods_for,
+)
 
 #: The simulated "today" the corpus is generated against — the vantage point of
-#: an auditor reviewing calendar year 2026 from the following spring. It sits
-#: after the last period closes *and* after its grace window, so every 2026
-#: check has had its chance: anything still unmet by now is genuinely overdue,
-#: not merely not-yet-due. Evidence for 2026-Q4 is filed in January 2027 and its
-#: remediation later still, which is why "today" is not inside 2026.
-SIMULATED_TODAY = date(2027, 3, 31)
+#: an auditor looking back over eighteen months, from January 2026 to the end of
+#: June 2027. It sits after the last period closes *and* after its grace window,
+#: so every check in the window has had its chance: anything still unmet by now
+#: is genuinely overdue rather than merely not-yet-due. Evidence for 2027-Q2 is
+#: filed in July and its remediation later still, which is why "today" is well
+#: clear of the window's end rather than on it.
+SIMULATED_TODAY = date(2027, 9, 30)
 
-__all__ = ["Period", "SIMULATED_TODAY", "all_periods", "due_date", "periods_for"]
+__all__ = ["Period", "SIMULATED_TODAY", "all_periods", "due_date",
+           "period_from_label", "periods_for"]

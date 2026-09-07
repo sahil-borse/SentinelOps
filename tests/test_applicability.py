@@ -105,7 +105,7 @@ def test_control_sets_come_back_sorted(corpus):
         assert control_ids == sorted(control_ids)
 
 
-# --- the 64 pairings pinned by slice 2 -------------------------------------
+# --- the 100 pairings pinned by the corpus ---------------------------------
 
 def test_the_engine_reproduces_every_pairing_the_corpus_assumes(corpus):
     """The real engine must agree with the generator's reference match exactly.
@@ -117,7 +117,7 @@ def test_the_engine_reproduces_every_pairing_the_corpus_assumes(corpus):
     assert sorted(applicable_pairs(corpus.controls, corpus.areas)) == sorted(
         corpus.applicable_pairs
     )
-    assert len(corpus.applicable_pairs) == 64
+    assert len(corpus.applicable_pairs) == 100
 
 
 def test_the_engine_and_the_generator_agree_on_every_combination(corpus):
@@ -148,10 +148,49 @@ def test_two_areas_with_different_attributes_get_different_control_sets(corpus):
     assert "CTRL-VENDOR-DD" in procurement and "CTRL-VENDOR-DD" in payments
 
 
-def test_every_area_gets_a_distinct_control_set(corpus):
+def test_control_sets_vary_meaningfully_across_units(corpus):
+    """Variation, not uniqueness — and the difference matters.
+
+    This asserted that all eleven units get distinct sets, which was true only
+    while the roster was seven hand-picked units. It is not a property of the
+    engine and it should not be: two units with the same risk profile *owe the
+    same controls*, and an engine that invented a difference between them would
+    be wrong. Project Atlas and Customer Operations both handle personal data,
+    both face customers, both buy through Procurement rather than directly —
+    so they carry the same obligations, and that is the correct answer.
+
+    What the corpus does need is that applicability is doing real work: most
+    units differ, the sets differ in size as well as membership, and nobody is
+    either exempt from everything or subject to everything by accident.
+    """
     matrix = applicability_matrix(corpus.controls, corpus.areas)
     fingerprints = {tuple(v) for v in matrix.values()}
-    assert len(fingerprints) == len(matrix)
+
+    assert len(fingerprints) >= len(matrix) - 2, "the sets have collapsed"
+    assert len({len(v) for v in matrix.values()}) >= 4, "no spread in size"
+    assert all(len(v) > 0 for v in matrix.values()), "every unit owes something"
+    assert min(len(v) for v in matrix.values()) < max(
+        len(v) for v in matrix.values()
+    )
+
+
+def test_units_that_share_a_profile_share_a_set(corpus):
+    """The other half of the same point, stated positively.
+
+    Determinism is the property: the same attributes produce the same
+    obligations every time, whoever the unit is and whatever it is called.
+    """
+    matrix = applicability_matrix(corpus.controls, corpus.areas)
+    by_id = {u.id: u for u in corpus.areas}
+    for left in corpus.areas:
+        for right in corpus.areas:
+            if left.id >= right.id:
+                continue
+            if left.attributes == right.attributes:
+                assert matrix[left.id] == matrix[right.id], (
+                    f"{left.id} and {right.id} have identical attributes and "
+                    f"must therefore owe identical controls"
+                )
 
 
 def test_an_area_matching_no_controls_is_handled_cleanly():
@@ -269,7 +308,7 @@ def test_the_stage_runs_with_every_provider_rigged_to_explode(conn, corpus, expl
     seed_database(conn, corpus)
     matrix = run(conn)
     assert len(matrix) == len(corpus.areas)
-    assert sum(len(v) for v in matrix.values()) == 64
+    assert sum(len(v) for v in matrix.values()) == 100
 
 
 def test_the_stage_records_no_token_usage(conn, corpus, exploding_llm):
@@ -309,12 +348,19 @@ def _code_only(path: Path) -> str:
     )
 
 
-#: S3 is the tier that spends. Every other stage is rules, permanently.
-SPENDING_STAGES = {"assess.py"}
+#: The stages that may spend. Every other one is rules, permanently.
+#:
+#: This is an allow-list and it is meant to be hard to add to. `assess.py` is S3.
+#: `audits.py` joined it in slice 10d because section 6 asks for a generated
+#: narrative summary — one call per audit, over structured findings, with every
+#: statement citing finding ids. Widening the list was a deliberate decision
+#: recorded here rather than a test quietly relaxed to go green; anything else
+#: added to it should come with the same paragraph.
+SPENDING_STAGES = {"assess.py", "audits.py"}
 
 
-def test_only_the_assessment_stage_can_reach_a_model():
-    """S0, S1, S2 and S4 are rules. Only S3 may import the provider boundary."""
+def test_only_the_spending_stages_can_reach_a_model():
+    """S0, S1, S2 and S4 are rules. Only the allow-list may import the boundary."""
     for path in (SRC / "stages").rglob("*.py"):
         if path.name in SPENDING_STAGES:
             continue
@@ -330,9 +376,22 @@ def test_only_the_assessment_stage_can_reach_a_model():
         assert "llm" not in _code_only(path), f"{path.name} references llm in code"
 
 
-def test_the_assessment_stage_does_reach_a_model():
-    """The positive half: S3 must actually go through the llm/ boundary."""
-    assert "llm" in _code_only(SRC / "stages" / "assess.py")
+def test_the_spending_stages_do_reach_a_model():
+    """The positive half: each must actually go through the llm/ boundary.
+
+    An allow-list entry for a stage that does not spend is stale, and a stale
+    allow-list is how the next one gets added without anybody noticing.
+    """
+    for name in SPENDING_STAGES:
+        assert "llm" in _code_only(SRC / "stages" / name), name
+
+
+def test_the_allow_list_is_small_and_named():
+    """A list that grows silently stops being a control."""
+    assert SPENDING_STAGES == {"assess.py", "audits.py"}, (
+        "adding a stage that spends is a decision; record it in the comment "
+        "above SPENDING_STAGES and update this test on purpose"
+    )
 
 
 def test_that_guard_would_actually_fire(tmp_path):

@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from sentinelops.entities import ComplianceException, EvidenceSubmission
+from sentinelops.entities import ComplianceException, InboundSubmission
 from sentinelops.repositories import repositories
 from sentinelops.stages.trigger import (
     DEFAULT_POLICY,
@@ -41,8 +41,8 @@ def test_a_full_year_generates_an_instance_per_open_period(seeded, corpus):
 
     # 64 applicable pairs across their frequencies, less the 3 periods that
     # approved exceptions excuse.
-    assert len(instances) == 343
-    assert len(result.created) == 343
+    assert len(instances) == 532
+    assert len(result.created) == 532
     assert len(result.suppressed) == 3
 
 
@@ -96,7 +96,7 @@ def test_running_the_same_cycle_twice_creates_nothing_new(seeded):
     second = run_cycle(seeded, END_OF_STORY)
     assert second.created == []
     assert len(repositories(seeded)["instances"].list()) == count
-    assert len(first.created) == 343
+    assert len(first.created) == 532
 
 
 def test_five_cycles_over_the_year_produce_the_same_instances_as_one(conn, corpus):
@@ -145,7 +145,7 @@ def test_evidence_moves_an_instance_to_submitted(seeded):
     assert submitted
     submissions = {
         (s.control_id, s.auditable_unit_id, s.period)
-        for s in repositories(seeded)["submissions"].list()
+        for s in repositories(seeded)["inbound"].list()
     }
     for instance in submitted:
         assert (instance.control_id, instance.auditable_unit_id, instance.period) in submissions
@@ -357,7 +357,7 @@ def test_every_new_instance_is_routed_to_its_owning_team(seeded, corpus):
     result = run_cycle(seeded, END_OF_STORY)
     assigned = [n for n in result.notifications if n.kind == "assigned"]
     teams = {a.id: a.name for a in corpus.areas}
-    assert len(assigned) == 343
+    assert len(assigned) == 532
     for notification in assigned:
         instance = repositories(seeded)["instances"].get(notification.entity_id)
         assert notification.to_team == teams[instance.auditable_unit_id]
@@ -529,7 +529,7 @@ def exploding_llm(monkeypatch):
 
 def test_a_full_cycle_runs_with_every_provider_rigged_to_explode(seeded, exploding_llm):
     result = run_cycle(seeded, END_OF_STORY)
-    assert len(result.created) == 343
+    assert len(result.created) == 532
 
 
 def test_a_full_cycle_records_no_token_usage(seeded, exploding_llm):
@@ -641,7 +641,7 @@ def test_the_fourth_exception_suppresses_no_generation(seeded):
     ids = {i.id for i in repositories(seeded)["instances"].list()}
     for quarter in ("Q1", "Q2", "Q3", "Q4"):
         assert f"CHK-CRYPTO-KEY-HR-2026-{quarter}" in ids
-    assert len(ids) == 343
+    assert len(ids) == 532
 
 
 def test_waives_and_covers_are_complementary():

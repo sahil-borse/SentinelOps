@@ -67,6 +67,12 @@ KNOWN_ACTIONS = (
     "finding_escalated",
     "evidence_found_insufficient",
     "finding_closed",
+    "audit_conducted",
+    "audit_report_generated",
+    "audit_report_issued",
+    "evidence_round_opened",
+    "evidence_round_accepted",
+    "evidence_round_insufficient",
     "notification_logged",
     "prescreen_completed",
     "assessment_completed",
@@ -289,8 +295,14 @@ def build(
                 "instance_id": detail.get("check_instance_id", ""),
                 "assessment_id": detail.get("assessment_id", ""),
                 "category": detail.get("category", "?"),
-                "severity": detail.get("suggested_severity", ""),
-                "suggested_severity": detail.get("suggested_severity", ""),
+                # An activity-track finding arrives with a model suggestion and
+                # the auditor's decision follows in its own event. An audit-track
+                # one is sized by the auditor as it is raised, so the severity is
+                # here and there is no suggestion to have overridden. Reading
+                # only the suggestion left every audit finding unsized.
+                "severity": detail.get("severity")
+                            or detail.get("suggested_severity", ""),
+                "suggested_severity": detail.get("suggested_severity") or "",
                 "assigned_severity": "",
                 "severity_overridden": False,
                 "band": detail.get("computed_severity_score", ""),
@@ -307,6 +319,7 @@ def build(
                 "reassessed_verdict": None,
                 "resolution_note": None,
                 "resolved_at": None,
+                "rounds": [],
                 "history": [(event.ts, "raised", event.owner)],
             }
 
@@ -348,6 +361,37 @@ def build(
                 record["resolved_at"] = event.ts
                 record["reassessed_verdict"] = "accepted"
                 record["history"].append((event.ts, "closed", event.owner))
+
+    # Review rounds. Attached to their finding rather than listed separately:
+    # "this one took three rounds" is a fact about the finding, and a register
+    # that makes the reader join two tables to learn it is a worse register.
+    for event in events:
+        if event.entity_type != "EvidenceSubmission":
+            continue
+        detail = event.detail
+        record = actions.get(detail.get("finding_id", ""))
+        if record is None:
+            continue
+        if event.action == "evidence_round_opened":
+            record["rounds"].append({
+                "id": event.entity_id,
+                "number": detail.get("round_number"),
+                "submitted_by": detail.get("submitted_by", ""),
+                "evidence_ref": detail.get("evidence_ref", ""),
+                "opened_at": event.ts,
+                "response": "pending",
+                "remarks": "",
+                "responded_by": "",
+            })
+        elif event.action in (
+            "evidence_round_accepted", "evidence_round_insufficient"
+        ):
+            for entry in record["rounds"]:
+                if entry["id"] != event.entity_id:
+                    continue
+                entry["response"] = detail.get("response", "")
+                entry["remarks"] = detail.get("remarks", "")
+                entry["responded_by"] = detail.get("responded_by", "")
 
     for instance in instances.values():
         key = (instance["area_id"], instance["control_id"])
@@ -555,6 +599,14 @@ def render_markdown(pack: AuditPack) -> str:
         )
         if action["progress"]:
             add(f"- **Owner progress** {action['progress']} (self-reported)")
+        for entry in action["rounds"]:
+            answer = entry["response"]
+            who = f" by {entry['responded_by']}" if entry["responded_by"] else ""
+            add(
+                f"- **Round {entry['number']}** {entry['evidence_ref']} filed by "
+                f"{entry['submitted_by']} → **{answer}**{who}"
+                + (f"  \n  _{entry['remarks']}_" if entry["remarks"] else "")
+            )
         if action["remediation_evidence"]:
             add(f"- **Remediation submitted** {action['remediation_evidence']}")
         if action["resolution_note"]:

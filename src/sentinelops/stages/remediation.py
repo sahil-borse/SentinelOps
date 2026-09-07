@@ -28,7 +28,7 @@ from typing import Any
 from ..entities import Evidence, Assessment
 from ..periods import periods_for
 from .assess import assess_one, AssessmentReport
-from . import followup
+from . import followup, rounds
 from .prescreen import bind_evidence, evaluate_thresholds, evidence_age_days
 
 #: Verdicts that count as the problem having been fixed.
@@ -45,8 +45,30 @@ class ReassessmentResult:
     decided_by: str | None = None
     finding_id: str | None = None
     finding_status: str | None = None
+    round_id: str | None = None
+    round_number: int | None = None
+    auditor_response: str | None = None
     resolved: bool = False
     reason: str = ""
+
+
+def _reviewing_auditor(people, finding, repo) -> str:
+    """Pick a PA/InfoSec identity who is clear to review this finding.
+
+    Section 7's separation rule is not decorative: with two auditors on the
+    rota, one of whom filed the evidence, the reviewer must be the other. If
+    nobody is clear the caller gets an id that will be refused downstream rather
+    than a silently-permitted one, because "no eligible reviewer" is a real
+    state and quietly picking somebody ineligible is the bug this prevents.
+    """
+    from ..authority import separated
+
+    disqualified = rounds.submitters_of(repo, finding.id) | {finding.owner_identity}
+    for auditor in people.by_role("pa_infosec"):
+        if separated(disqualified, auditor.id, "respond_to_submission"):
+            return auditor.id
+    auditors = people.by_role("pa_infosec")
+    return auditors[0].id if auditors else "ID-SYSTEM"
 
 
 def pending_remediation(repo, instance, as_of: date | None = None) -> Any | None:
@@ -60,7 +82,7 @@ def pending_remediation(repo, instance, as_of: date | None = None) -> Any | None
     bound = {e.id for e in repo["evidence"].list(check_instance_id=instance.id)}
     candidates = [
         s
-        for s in repo["submissions"].list(
+        for s in repo["inbound"].list(
             control_id=instance.control_id,
             auditable_unit_id=instance.auditable_unit_id,
             period=instance.period,
@@ -125,6 +147,9 @@ def _reassess(
     from .prescreen import _write_finding as write_rule_finding
 
     repo = repositories(conn)
+    from .. import directory
+
+    people = directory.load(conn)
     result = ReassessmentResult(check_instance_id=check_instance_id)
 
     instance = repo["instances"].get(check_instance_id)
@@ -175,9 +200,22 @@ def _reassess(
         # owner believes the work is done; it does not make the finding closed,
         # and section 4 is emphatic that only the auditor moves that.
         followup.set_progress(
-            repo, finding_record, "implemented", by=submission.author,
+            repo, finding_record, "implemented",
+            by=finding_record.owner_identity,
             detail={"evidence_id": evidence.id, "submission_id": submission.id},
         )
+        # And it opens a review round. The round is the durable record of "we
+        # went round on this one N times" — without it the loop happens but
+        # leaves nothing behind to count.
+        round_record = rounds.open_round(
+            repo, people, finding_record,
+            by=finding_record.owner_identity,
+            evidence_ref=evidence.id,
+            note=submission.owner_note if hasattr(submission, "owner_note") else "",
+            as_of=as_of,
+        )
+        result.round_id = round_record.id
+        result.round_number = round_record.round_number
 
     # --- S2 first, then S3 only if the rules cannot decide ----------------
     period_end = next(
@@ -218,39 +256,45 @@ def _reassess(
     result.verdict = finding.verdict
     result.decided_by = finding.decided_by
 
-    # --- did it work? The auditor decides, always --------------------------
+    # --- did it work? The auditor answers the round, always ----------------
     if finding_record is not None:
-        from .. import directory
-
-        people = directory.load(conn)
-        auditors = people.by_role("pa_infosec")
-        auditor = auditors[0].id if auditors else "ID-SYSTEM"
+        auditor = _reviewing_auditor(people, finding_record, repo)
         if finding.verdict in PASSING:
+            remarks = (
+                f"Remediation accepted. {finding.id} supersedes "
+                f"{superseded.id}: {superseded.verdict} -> {finding.verdict}, "
+                f"decided by {finding.decided_by}."
+            )
+            rounds.respond(
+                repo, people, round_record, response="accepted",
+                by=auditor, remarks=remarks, as_of=as_of,
+            )
             followup.close_on_repo(
-                repo, finding_record, by=auditor,
-                remarks=(
-                    f"Remediation accepted. {finding.id} supersedes "
-                    f"{superseded.id}: {superseded.verdict} -> {finding.verdict}, "
-                    f"decided by {finding.decided_by}."
-                ),
-                as_of=as_of,
+                repo, finding_record, by=auditor, remarks=remarks, as_of=as_of,
+                people=people,
             )
             result.resolved = True
         else:
-            # Insufficient. The finding stays open, another round is expected,
-            # and the count of rounds is what makes "what did this cost to
-            # close?" answerable later.
+            # Insufficient. The round is answered and closed, the finding stays
+            # open, and round N+1 is expected. This is the transition the
+            # stakeholder described in the most detail, so it is the one that
+            # leaves the most behind.
+            remarks = (
+                f"Evidence does not clear the finding: still "
+                f"{finding.verdict}. {finding.recommended_action}".strip()
+            )
+            rounds.respond(
+                repo, people, round_record, response="insufficient",
+                by=auditor, remarks=remarks, as_of=as_of,
+            )
             followup.record_insufficient_round(
-                repo, finding_record, by=auditor,
-                remarks=(
-                    f"Evidence does not clear the finding: still "
-                    f"{finding.verdict}. {finding.recommended_action}".strip()
-                ),
+                repo, finding_record, by=auditor, remarks=remarks,
                 assessment_id=finding.id,
             )
             result.reason = (
                 f"remediation did not clear the finding: still {finding.verdict}"
             )
+        result.auditor_response = round_record.auditor_response
         result.finding_status = finding_record.status
 
     for flag in repo["flags"].list(check_instance_id=instance.id):
@@ -276,7 +320,7 @@ def reassess_all(conn, as_of: date, *, client=None) -> list[ReassessmentResult]:
     waiting = sorted(
         {
             s.control_id + "|" + s.auditable_unit_id + "|" + s.period
-            for s in repo["submissions"].list()
+            for s in repo["inbound"].list()
             if s.is_remediation
         }
     )

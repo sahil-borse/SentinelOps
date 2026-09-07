@@ -437,7 +437,7 @@ def test_only_the_instances_s2_could_not_decide_are_assessed(screened):
     conn, prescreen_report = screened
     report = assess(conn, prescreen_report.to_assess, END_OF_STORY)
     assert set(report.assessed) == set(prescreen_report.to_assess)
-    assert len(report.assessed) == 202
+    assert len(report.assessed) == 371
 
 
 def test_token_usage_rows_carry_the_instance_label(assessed):

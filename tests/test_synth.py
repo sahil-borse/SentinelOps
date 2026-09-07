@@ -7,7 +7,7 @@ from random import Random
 
 import pytest
 
-from sentinelops.entities import EvidenceSubmission
+from sentinelops.entities import InboundSubmission
 from sentinelops.synth import (
     COMPLIANCE_EXCEPTIONS,
     CONTROL_SPECS,
@@ -54,8 +54,24 @@ def test_the_generator_never_reads_the_clock():
 
 # --- shape, per section 7 --------------------------------------------------
 
+def test_unit_roster_matches_section_ten(corpus):
+    """Six support functions plus three project teams, and two departments.
+
+    Section 10 names the first two; the departments were already there and stay,
+    because `kind` being descriptive rather than a switch is only demonstrated
+    if more than two values of it exist and nothing branches on any of them.
+    """
+    from collections import Counter
+
+    kinds = Counter(u.kind for u in corpus.areas)
+    assert kinds["support_function"] == 6
+    assert kinds["project_team"] == 3
+    assert kinds["department"] == 2
+    assert len(corpus.areas) == 11
+
+
 def test_area_count_and_varied_attributes(corpus):
-    assert 6 <= len(corpus.areas) <= 8
+    assert 10 <= len(corpus.areas) <= 12
     for attribute in ("handles_pii", "customer_facing", "has_suppliers"):
         values = {a.attributes[attribute] for a in corpus.areas}
         assert values == {True, False}, f"{attribute} does not vary"
@@ -91,14 +107,18 @@ def test_areas_receive_genuinely_different_control_sets(corpus):
     for control_id, area_id in corpus.applicable_pairs:
         by_area[area_id].add(control_id)
 
-    # Every area is in scope for something, no two areas get the same set, and
-    # the sets differ in size as well as membership. AREA-PAYMENTS legitimately
-    # draws all fourteen — it handles PII, faces customers, uses suppliers and
-    # is business-critical — so "nobody gets everything" is not the property to
-    # assert. "Everybody gets something different" is.
+    # Every unit is in scope for something and the sets differ in size as well
+    # as membership. AREA-PAYMENTS legitimately draws all fourteen — it handles
+    # PII, faces customers, uses suppliers and is business-critical — so "nobody
+    # gets everything" is not the property to assert.
+    #
+    # Nor is "everybody gets something different": with eleven units a couple of
+    # them share a risk profile and therefore share their obligations, which is
+    # the rules engine being right rather than lazy. See
+    # `test_units_that_share_a_profile_share_a_set`.
     assert all(len(s) > 0 for s in by_area.values())
     sets = [frozenset(s) for s in by_area.values()]
-    assert len(set(sets)) == len(sets), "two areas received identical control sets"
+    assert len(set(sets)) >= len(sets) - 2, "the sets have collapsed"
     assert len({len(s) for s in sets}) >= 4
     assert by_area["AREA-FINREP"] != by_area["AREA-PROC"]
     assert by_area["AREA-PAYMENTS"] > by_area["AREA-FINREP"]
@@ -250,7 +270,11 @@ def test_stale_evidence_predates_its_freshness_window(corpus):
     for row in rows:
         spec = SPECS_BY_ID[row["control_id"]]
         period = next(
-            p for p in periods_for(spec.frequency, 2026) if p.label == row["period"]
+            p for p in periods_for(
+                spec.frequency, corpus.year, corpus.through,
+                last_month=corpus.last_month,
+            )
+            if p.label == row["period"]
         )
         age = (period.end - by_id[row["submission_id"]].submitted_at.date()).days
         assert age > spec.freshness_days
@@ -269,12 +293,16 @@ def test_missing_evidence_has_no_submission(corpus):
 # --- the consistency pair --------------------------------------------------
 
 def test_the_same_evidence_is_filed_in_two_areas(corpus):
+    # Original filings only. A remediation for either half is a *different*
+    # document filed later, and counting it here would turn a test about one
+    # document reaching two units into a test about how many documents exist.
     paired = [
         s
         for s in corpus.submissions
         if s.control_id == CONSISTENCY_PAIR["control_id"]
         and s.period == CONSISTENCY_PAIR["period"]
         and s.auditable_unit_id in CONSISTENCY_PAIR["area_ids"]
+        and not s.is_remediation
     ]
     assert len(paired) == 2
     assert paired[0].auditable_unit_id != paired[1].auditable_unit_id
@@ -336,8 +364,11 @@ def test_the_fourth_exception_leaves_the_corpus_untouched(corpus):
     assert {r["control_id"] for r in suppressed} == {
         "CTRL-BCP-TEST", "CTRL-THIRD-PARTY-ACCESS"
     }
-    assert len(corpus.submissions) == 316
-    assert len(corpus.truth_rows) == 352
+    # Section 10's eighteen-month window over eleven units. Pinned rather than
+    # bounded because this test's whole job is "adding EXC-004 changed nothing
+    # else" — a range would let a drift of a dozen submissions through.
+    assert len(corpus.submissions) == 959
+    assert len(corpus.truth_rows) == 972
 
     # the obligation it waives is genuinely unevidenced
     filed = {(s.control_id, s.auditable_unit_id, s.period) for s in corpus.submissions}
@@ -384,7 +415,13 @@ def test_remediation_evidence_answers_a_real_gap(corpus):
             original.auditable_unit_id,
             original.period,
         )
-        assert row["expected_verdict"] == "compliant"
+        # Not every remediation works first time. Section 10 asks for findings
+        # needing three or more rounds, which means the corpus has to contain
+        # fixes that did not fix it — so the assertion is that a remediation is
+        # a genuine later attempt at the same obligation, not that it succeeds.
+        assert row["expected_verdict"] in (
+            "compliant", "gap", "partial", "insufficient_evidence"
+        )
 
 
 # --- persistence -----------------------------------------------------------
@@ -397,28 +434,65 @@ def test_the_corpus_loads_into_sqlite(conn, corpus):
             "auditable_units",
             "control_definitions",
             "compliance_exceptions",
-            "evidence_submissions",
+            "inbound_submissions",
         )
     }
     assert counts["auditable_units"] == len(corpus.areas)
     assert counts["control_definitions"] == len(corpus.controls)
     assert counts["compliance_exceptions"] == len(corpus.exceptions)
-    assert counts["evidence_submissions"] == len(corpus.submissions)
+    assert counts["inbound_submissions"] == len(corpus.submissions)
 
 
-def test_seeding_creates_no_findings_actions_or_instances(conn, corpus):
-    """The generator supplies inputs; the pipeline produces judgements."""
+def test_seeding_produces_no_pipeline_output(conn, corpus):
+    """The generator supplies inputs; the pipeline produces judgements.
+
+    The audit track is the one thing seeded that is not an input, and it is
+    deliberate: section 1 makes findings the children of audits, and an audit
+    that happened last March is a fact about the past rather than something the
+    pipeline discovers. Those findings are still *raised* through
+    `stages.audits`, so each has a trail behind it — see the test below.
+    """
     seed_database(conn, corpus)
-    for table in ("check_instances", "evidence", "assessments", "findings"):
+    for table in ("check_instances", "evidence", "assessments"):
         assert conn.execute(f"SELECT COUNT(*) c FROM {table}").fetchone()["c"] == 0
+
+
+def test_seeding_creates_only_audit_track_findings(conn, corpus):
+    from sentinelops.repositories import repositories
+
+    seed_database(conn, corpus)
+    repo = repositories(conn)
+    findings = repo["findings"].list()
+    assert findings, "the corpus carries an audit programme"
+    for finding in findings:
+        assert finding.source == "audit"
+        assert finding.audit_id
+        assert finding.check_instance_id is None
+        # raised through the stage, so it has a history
+        events = repo["audit"].read_for("Finding", finding.id)
+        assert events and events[0].action == "finding_raised"
+        assert events[0].actor_identity
+
+
+def test_seeding_spends_nothing(conn, corpus):
+    """Seeding a database must never call a model.
+
+    Report drafting is the audit track's one paid step, and it is deliberately
+    not done here — a fixture that runs hundreds of times must not carry a bill,
+    and S0's own tests seed a corpus, so a spending seed would make "S0 never
+    calls a model" impossible to assert.
+    """
+    seed_database(conn, corpus)
+    spent = conn.execute("SELECT COUNT(*) c FROM token_usage").fetchone()["c"]
+    assert spent == 0
 
 
 def test_submissions_round_trip_through_the_repository(conn, corpus):
     from sentinelops.repositories import repositories
 
     seed_database(conn, corpus)
-    loaded = repositories(conn)["submissions"].get(corpus.submissions[0].id)
-    assert isinstance(loaded, EvidenceSubmission)
+    loaded = repositories(conn)["inbound"].get(corpus.submissions[0].id)
+    assert isinstance(loaded, InboundSubmission)
     assert loaded == corpus.submissions[0]
 
 

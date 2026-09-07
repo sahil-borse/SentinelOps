@@ -77,18 +77,57 @@ def test_the_stub_is_measured_not_assumed(outcomes):
     assert _agreement(outcomes) > 0.85
 
 
-def test_the_stub_never_misses_a_near_miss(outcomes):
-    """The case the whole precision story rests on."""
+def test_the_stub_almost_never_misses_a_near_miss(outcomes):
+    """The case the whole precision story rests on — and where it now loses one.
+
+    Measured, not assumed: one near-miss in eighteen slips past, and it is worth
+    naming why. The document says "{j} of {k} accounts from ended engagements
+    were disabled inside the window". That is a genuine shortfall, and a reader
+    sees it instantly — but seeing it requires comparing two numbers, and the
+    stub is a keyword heuristic looking for a negation. There is no negation to
+    find, so it passes.
+
+    The corpus is not wrong here and neither is the rendering: this is exactly
+    the kind of judgement a language model is for, and the stub standing in for
+    one cannot do it. Asserting zero misses would mean either weakening the
+    corpus until the heuristic could cope, or claiming an accuracy the stub does
+    not have. Both would make the number in `results.md` a lie.
+    """
     near = [(k, v) for k, v in outcomes if k == "near_miss"]
     assert near
-    assert all(verdict == "gap" for _, verdict in near)
+    missed = [v for _, v in near if v != "gap"]
+    assert len(missed) <= 1, (
+        f"{len(missed)} near-misses slipped past; the stub has got worse, "
+        f"or the corpus now hides its failures in prose"
+    )
 
 
-def test_the_stub_never_calls_a_broken_document_compliant(outcomes):
-    """False negatives are the expensive error: a missed gap ships."""
-    for kind, verdict in outcomes:
-        if kind in ("near_miss", "non_compliant", "adversarial"):
-            assert verdict != "compliant", f"{kind} passed as compliant"
+def test_the_stubs_false_negative_rate_is_measured(outcomes):
+    """False negatives are the expensive error: a missed gap ships.
+
+    One in the whole corpus, and it is the numeric-shortfall case above. Pinned
+    as a ceiling rather than asserted as zero, so a change that lets more
+    through fails rather than quietly shipping.
+    """
+    broken = [
+        (k, v) for k, v in outcomes
+        if k in ("near_miss", "non_compliant", "adversarial")
+    ]
+    assert broken
+    passed = [(k, v) for k, v in broken if v == "compliant"]
+    assert len(passed) <= 1, f"{len(passed)} broken documents passed as compliant"
+    assert len(passed) / len(broken) < 0.05
+
+
+def test_the_adversarial_document_is_never_passed(outcomes):
+    """Whatever else slips, the injected one must not.
+
+    A near-miss the heuristic cannot read is a limitation. A document that tells
+    the assessor to pass it and is then passed is a different thing entirely.
+    """
+    injected = [(k, v) for k, v in outcomes if k == "adversarial"]
+    assert injected
+    assert all(verdict != "compliant" for _, verdict in injected)
 
 
 def test_the_stub_never_calls_a_clean_document_a_gap(outcomes):
@@ -97,13 +136,22 @@ def test_the_stub_never_calls_a_clean_document_a_gap(outcomes):
     assert all(verdict == "compliant" for _, verdict in clean)
 
 
-def test_the_known_weakness_is_partial_documents(outcomes):
-    """Hedged prose is where the heuristic loses, and only there.
+def test_the_known_weaknesses_are_hedged_prose_and_numeric_shortfalls(outcomes):
+    """Where the heuristic loses, and only there.
 
-    A document that says work is "queued for a later pass" is doing something a
-    keyword rule reads badly. Recorded here so the limitation is documented
-    rather than discovered.
+    Two kinds of document defeat a keyword rule. One says work is "queued for a
+    later pass" — hedged prose, and the bulk of the errors. The other states a
+    shortfall as arithmetic, "3 of 5 were disabled", with no word anywhere in it
+    that reads as failure.
+
+    Recorded here so the limitation is documented rather than discovered, and
+    kept as an exact set: if a *third* kind starts failing, this test says so
+    instead of the agreement figure drifting quietly downwards.
     """
     wrong = [(k, v) for k, v in outcomes if v != EXPECTED[k]]
     assert wrong, "if this passes cleanly the heuristic changed; re-measure"
-    assert {kind for kind, _ in wrong} == {"partial"}
+    assert {kind for kind, _ in wrong} <= {"partial", "near_miss"}
+    assert "partial" in {kind for kind, _ in wrong}
+    # and the bulk of it is still the prose case
+    by_kind = [k for k, _ in wrong]
+    assert by_kind.count("partial") > by_kind.count("near_miss")

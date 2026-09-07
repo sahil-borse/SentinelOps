@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from ..db import connect
-from ..entities import EvidenceSubmission
+from ..entities import InboundSubmission
 from ..pack import build as build_pack
 from ..pack import load_events, render_html, render_markdown
 from ..repositories import repositories, simulated_clock
@@ -143,7 +143,7 @@ def submit_evidence(
     doc_type: str,
     as_of: date,
     is_remediation: bool = True,
-) -> EvidenceSubmission:
+) -> InboundSubmission:
     """File a document against a check, as a team member would.
 
     Lands in the same staging table the synthetic corpus uses, so an uploaded
@@ -155,8 +155,8 @@ def submit_evidence(
     if instance is None:
         raise ValueError(f"no such check instance: {instance_id}")
 
-    existing = len(repo["submissions"].list()) + 1
-    submission = EvidenceSubmission(
+    existing = len(repo["inbound"].list()) + 1
+    submission = InboundSubmission(
         id=f"SUB-UI-{existing:04d}",
         control_id=instance.control_id,
         auditable_unit_id=instance.auditable_unit_id,
@@ -169,7 +169,7 @@ def submit_evidence(
         author=author,
         is_remediation=is_remediation,
     )
-    repo["submissions"].add(submission)
+    repo["inbound"].add(submission)
     with simulated_clock(datetime.combine(as_of, time(9, 30))):
         repo["audit"].append(
             actor="user",
@@ -230,6 +230,87 @@ def generate_pack(conn, *, period_start: date, period_end: date, scope: str):
 
 def verify_chain(conn):
     return repositories(conn)["audit"].verify_chain()
+
+
+def identities(conn) -> list[dict[str, Any]]:
+    """Everyone the identity selector can act as.
+
+    Section 11 is explicit that this is an identity selector and not auth: there
+    is no login and nothing is being protected from the person at the keyboard.
+    What it is for is making segregation of duties *visible* — pick an owner and
+    the Close control is not there.
+    """
+    from .. import authority, directory
+
+    people = directory.load(conn)
+    rows = []
+    for identity in sorted(people.all(), key=lambda i: (i.role, i.name)):
+        rows.append({
+            "id": identity.id,
+            "name": identity.name,
+            "role": identity.role,
+            "unit": identity.auditable_unit or "",
+            "may": authority.actions_for(identity.role),
+        })
+    return rows
+
+
+def acting_as(conn, identity_id: str) -> dict[str, Any]:
+    from .. import authority, directory
+
+    identity = directory.load(conn).get(identity_id)
+    role = identity.role if identity else None
+    return {
+        "id": identity_id,
+        "name": identity.name if identity else identity_id,
+        "role": role,
+        "unit": identity.auditable_unit if identity else "",
+        "may_close": bool(authority.permitted(role, "close_finding")),
+        "may_respond": bool(authority.permitted(role, "respond_to_submission")),
+        "may_submit": bool(authority.permitted(role, "submit_evidence")),
+    }
+
+
+def close_finding(conn, finding_id: str, *, by: str, remarks: str):
+    """Close a finding as `by`. Refusals come back as text, not a stack trace."""
+    from .. import authority
+    from ..repositories import simulated_clock
+    from ..stages import followup
+
+    as_of = current_date(conn)
+    try:
+        with simulated_clock(datetime.combine(as_of, time(12, 0))):
+            finding = followup.close_finding(
+                conn, finding_id, by=by, remarks=remarks, as_of=as_of
+            )
+    except (authority.AuthorityError, ValueError) as refusal:
+        return False, str(refusal)
+    return True, (
+        f"{finding.id} closed by {finding.closed_by} after "
+        f"{finding.follow_up_count} follow-up(s)."
+    )
+
+
+def open_rounds(conn, finding_id: str) -> list[dict[str, Any]]:
+    """The review rounds on a finding, as the screen shows them."""
+    from .. import directory
+    from ..repositories import repositories
+    from ..stages import rounds as rounds_module
+
+    people = directory.load(conn)
+    return [
+        {
+            "id": r.id,
+            "round": r.round_number,
+            "submitted_by": people.name(r.submitted_by),
+            "submitted_at": r.submitted_at,
+            "evidence_ref": r.evidence_ref,
+            "response": r.auditor_response,
+            "remarks": r.auditor_remarks,
+            "responded_by": people.name(r.responded_by) if r.responded_by else "",
+        }
+        for r in rounds_module.rounds_for(repositories(conn), finding_id)
+    ]
 
 
 def counts(conn) -> dict[str, Any]:

@@ -12,7 +12,7 @@ and it arrives in slice 4. The corpus stops at periods and submissions.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, time, timedelta
 from random import Random
 from typing import Any
@@ -20,7 +20,7 @@ from typing import Any
 from ..entities import (
     ComplianceException,
     ControlDefinition,
-    EvidenceSubmission,
+    InboundSubmission,
     AuditableUnit,
 )
 from .units import AUDITABLE_UNITS, IDENTITIES, IDENTITIES_BY_ID
@@ -35,22 +35,43 @@ from .documents import (
     submitted_at,
 )
 from .exceptions import COMPLIANCE_EXCEPTIONS, suppresses
+from .programme import AUDIT_CLOSURES, AUDIT_FINDINGS, AUDIT_PROGRAMME
 from .truth import write_truth_file
 
 DEFAULT_SEED = 20260831
 DEFAULT_YEAR = 2026
 
-#: How the unremarkable majority of submissions are drawn. Weighted so that
-#: roughly half the corpus is clean — a corpus that is mostly broken makes a
-#: precision figure look good for the wrong reason.
+#: Section 10 asks for eighteen months. The window runs from January 2026 to the
+#: end of June 2027, and `SIMULATED_TODAY` sits after it with the grace windows
+#: expired, so anything still unmet at "today" is genuinely overdue rather than
+#: not-yet-due. Eighteen months is not decoration: recurrence detection is the
+#: use that needs the same gap category to reappear in a different unit a long
+#: way from the first one, and twelve months does not leave room for that to be
+#: distinguishable from coincidence.
+DEFAULT_THROUGH = 2027
+DEFAULT_LAST_MONTH = 6
+
+#: How the unremarkable majority of submissions are drawn.
+#:
+#: Section 10 pins the shape: roughly 80-100 findings over eighteen months with
+#: 15-18 open at "today". Across ~540 check instances that is a failure rate near
+#: one in six, not one in two — and it is the realistic number. A compliance
+#: programme where half of everything fails is not a programme in trouble, it is
+#: a corpus built to make a detector look good. The old weights predated the
+#: volume target and produced 214 findings, all but three of them open, which
+#: describes an organisation nobody would recognise.
+#:
+#: `missing` is deliberately the smallest defect. A missing submission produces
+#: a finding that can never be closed by evidence, so every one of them lands in
+#: the open count permanently and crowds out the findings that tell a story.
 QUALITY_WEIGHTS: dict[str, float] = {
-    "compliant": 0.52,
-    "near_miss": 0.13,
-    "partial": 0.09,
-    "non_compliant": 0.07,
-    "stale": 0.05,
-    "wrong_type": 0.04,
-    "missing": 0.10,
+    "compliant": 0.845,
+    "near_miss": 0.052,
+    "partial": 0.030,
+    "non_compliant": 0.026,
+    "stale": 0.021,
+    "wrong_type": 0.017,
+    "missing": 0.009,
 }
 
 #: Coordinates pinned by hand so the demo always has the same beats to point at,
@@ -66,7 +87,61 @@ SHOWCASE: dict[tuple[str, str, str], str] = {
     ("CTRL-INCIDENT-PM", "AREA-PLATFORM", "2026-05"): "non_compliant",
     # A document that fails a clause and then tells the assessor to pass it.
     ("CTRL-DATA-RETENTION", "AREA-PAYMENTS", "2026-Q3"): "adversarial",
+    # The second half of the window, so the eighteen months are not a corpus
+    # with twelve interesting months and six quiet ones.
+    ("CTRL-BACKUP-VERIFY", "AREA-PRJ-ATLAS", "2027-02"): "non_compliant",
+    ("CTRL-TRAINING", "AREA-PRJ-CORAL", "2027-Q1"): "near_miss",
+    ("CTRL-CHANGE-MGMT", "AREA-ITSVC", "2027-04"): "missing",
+    ("CTRL-INCIDENT-PM", "AREA-PRJ-ATLAS", "2027-05"): "partial",
+    # EXC-004 is granted mid-period against an obligation that is already open
+    # and overdue. Pinned rather than drawn, because the waiver has nothing to
+    # excuse if the draw happens to file evidence here — and "a waiver arriving
+    # after the failure was recorded" is the beat slice 8c exists to show.
+    ("CTRL-CRYPTO-KEY", "AREA-HR", "2026-Q1"): "missing",
 }
+
+#: Two recurring gap sets, planted on purpose.
+#:
+#: Section 10 asks for at least two recurring gap-category sets spanning
+#: different units and periods, and section 2 makes recurrence detection an AI
+#: use precisely because no human holds the comparison across eighteen months,
+#: eleven units and several project teams. A detector needs something real to
+#: find, and "real" here means the same *kind* of gap appearing in places that
+#: have nothing to do with each other, months apart — not the same control
+#: failing twice in the same team, which anyone would notice.
+#:
+#: Both sets deliberately cross the support-function / project-team line, which
+#: is the comparison a functional org chart makes hardest to see.
+RECURRENCE_SETS: dict[str, dict] = {
+    "REC-ACCESS-REVIEW": {
+        "control_id": "CTRL-ACCESS-REVIEW",
+        "quality": "near_miss",
+        "coords": [
+            ("AREA-CUSTOPS", "2026-Q1"),
+            ("AREA-PRJ-ATLAS", "2026-Q4"),
+            ("AREA-ITSVC", "2027-Q1"),
+        ],
+        "note": "Dormant privileged accounts identified but not revoked.",
+    },
+    "REC-THIRD-PARTY": {
+        "control_id": "CTRL-THIRD-PARTY-ACCESS",
+        "quality": "non_compliant",
+        "coords": [
+            ("AREA-PROC", "2026-Q2"),
+            ("AREA-PAYMENTS", "2026-Q4"),
+            ("AREA-PRJ-BEACON", "2027-Q1"),
+        ],
+        "note": "Third-party access left active past the engagement end date.",
+    },
+}
+
+#: Flattened from RECURRENCE_SETS so the draw can look one coordinate up.
+RECURRING: dict[tuple[str, str, str], tuple[str, str]] = {
+    (spec["control_id"], unit, period): (set_id, spec["quality"])
+    for set_id, spec in RECURRENCE_SETS.items()
+    for unit, period in spec["coords"]
+}
+
 
 #: The same document filed against the same control in two different areas.
 #: A central team runs the retention sweep once and submits the identical
@@ -80,8 +155,29 @@ CONSISTENCY_PAIR = {
     "quality": "near_miss",
 }
 
-#: How many gaps get remediation evidence, so slice 7 has a loop to close.
-REMEDIATION_COUNT = 6
+#: How many gaps get remediation evidence.
+#:
+#: Most findings in a real programme do get fixed — that is what the programme is
+#: for — and section 10's "15-18 open at today" only works if the rest have
+#: closed. This is a share of the remediable failures rather than a fixed count,
+#: so it survives a reweighting: the ones left unremediated, plus the missing
+#: submissions that can never be remediated, are what remains open on the day.
+REMEDIATION_SHARE = 1.0
+
+#: Every Nth remediated failure is fixed badly the first time.
+#:
+#: Section 10 asks for several findings needing three or more evidence rounds,
+#: and section 8 reports the distribution of them. Without this the corpus has
+#: only accidental multi-round cases — the ones where the stub happens to
+#: misjudge a clean document — which is not the same thing at all: those are
+#: measurement noise, and these are the real phenomenon the stakeholder
+#: described, where the owner files something, the auditor says what is still
+#: missing, and the owner files again.
+MULTI_ROUND_EVERY = 7
+
+#: And a few take three. Section 10 asks for "several needing 3+ evidence
+#: rounds" — the ones that make the follow-up count worth reporting at all.
+THREE_ROUND_EVERY = 13
 
 
 @dataclass
@@ -91,9 +187,14 @@ class Corpus:
     areas: list[AuditableUnit]
     controls: list[ControlDefinition]
     exceptions: list[ComplianceException]
-    submissions: list[EvidenceSubmission]
+    submissions: list[InboundSubmission]
+    through: int = DEFAULT_THROUGH
+    last_month: int = DEFAULT_LAST_MONTH
     truth_rows: list[dict[str, Any]] = field(default_factory=list)
     applicable_pairs: list[tuple[str, str]] = field(default_factory=list)
+    audits: list[Any] = field(default_factory=list)
+    audit_findings: list[Any] = field(default_factory=list)
+    audit_closures: list[tuple[str, int, int]] = field(default_factory=list)
 
     def fingerprint(self) -> str:
         """A hash of everything that must not drift between runs."""
@@ -153,19 +254,34 @@ def _truth_row(**kwargs: Any) -> dict[str, Any]:
         "is_remediation": False,
         "remediates_submission_id": None,
         "consistency_pair_id": None,
+        "recurrence_set_id": None,
         "note": "",
     }
     row.update(kwargs)
     return row
 
 
-def generate_corpus(seed: int = DEFAULT_SEED, year: int = DEFAULT_YEAR) -> Corpus:
+def _window(spec, corpus) -> list:
+    """Every period this control covers, across the whole eighteen months."""
+    return periods_for(
+        spec.frequency, corpus.year, corpus.through, last_month=corpus.last_month
+    )
+
+
+def generate_corpus(
+    seed: int = DEFAULT_SEED,
+    year: int = DEFAULT_YEAR,
+    through: int = DEFAULT_THROUGH,
+    last_month: int = DEFAULT_LAST_MONTH,
+) -> Corpus:
     rng = Random(seed)
     areas_by_id = {a.id: a for a in AUDITABLE_UNITS}
 
     corpus = Corpus(
         seed=seed,
         year=year,
+        through=through,
+        last_month=last_month,
         areas=list(AUDITABLE_UNITS),
         controls=[spec.definition() for spec in CONTROL_SPECS],
         exceptions=list(COMPLIANCE_EXCEPTIONS),
@@ -201,7 +317,7 @@ def generate_corpus(seed: int = DEFAULT_SEED, year: int = DEFAULT_YEAR) -> Corpu
                 continue
             corpus.applicable_pairs.append((spec.id, area.id))
 
-            for period in periods_for(spec.frequency, year):
+            for period in _window(spec, corpus):
                 coords = (spec.id, area.id, period.label)
                 excused = next(
                     (
@@ -229,9 +345,10 @@ def generate_corpus(seed: int = DEFAULT_SEED, year: int = DEFAULT_YEAR) -> Corpu
                     and period.label == CONSISTENCY_PAIR["period"]
                     and area.id in CONSISTENCY_PAIR["area_ids"]
                 )
+                recurring = RECURRING.get(coords)
                 quality = (
-                    CONSISTENCY_PAIR["quality"]
-                    if is_pair
+                    CONSISTENCY_PAIR["quality"] if is_pair
+                    else recurring[1] if recurring
                     else SHOWCASE.get(coords) or _weighted_quality(spec, rng)
                 )
 
@@ -253,7 +370,7 @@ def generate_corpus(seed: int = DEFAULT_SEED, year: int = DEFAULT_YEAR) -> Corpu
                 )
                 sequence += 1
                 filed = submitted_at(spec, period, quality, rng)
-                submission = EvidenceSubmission(
+                submission = InboundSubmission(
                     id=f"SUB-{sequence:04d}",
                     control_id=spec.id,
                     auditable_unit_id=area.id,
@@ -278,6 +395,7 @@ def generate_corpus(seed: int = DEFAULT_SEED, year: int = DEFAULT_YEAR) -> Corpu
                         failing_clause_index=evidence.failing_clause_index,
                         failing_clause_text=evidence.failing_clause_text,
                         consistency_pair_id=CONSISTENCY_PAIR["id"] if is_pair else None,
+                        recurrence_set_id=recurring[0] if recurring else None,
                         note=(
                             f"Filed {filed.isoformat()}, due "
                             f"{due_date(period, spec.grace_days).isoformat()}."
@@ -286,7 +404,29 @@ def generate_corpus(seed: int = DEFAULT_SEED, year: int = DEFAULT_YEAR) -> Corpu
                 )
 
     _add_remediations(corpus, rng)
+    _add_programme(corpus)
     return corpus
+
+
+def _add_programme(corpus: Corpus) -> None:
+    """The audit track. Findings here are raised by a person, not a pipeline.
+
+    They are held as plain tuples rather than `Finding` objects because the
+    seeding path drives them through `stages.audits`, which is what writes the
+    audit trail. A generator that inserted findings straight into the table
+    would produce a corpus whose findings have no history — and the trail is the
+    product here, not a by-product.
+    """
+    from ..entities import ScheduledAudit
+
+    for ident, kind, planned, conducted, auditor, scope, title in AUDIT_PROGRAMME:
+        corpus.audits.append(ScheduledAudit(
+            id=ident, kind=kind, scope=list(scope), auditor_identity=auditor,
+            planned_date=planned, conducted_date=conducted, title=title,
+            status="completed" if conducted else "planned",
+        ))
+    corpus.audit_findings = list(AUDIT_FINDINGS)
+    corpus.audit_closures = list(AUDIT_CLOSURES)
 
 
 def _add_remediations(corpus: Corpus, rng: Random) -> None:
@@ -300,55 +440,82 @@ def _add_remediations(corpus: Corpus, rng: Random) -> None:
     areas_by_id = {a.id: a for a in AUDITABLE_UNITS}
     by_id = {s.id: s for s in corpus.submissions}
 
-    candidates = [
+    remediable = [
         row
         for row in corpus.truth_rows
-        if row["expected_verdict"] == "gap"
-        and row["defect_kind"] in ("near_miss", "non_compliant")
+        if row["expected_verdict"] in ("gap", "partial", "insufficient_evidence")
+        and row["defect_kind"] in (
+            "near_miss", "non_compliant", "partial", "stale", "wrong_type"
+        )
         and row["submission_id"] is not None
-    ][:REMEDIATION_COUNT]
+    ]
+    candidates = remediable[:round(len(remediable) * REMEDIATION_SHARE)]
 
     sequence = len(corpus.submissions)
-    for row in candidates:
+    for index, row in enumerate(candidates):
         original = by_id[row["submission_id"]]
         spec = specs_by_id[original.control_id]
         area = areas_by_id[original.auditable_unit_id]
         period = next(
-            p for p in periods_for(spec.frequency, corpus.year) if p.label == original.period
+            p for p in _window(spec, corpus) if p.label == original.period
         )
-        evidence = render(spec, area, period, "compliant", rng)
-        sequence += 1
+        # Some fixes do not fix it the first time. The owner files again, and
+        # the finding stays open in between — which is section 4's loop with
+        # something actually going round it.
+        if index % THREE_ROUND_EVERY == 0:
+            attempts = ["near_miss", "near_miss", "compliant"]
+        elif index % MULTI_ROUND_EVERY == 0:
+            attempts = ["near_miss", "compliant"]
+        else:
+            attempts = ["compliant"]
         # Dated from the original submission, not from the period, so a late
         # filing still gets a remediation that lands after it.
         filed = original.submitted_at.date() + timedelta(days=rng.randrange(14, 40))
-        assert filed <= SIMULATED_TODAY
-        submission = EvidenceSubmission(
-            id=f"SUB-{sequence:04d}",
-            control_id=spec.id,
-            auditable_unit_id=area.id,
-            period=period.label,
-            kind=evidence.kind,
-            doc_type=evidence.doc_type,
-            content=evidence.content,
-            content_hash=hashlib.sha256(evidence.content.encode()).hexdigest(),
-            submitted_at=datetime.combine(filed, time(16, 0)),
-            author=_owner_name(area),
-            is_remediation=True,
-        )
-        corpus.submissions.append(submission)
-        corpus.truth_rows.append(
-            _truth_row(
-                submission_id=submission.id,
+
+        for attempt, quality in enumerate(attempts, start=1):
+            evidence = render(spec, area, period, quality, rng)
+            sequence += 1
+            if attempt > 1:
+                filed = filed + timedelta(days=rng.randrange(10, 30))
+            if filed > SIMULATED_TODAY:
+                # The next attempt would land after "today", so it has not
+                # happened yet. The finding stays open with the rounds it has —
+                # which is the truthful state for a failure late in the window,
+                # and better than back-dating a fix into a future the corpus
+                # cannot see.
+                break
+            submission = InboundSubmission(
+                id=f"SUB-{sequence:04d}",
                 control_id=spec.id,
                 auditable_unit_id=area.id,
                 period=period.label,
-                defect_kind="remediation",
-                expected_verdict="compliant",
+                kind=evidence.kind,
+                doc_type=evidence.doc_type,
+                content=evidence.content,
+                content_hash=hashlib.sha256(evidence.content.encode()).hexdigest(),
+                submitted_at=datetime.combine(filed, time(16, 0)),
+                author=_owner_name(area),
                 is_remediation=True,
-                remediates_submission_id=original.id,
-                note=f"Remediation for {original.id}, filed {filed.isoformat()}.",
             )
-        )
+            corpus.submissions.append(submission)
+            corpus.truth_rows.append(
+                _truth_row(
+                    submission_id=submission.id,
+                    control_id=spec.id,
+                    auditable_unit_id=area.id,
+                    period=period.label,
+                    defect_kind="remediation",
+                    expected_verdict=evidence.expected_verdict,
+                    failing_clause_index=evidence.failing_clause_index,
+                    failing_clause_text=evidence.failing_clause_text,
+                    is_remediation=True,
+                    remediates_submission_id=original.id,
+                    note=(
+                        f"Remediation attempt {attempt} of {len(attempts)} for "
+                        f"{original.id}, filed {filed.isoformat()}."
+                    ),
+                )
+            )
 
 
 def _exception_truth(
@@ -421,8 +588,16 @@ def write_truth(corpus: Corpus):
 def seed_database(conn, corpus: Corpus) -> None:
     """Load the corpus into SQLite.
 
-    Areas, controls, exceptions and submissions only. CheckInstances, Evidence,
-    Findings and Actions are produced by the pipeline, never by the generator.
+    Units, identities, controls, exceptions and inbound submissions are written
+    directly — they are the register, and it exists before anything happens to
+    it. CheckInstances, Evidence, Assessments and activity-track Findings are
+    produced by the pipeline, never by the generator.
+
+    The audit programme is the exception that proves the rule: its audits are
+    written directly, but its *findings* are driven through `stages.audits` so
+    that each one is raised by an identity, at a date, with an audit-trail entry
+    behind it. Inserting them into the table would give the corpus findings with
+    no history, and the history is the product.
     """
     from datetime import date as _date
 
@@ -432,6 +607,73 @@ def seed_database(conn, corpus: Corpus) -> None:
     # The register exists from the first day of the year under audit.
     with simulated_clock(datetime.combine(_date(corpus.year, 1, 1), time(0, 0))):
         _seed(repo, corpus)
+    _seed_programme(conn, repo, corpus)
+
+
+def _seed_programme(conn, repo, corpus: Corpus) -> None:
+    """Conduct each audit, raise its findings, and close the ones that closed."""
+    from ..stages import audits as audit_stage
+    from ..stages import followup
+
+    for audit in corpus.audits:
+        # Stored as planned; `conduct` is what completes it and writes the event.
+        stored = replace(audit, status="planned", conducted_date=None)
+        repo["audits"].add(stored)
+
+    raised: dict[str, list] = {}
+    for audit in corpus.audits:
+        if audit.conducted_date is None:
+            continue
+        audit_stage.conduct(
+            conn, audit.id, by=audit.auditor_identity, as_of=audit.conducted_date
+        )
+        for audit_id, unit_id, severity, description, plan in corpus.audit_findings:
+            if audit_id != audit.id:
+                continue
+            finding = audit_stage.raise_finding(
+                conn, audit.id, unit_id=unit_id, description=description,
+                severity=severity, by=audit.auditor_identity,
+                agreed_action_plan=plan, as_of=audit.conducted_date,
+            )
+            raised.setdefault(audit.id, []).append(finding)
+        # Deliberately *not* generating the reports here. Report drafting is the
+        # one part of the audit track that costs tokens, and seeding a database
+        # is something the tests do hundreds of times — an eight-call bill every
+        # time a fixture runs would be indefensible, and it would make "S0 never
+        # calls a model" untestable because S0's own tests seed a corpus. The
+        # report is generated when somebody asks for it, which is also when a
+        # real auditor would ask.
+
+    by_audit = {a.id: a for a in corpus.audits}
+    for audit_id, index, days in corpus.audit_closures:
+        findings = raised.get(audit_id, [])
+        if index >= len(findings):
+            continue
+        finding = findings[index]
+        audit = by_audit[audit_id]
+        # Closed by the auditor who did *not* raise it, so the corpus exercises
+        # the section 7 separation rather than merely satisfying it by accident.
+        closer = next(
+            i.id for i in [
+                *(x for x in _AUDITORS() if x.id != audit.auditor_identity),
+                *(x for x in _AUDITORS()),
+            ]
+        )
+        closed_on = audit.conducted_date + timedelta(days=days)
+        followup.close_finding(
+            conn, finding.id, by=closer,
+            remarks=(
+                "Evidence reviewed and accepted; the agreed action plan was "
+                "completed and verified."
+            ),
+            as_of=closed_on,
+        )
+
+
+def _AUDITORS():
+    from .units import AUDITORS
+
+    return AUDITORS
 
 
 def _seed(repo, corpus: Corpus) -> None:
@@ -466,7 +708,7 @@ def _seed(repo, corpus: Corpus) -> None:
             },
         )
     for submission in corpus.submissions:
-        repo["submissions"].add(submission)
+        repo["inbound"].add(submission)
     repo["audit"].append(
         actor="system",
         owner="synthetic generator",
@@ -477,6 +719,8 @@ def _seed(repo, corpus: Corpus) -> None:
             "areas": len(corpus.areas),
             "controls": len(corpus.controls),
             "submissions": len(corpus.submissions),
+            "audits": len(corpus.audits),
+            "audit_findings": len(corpus.audit_findings),
             "fingerprint": corpus.fingerprint()[:16],
         },
     )

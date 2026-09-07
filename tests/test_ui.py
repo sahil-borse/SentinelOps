@@ -129,7 +129,7 @@ def test_a_superseded_citation_still_resolves_in_its_own_source(live):
 
 def test_status_by_area_accounts_for_every_check(live):
     rows = view.status_by_area(live)
-    assert len(rows) == 7
+    assert len(rows) == 11
     total = sum(r.due for r in rows)
     assert total == len(repositories(live)["instances"].list())
     for row in rows:
@@ -272,7 +272,7 @@ def test_uploaded_evidence_goes_through_the_normal_path(live):
     assert submission.id.startswith("SUB-UI-")
     assert submission.is_remediation
     assert submission.content_hash
-    stored = repo["submissions"].get(submission.id)
+    stored = repo["inbound"].get(submission.id)
     assert stored == submission
 
     outcome = service.reassess(live, target, date(2026, 6, 28))

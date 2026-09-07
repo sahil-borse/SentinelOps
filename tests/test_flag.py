@@ -24,8 +24,8 @@ from sentinelops.stages import followup
 from sentinelops.stages.trigger import run_cycle
 from sentinelops.synth import generate_corpus, seed_database
 
-END_OF_STORY = date(2027, 3, 31)
-LATER = date(2027, 6, 30)
+END_OF_STORY = date(2027, 9, 30)
+LATER = date(2027, 12, 31)
 
 
 @pytest.fixture(scope="module")
@@ -514,10 +514,20 @@ def test_events_are_stamped_with_the_cycle_date_not_today(conn, corpus):
     prescreen(conn, date(2026, 3, 28))
     flag_run(conn, date(2026, 3, 28))
 
-    stamps = [
-        e.ts for e in repositories(conn)["audit"].read_all()
-        if e.action != "exception_registered" and e.action != "corpus_seeded"
+    # Everything the *cycle* wrote. Seeding also writes history — the exception
+    # register, and an audit programme whose audits were conducted on their own
+    # dates across the eighteen months — and those legitimately carry the dates
+    # they happened on rather than the date of this run.
+    seeded = {
+        "exception_registered", "corpus_seeded", "audit_conducted",
+        "finding_raised", "finding_severity_assigned", "finding_closed",
+        "notification_logged", "finding_reminder_sent", "finding_escalated",
+    }
+    events = [
+        e for e in repositories(conn)["audit"].read_all()
+        if e.action not in seeded
     ]
+    stamps = [e.ts for e in events]
     assert stamps
     assert all(s.date() == date(2026, 3, 28) for s in stamps)
     assert all(s.year == 2026 for s in stamps)
@@ -533,9 +543,27 @@ def test_the_trail_sorts_chronologically_within_a_run(conn, corpus):
         flag_run(conn, as_of)
 
     events = repositories(conn)["audit"].read_all()
-    stamps = [e.ts for e in events]
-    assert stamps == sorted(stamps), "sequence order and time order agree"
+
+    # Sequence is the order things were *recorded*; `ts` is the business time
+    # they happened at. For a live run those coincide, and the trail below
+    # asserts it. They do not coincide across seeding, and should not: the
+    # corpus loads an audit programme whose audits were conducted throughout
+    # 2026 and 2027 before the first cycle runs, so a November audit is recorded
+    # ahead of a January reminder. Integrity is sequence-based (`verify_chain`),
+    # legibility is time-based, and conflating them would mean either back-
+    # dating the chain or pretending the history did not happen.
+    cycle_events = [
+        e for e in events
+        if e.action in (
+            "cycle_started", "cycle_completed", "check_instance_created",
+            "check_instance_overdue", "prescreen_completed",
+            "assessment_recorded", "flag_raised", "flagging_completed",
+        )
+    ]
+    stamps = [e.ts for e in cycle_events]
+    assert stamps == sorted(stamps), "within a run, sequence and time agree"
     assert stamps[0].date() < stamps[-1].date()
+    assert [e.seq for e in events] == sorted(e.seq for e in events)
 
 
 def test_the_clock_is_restored_when_a_cycle_fails(conn, corpus):

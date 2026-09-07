@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from random import Random
 
-from sentinelops.periods import due_date, periods_for
+from sentinelops.periods import due_date, period_from_label, periods_for
 
 #: How hard a document is to judge, by the defect that was injected into it.
 #: Borderline documents are where reviewers diverge; a blank page is not.
@@ -171,9 +171,7 @@ def simulate(
 
     for (control_id, area_id, period_label), row in sorted(truth_rows.items()):
         control = controls[control_id]
-        period = next(
-            p for p in periods_for(control.frequency, year) if p.label == period_label
-        )
+        period = period_from_label(period_label)
         deadline = due_date(period, control.grace_days)
         expected = row["expected_verdict"] or "insufficient_evidence"
         kind = row["defect_kind"]

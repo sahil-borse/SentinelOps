@@ -335,7 +335,7 @@ def _run(conn, as_of: date, *, year: int = 2026) -> PrescreenReport:
     }
 
     submissions: dict[tuple[str, str, str], list] = {}
-    for submission in repo["submissions"].list():
+    for submission in repo["inbound"].list():
         if submission.is_remediation:
             continue  # slice 7 re-assesses these through the action loop
         if submission.submitted_at.date() > as_of:

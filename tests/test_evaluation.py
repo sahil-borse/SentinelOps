@@ -9,7 +9,9 @@ import pytest
 from evaluation import baseline as baseline_module
 from evaluation import manual as manual_module
 from evaluation import metrics as metrics_module
-from evaluation.harness import CYCLE_DATES, evaluate, run_pipeline
+from evaluation.harness import (
+    CYCLE_DATES, StaleGroundTruth, _require_matching_truth, evaluate, run_pipeline,
+)
 from sentinelops.db import connect
 from sentinelops.synth import generate_corpus
 
@@ -248,7 +250,16 @@ def test_superseded_findings_are_excluded_from_every_metric(evaluation):
 def test_no_evidence_is_not_counted_as_a_missed_check(evaluation):
     """The system raised, chased and recorded them. That is not missing them."""
     assert evaluation.pipeline["missed"]["rate"] == 0.0
-    assert evaluation.pipeline["zero_model"]["by_tier"]["no_evidence"] > 20
+    # The threshold was tuned to a corpus where a tenth of everything was never
+    # filed. The reshaped one is realistic instead: unfiled evidence is the
+    # rarest defect, because a finding raised from it can never be closed by
+    # evidence and every one of them sits in the open count forever. What the
+    # metric has to show is that they were *seen and settled without spending*,
+    # not that there are lots of them.
+    assert evaluation.pipeline["zero_model"]["by_tier"]["no_evidence"] > 0
+    assert evaluation.pipeline["missed"]["due"] > 0, (
+        "a zero missed-check rate means nothing if nothing was ever due"
+    )
 
 
 # --- the run as a whole -----------------------------------------------------
@@ -301,3 +312,33 @@ def test_results_md_names_the_corpus_it_was_measured_on(evaluation):
     text = (ROOT / "results.md").read_text(encoding="utf-8")
     assert evaluation.corpus_fingerprint[:16] in text
     assert str(evaluation.seed) in text
+
+
+# --- the guard that stops a plausible wrong answer ---------------------------
+
+def test_a_stale_truth_file_is_refused_not_scored():
+    """Every accuracy figure joins the run to the truth file on (control, unit,
+    period). A truth file generated before the corpus changed lines up rows that
+    describe different documents and yields a number that is wrong but
+    plausible — which is worse than one that is obviously broken.
+
+    This is not hypothetical: it put recall at 12.8% for a pipeline that had
+    caught almost everything, during the corpus reshape.
+    """
+    from sentinelops.synth import generate_corpus
+
+    corpus = generate_corpus()
+    _require_matching_truth(corpus, {"fingerprint": corpus.fingerprint()})
+
+    with pytest.raises(StaleGroundTruth) as refused:
+        _require_matching_truth(corpus, {"fingerprint": "0" * 64})
+    assert "regenerate" in str(refused.value)
+
+
+def test_the_truth_file_on_disk_describes_the_current_corpus():
+    """The guard above only helps if somebody runs it. This is that somebody."""
+    from evaluation.metrics import load_ground_truth
+    from sentinelops.synth import generate_corpus
+
+    corpus = generate_corpus()
+    assert load_ground_truth(corpus.year)["fingerprint"] == corpus.fingerprint()

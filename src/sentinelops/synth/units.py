@@ -5,11 +5,12 @@ project team, a department and IT all qualify, and the subject should be
 modelled generically. So a unit now carries a `kind` — and nothing downstream
 branches on it, which is the point. It is descriptive, not a switch.
 
-**The roster is deliberately unchanged in this slice.** Same seven units, same
-ids, same attributes, so the corpus fingerprint, the 64 applicable pairings and
-the 343 check instances all hold and every test that moves is a rename rather
-than a recount. Adding project teams and stretching to eighteen months is the
-corpus slice; doing it here would hide a vocabulary change inside a data change.
+Section 10 asks for six support functions plus three or four project teams, and
+the roster now matches. The project teams are the point of `kind` being
+descriptive rather than a switch: nothing downstream branches on it, so a
+finding against a project team is chased, escalated and closed by exactly the
+same code as one against Payments. If it were not, the stakeholder's "model the
+subject generically" would be a comment rather than a fact.
 
     unit          kind             pii  cust  supp  region  criticality
     CUSTOPS       support_function  Y    Y     -     APAC    high
@@ -17,8 +18,17 @@ corpus slice; doing it here would hide a vocabulary change inside a data change.
     HR            support_function  Y    -     Y     NA      medium
     PROCUREMENT   support_function  -    -     Y     EMEA    medium
     MARKETING     support_function  Y    Y     Y     NA      low
+    ITSVC         support_function  Y    -     Y     APAC    high
     PLATFORM      department        -    -     Y     APAC    critical
     FINREP        department        -    -     -     EMEA    high
+    PRJ-ATLAS     project_team      Y    Y     -     EMEA    critical
+    PRJ-BEACON    project_team      -    -     Y     NA      medium
+    PRJ-CORAL     project_team      Y    -     -     APAC    low
+
+Project teams are short-lived and their owners are engineers rather than
+functional heads, which is why they report into Platform Engineering's owner
+rather than to the operations director — escalation should follow the line that
+exists, not a tidier one.
 
 The reporting lines matter: escalation walks `reports_to` rather than inventing
 a manager by gluing "Head of " onto a team name, so everybody it escalates to
@@ -55,6 +65,11 @@ _OWNERS = [
     ("ID-ALVAREZ", "J. Alvarez", "AREA-MKTG", "ID-OPSDIR"),
     ("ID-IYER", "N. Iyer", "AREA-PLATFORM", "ID-DIRECTOR"),
     ("ID-NOVAK", "A. Novak", "AREA-FINREP", "ID-DIRECTOR"),
+    ("ID-BRENNAN", "C. Brennan", "AREA-ITSVC", "ID-OPSDIR"),
+    # Project leads report through Platform Engineering, not to operations.
+    ("ID-VASQUEZ", "E. Vasquez", "AREA-PRJ-ATLAS", "ID-IYER"),
+    ("ID-TANAKA", "K. Tanaka", "AREA-PRJ-BEACON", "ID-IYER"),
+    ("ID-DUBOIS", "M. Dubois", "AREA-PRJ-CORAL", "ID-IYER"),
 ]
 
 UNIT_OWNERS = [
@@ -112,6 +127,18 @@ AUDITABLE_UNITS: list[AuditableUnit] = [
           False, False, True, "APAC", "critical"),
     _unit("AREA-FINREP", "Financial Reporting", "department",
           False, False, False, "EMEA", "high"),
+    _unit("AREA-ITSVC", "IT Services", "support_function",
+          True, False, True, "APAC", "high"),
+    # No suppliers of its own — Atlas buys through Procurement. Without that
+    # it would carry byte-identical attributes to Payments and therefore an
+    # identical control set, which makes the applicability engine look like it
+    # is doing less work than it is.
+    _unit("AREA-PRJ-ATLAS", "Project Atlas", "project_team",
+          True, True, False, "EMEA", "critical"),
+    _unit("AREA-PRJ-BEACON", "Project Beacon", "project_team",
+          False, False, True, "NA", "medium"),
+    _unit("AREA-PRJ-CORAL", "Project Coral", "project_team",
+          True, False, False, "APAC", "low"),
 ]
 
 UNITS_BY_ID = {u.id: u for u in AUDITABLE_UNITS}

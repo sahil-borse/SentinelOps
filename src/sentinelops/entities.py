@@ -3,12 +3,18 @@
 No behaviour lives here beyond identity and defaults; persistence is the
 repositories' job and rules are the stages' job.
 
-Migrating from the v2 model to v3. Two names change meaning rather than simply
-moving, so the order of the migration matters: the v2 `Assessment` — an AI verdict
-on a piece of evidence — becomes `Assessment` here, which vacates the name
-before a later slice reuses it for the central tracked object. Doing it the
-other way round would leave every reference to `Assessment` ambiguous, and a wrong
-call would be silent.
+Migrating from the v2 model to v3. Several names change meaning rather than
+simply moving, so the order of the migration matters. Each is vacated before it
+is reused, because a name that means two things at once fails silently:
+
+    v2 `Finding` (an AI verdict)      -> `Assessment`      (slice 10a)
+    v2 `Action`  (a task)             -> `Finding`         (slice 10b)
+    v2 `EvidenceSubmission` (an inbox) -> `InboundSubmission` (slice 10c)
+
+`EvidenceSubmission` now means what section 3 says it means: **one review round
+on one finding**. The thing it used to mean — a document arriving from a team
+before any check instance exists to bind it to — is still needed and is now
+`InboundSubmission`, which is what it always was.
 """
 
 from __future__ import annotations
@@ -35,6 +41,13 @@ Severity = Literal["Major", "Minor", "Observation"]
 
 FindingSource = Literal["audit", "activity_assessment", "self_identified"]
 ExceptionStatus = Literal["active", "expired", "revoked"]
+
+#: The four kinds of audit the stakeholder named. Not a taxonomy we invented —
+#: these are the programmes PA/InfoSec actually run.
+AuditKind = Literal[
+    "internal_audit", "qarev", "release_audit", "document_review"
+]
+AuditStatus = Literal["planned", "in_progress", "completed"]
 FlagCategory = Literal["gap", "exception", "overdue"]
 Actor = Literal["system", "ai", "user"]
 Frequency = Literal["monthly", "quarterly", "annual"]
@@ -82,6 +95,37 @@ class AuditableUnit:
 
 
 @dataclass
+class ScheduledAudit:
+    """One audit in the programme, and the findings are its children.
+
+    This is the other half of the two scheduled things section 1 is at pains to
+    keep apart. An audit is something PA/InfoSec *conduct* and whose output is
+    findings; a compliance activity is something a unit's owner *does* and whose
+    output is evidence. Sharing a table between them would collapse exactly the
+    distinction the stakeholder drew twice.
+
+    `scope` is the units the audit covers, so a finding raised under it can be
+    checked against what was actually looked at.
+    """
+
+    id: str
+    kind: AuditKind
+    scope: list[str]
+    auditor_identity: str
+    planned_date: date
+    title: str = ""
+    conducted_date: date | None = None
+    status: AuditStatus = "planned"
+    report_generated_at: datetime | None = None
+    report_issued_at: datetime | None = None
+    report_issued_by: str = ""
+
+    @property
+    def is_complete(self) -> bool:
+        return self.status == "completed"
+
+
+@dataclass
 class ControlDefinition:
     id: str
     title: str
@@ -125,7 +169,7 @@ class Evidence:
 
 
 @dataclass
-class EvidenceSubmission:
+class InboundSubmission:
     """Evidence as it arrives, before it is matched to a CheckInstance.
 
     A team submits against a control for a period; S1 (slice 4) creates the
@@ -146,6 +190,44 @@ class EvidenceSubmission:
     submitted_at: datetime
     author: str
     is_remediation: bool = False
+
+
+#: Section 4: the auditor either accepts a round or asks for more. There is no
+#: third answer, and "pending" is the absence of one rather than a verdict.
+AuditorResponse = Literal["pending", "accepted", "insufficient"]
+
+
+@dataclass
+class EvidenceSubmission:
+    """One round of evidence on one finding, and the auditor's answer to it.
+
+    The stakeholder described the loop precisely: the owner submits, PA/InfoSec
+    review, and if the evidence is insufficient they communicate the gaps and
+    request revised evidence — the finding staying open throughout. That loop
+    has a shape, and this is it. Rounds are numbered because "how many times did
+    we go round on this one?" is a question the portfolio needs answered, and
+    because a system that overwrites round 1 with round 2 cannot answer it.
+
+    A round is never edited once answered; a new round is opened instead. That
+    is what makes `round_number` meaningful rather than decorative.
+    """
+
+    id: str
+    finding_id: str
+    round_number: int
+    submitted_by: str
+    submitted_at: datetime
+    evidence_ref: str
+    owner_note: str = ""
+    auditor_response: AuditorResponse = "pending"
+    auditor_remarks: str = ""
+    responded_by: str = ""
+    responded_at: datetime | None = None
+
+    @property
+    def is_open(self) -> bool:
+        """Awaiting the auditor. The owner has done what they can."""
+        return self.auditor_response == "pending"
 
 
 @dataclass

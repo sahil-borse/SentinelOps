@@ -372,7 +372,7 @@ def _advance_states(
     instances: dict[str, CheckInstance],
     period_ends: dict[tuple[str, str], date],
 ) -> None:
-    submissions = repo["submissions"].list()
+    submissions = repo["inbound"].list()
     arrived: dict[tuple[str, str, str], Any] = {}
     for submission in submissions:
         if submission.submitted_at.date() > as_of:

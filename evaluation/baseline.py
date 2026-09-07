@@ -143,7 +143,10 @@ def run(
     # No applicability: every control is considered against every area.
     for control in sorted(corpus.controls, key=lambda c: c.id):
         for area in sorted(corpus.areas, key=lambda a: a.id):
-            for period in periods_for(control.frequency, year):
+            for period in periods_for(
+                control.frequency, corpus.year, corpus.through,
+                last_month=corpus.last_month,
+            ):
                 result.instances_considered += 1
                 submission = submissions.get((control.id, area.id, period.label))
                 if submission is None:

@@ -32,12 +32,28 @@ CREATE TABLE IF NOT EXISTS evidence (
     kind TEXT NOT NULL, doc_type TEXT NOT NULL, content TEXT NOT NULL,
     content_hash TEXT NOT NULL, submitted_at TEXT NOT NULL, author TEXT NOT NULL,
     is_remediation INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS evidence_submissions (
+CREATE TABLE IF NOT EXISTS scheduled_audits (
+    id TEXT PRIMARY KEY, kind TEXT NOT NULL, scope TEXT NOT NULL,
+    auditor_identity TEXT NOT NULL REFERENCES identities(id),
+    planned_date TEXT NOT NULL, title TEXT NOT NULL, conducted_date TEXT,
+    status TEXT NOT NULL, report_generated_at TEXT, report_issued_at TEXT,
+    report_issued_by TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS inbound_submissions (
     id TEXT PRIMARY KEY, control_id TEXT NOT NULL REFERENCES control_definitions(id),
     auditable_unit_id TEXT NOT NULL REFERENCES auditable_units(id), period TEXT NOT NULL,
     kind TEXT NOT NULL, doc_type TEXT NOT NULL, content TEXT NOT NULL,
     content_hash TEXT NOT NULL, submitted_at TEXT NOT NULL, author TEXT NOT NULL,
     is_remediation INTEGER NOT NULL);
+-- One review round on one finding. Section 4's loop, made durable: the owner
+-- files, the auditor answers, and an insufficient answer opens the next round
+-- rather than editing this one.
+CREATE TABLE IF NOT EXISTS evidence_submissions (
+    id TEXT PRIMARY KEY, finding_id TEXT NOT NULL REFERENCES findings(id),
+    round_number INTEGER NOT NULL, submitted_by TEXT NOT NULL,
+    submitted_at TEXT NOT NULL, evidence_ref TEXT NOT NULL, owner_note TEXT NOT NULL,
+    auditor_response TEXT NOT NULL, auditor_remarks TEXT NOT NULL,
+    responded_by TEXT NOT NULL, responded_at TEXT,
+    UNIQUE (finding_id, round_number));
 CREATE TABLE IF NOT EXISTS assessments (
     id TEXT PRIMARY KEY, check_instance_id TEXT NOT NULL REFERENCES check_instances(id),
     verdict TEXT NOT NULL, confidence REAL NOT NULL, rationale TEXT NOT NULL,

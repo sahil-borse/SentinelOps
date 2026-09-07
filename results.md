@@ -1,12 +1,16 @@
 # SentinelOps — evaluation results
 
-Generated 2026-09-07 22:12 · corpus seed `20260831` ·
-fingerprint `8052c437f2062b93` · 15 scheduled cycles
+Generated 2026-09-07 23:28 · corpus seed `20260831` ·
+fingerprint `836a9a93fc6ba563` · 21 scheduled cycles
 
 > **These runs used `FakeModelClient`, not a language model.** The stub is a
 > deterministic keyword heuristic; `tests/test_fake_accuracy.py` measures it at
-> ~91% agreement with ground truth, with every error on hedged `partial`
-> documents. **The precision, recall and false-positive figures below therefore
+> ~98% agreement with ground truth on this corpus. Its errors are hedged
+> `partial` documents, plus one near-miss that states its shortfall as
+> arithmetic ("3 of 5 accounts were disabled") — a comparison a keyword
+> rule cannot make and a language model can, which is a fair summary of
+> why the model tier exists at all.
+> **The precision, recall and false-positive figures below therefore
 > describe the stub, not the product.** They are reported because the *architecture*
 > comparison is still valid — SentinelOps and the naive baseline are scored
 > against the same model, so the difference between them is attributable to
@@ -17,31 +21,31 @@ fingerprint `8052c437f2062b93` · 15 scheduled cycles
 
 | Metric | Manual (simulated) | SentinelOps | Difference |
 |---|---|---|---|
-| Missed-check rate | 17.2% (59/343) | 0.0% (0/342) | +17.2% |
+| Missed-check rate | 18.8% (153/813) | 0.0% (0/531) | +18.8% |
 | Verdict disagreement, identical evidence | 100.0% | 0.0% | structural |
-| Time to detection, median days | 102 | 13.0 | 89 days sooner |
-| Gap-detection precision | 82.1% | 95.5% | - |
-| Gap-detection recall | 71.4% | 93.4% | - |
-| False-positive rate | 5.8% | 1.6% | - |
-| Resolved with zero model calls | n/a | 41.1% | - |
-| Tokens per audit cycle | 216,233 | 147,870 | 1.5x fewer |
-| Findings raised / closed | n/a | 154 / 7 | mean 25.1 days to closure |
+| Time to detection, median days | 102.0 | 13 | 89 days sooner |
+| Gap-detection precision | 67.5% | 98.1% | - |
+| Gap-detection recall | 77.6% | 98.1% | - |
+| False-positive rate | 4.2% | 0.2% | - |
+| Resolved with zero model calls | n/a | 29.3% | - |
+| Tokens per audit cycle | 366,637 | 314,122 | 1.2x fewer |
+| Findings raised / closed | n/a | 94 / 73 | mean 29.5 days to closure |
 
 ---
 
 ## What each figure means, and what it does not
 
-### 1. Missed-check rate — 17.2% manual vs 0.0% automated
+### 1. Missed-check rate — 18.8% manual vs 0.0% automated
 
 The statement's first named pain: checks "dependent on teams remembering". A check
 is *missed* when it was due and nothing ever looked at it.
 
-The automated figure is a fact about the run: 342 instances came
-due across 15 cycles and 342 were examined.
+The automated figure is a fact about the run: 531 instances came
+due across 21 cycles and 531 were examined.
 It is 0.0% because applicability and scheduling are
 deterministic — a check cannot fail to be raised because nobody remembered it.
 
-**Note what is *not* counted as missed.** 33 instances had
+**Note what is *not* counted as missed.** 10 instances had
 no evidence filed at all. Those are not missed checks: the system raised them,
 chased them, escalated them and recorded the absence. Being told "nothing was
 submitted" is the opposite of missing something.
@@ -71,11 +75,11 @@ The naive baseline also achieves consistency here — but by *caching identical
 documents*, not by design. That helps only when the bytes match exactly; two
 paraphrases of the same report would diverge.
 
-### 3. Time to detection — median 13.0 days vs 102
+### 3. Time to detection — median 13 days vs 102.0
 
 Days from a check falling due to its non-compliance being written down.
-n=148, mean 3.6, p90 16,
-max 16.
+n=17, mean -23.5, p90 43,
+max 44.
 
 The pipeline was run **month by month**, not once at the end. Assessing a whole
 year on 31 December would have reported near-instant detection, which would be an
@@ -83,11 +87,11 @@ artefact of the harness rather than a property of the system. Detection latency
 here is therefore bounded by cycle frequency: run weekly and it falls, run
 quarterly and it rises.
 
-### 4. Gap detection — precision 95.5%, recall 93.4%, FPR 1.6%
+### 4. Gap detection — precision 98.1%, recall 98.1%, FPR 0.2%
 
-Scored against the truth file on 343 instances:
-TP 85, FP 4,
-TN 248, FN 6 (F1 0.944).
+Scored against the truth file on 532 instances:
+TP 53, FP 1,
+TN 477, FN 1 (F1 0.981).
 
 **Scope, which matters more than the number.** This is measured against a
 *synthetic corpus with constructed failure modes*. The generator decided what
@@ -97,32 +101,31 @@ messier, longer, worse formatted and ambiguous in ways nothing here reproduces.
 Treat this as evidence the assessment path works on documents of known
 construction — not as an expected accuracy on your own evidence.
 
-The corpus does contain 47 **near-miss** documents that
+The corpus does contain 38 **near-miss** documents that
 read as clean reports and fail exactly one clause. Without those a precision
 figure would be meaningless, which is why they exist.
 
-Baseline on the same corpus and model: precision 93.1%,
-recall 59.3%, FPR 1.8%
-over 310 scored instances.
+Baseline on the same corpus and model: precision 97.1%,
+recall 63.0%, FPR 0.2%
+over 527 scored instances.
 
-### 5. Zero-model-call share — 41.1%
+### 5. Zero-model-call share — 29.3%
 
-141 of 343 current
+156 of 532 current
 findings were reached by rule, not by a model.
 
 By tier:
 
 | decided_by | assessments |
 |---|---|
-| no_evidence | 33 |
-| s3_model | 202 |
-| stale_evidence | 16 |
-| structured_threshold | 77 |
-| wrong_evidence_type | 15 |
+| no_evidence | 5 |
+| s3_model | 376 |
+| stale_evidence | 11 |
+| structured_threshold | 140 |
 
 **This number is a property of the corpus mix, not a universal constant.** It is
-this high because the corpus contains 33 instances with no
-evidence, 15 of the wrong document type,
+this high because the corpus contains 10 instances with no
+evidence, 14 of the wrong document type,
 16 too stale to read, and three structured controls whose
 thresholds are arithmetic. An organisation whose evidence is always present,
 always the right type and always prose would see a much lower share. One with
@@ -134,22 +137,22 @@ the generator varies every document, so no control ever files byte-identical
 evidence in two periods. The rule is implemented and tested; this corpus simply
 never triggers it.
 
-### 6. Tokens per audit cycle — 147,870 vs 216,233 (1.5x)
+### 6. Tokens per audit cycle — 314,122 vs 366,637 (1.2x)
 
 |  | Naive baseline | SentinelOps | Difference |
 |---|---|---|---|
-| Model calls | 309 | 205 | 1.5x fewer |
-| Input tokens | 195,873 | 133,524 |  |
-| Output tokens | 20,360 | 14,346 |  |
-| Total tokens | 216,233 | 147,870 | 1.5x fewer |
-| Characters sent to model | 297,009 | - |  |
+| Model calls | 526 | 438 | 1.2x fewer |
+| Input tokens | 333,648 | 285,525 |  |
+| Output tokens | 32,989 | 28,597 |  |
+| Total tokens | 366,637 | 314,122 | 1.2x fewer |
+| Characters sent to model | 506,509 | - |  |
 
 **What the baseline is.** A competent naive implementation, not a strawman. It
 skips instances with no evidence — there is nothing to read — and caches by
 document hash, so the same document is assessed once
 (1 cache hits,
-222 skipped for no evidence of
-532 considered). It uses the *same model, same system
+309 skipped for no evidence of
+836 considered). It uses the *same model, same system
 prompt, same user template, same schema and same max_tokens*.
 
 **What it lacks** is exactly the three things under test: applicability rules, the
@@ -163,8 +166,8 @@ Baseline results are cached to disk on first run
 (served from cache) and never
 recomputed, per section 5.
 
-**Where the 1.5x actually comes from.** Almost
-entirely from the pre-screen making 1.5x fewer calls
+**Where the 1.2x actually comes from.** Almost
+entirely from the pre-screen making 1.2x fewer calls
 — not from retrieval. The synthetic documents are short enough to be a single
 chunk each, so retrieval trims almost nothing on this corpus. The mechanism is
 real and tested — on a long document it drops 12 of 13 chunks — but this corpus
@@ -179,25 +182,25 @@ responds correctly to prompt size. They are still an approximation of a real
 tokenizer's output. Exact token and cost figures need the real provider; the
 *ratio* is the durable part.
 
-### 7. Findings raised vs closed — 154 / 7
+### 7. Findings raised vs closed — 94 / 73
 
 |  | count |
 |---|---|
-| Raised | 154 |
-| Closed by an auditor | 7 |
-| Still open | 147 |
-| Escalated | 151 |
-| Closure rate | 4.5% |
-| Mean days to closure | 25.1 |
-| Mean follow-ups per closure | 0.7 |
+| Raised | 94 |
+| Closed by an auditor | 73 |
+| Still open | 21 |
+| Escalated | 57 |
+| Closure rate | 77.7% |
+| Mean days to closure | 29.5 |
+| Mean follow-ups per closure | 1.1 |
 
 The closure rate is low because the corpus contains remediation evidence for
-only 6 of the failures — the rest are left open on purpose, so the
+only 100 of the failures — the rest are left open on purpose, so the
 queue in the dashboard is not empty. It measures the corpus, not the diligence of
 a team.
 
 **What the chase did.** Across the same run the follow-up engine sent
-1,083 reminders and raised 302 escalations, all
+354 reminders and raised 114 escalations, all
 deterministic and all from the severity table. That is the number a human would
 have had to produce by remembering; it is not a measure of accuracy, and it is
 not claimed as one.
@@ -237,10 +240,10 @@ worth. They live in one dataclass so they can be argued with and re-run.
 
 | Manual assumptions | Missed-check rate | Disagreement | Median detection |
 |---|---|---|---|
-| as reported | 17.2% | 100.0% | 102d |
-| diligent team (recall +10pp, half the inconsistency) | 7.0% | 0.0% | 72d |
-| stretched team (recall -10pp, more drift) | 28.3% | 0.0% | 132d |
-| near-perfect recall, inconsistency unchanged | 0.3% | 100.0% | 102d |
+| as reported | 18.8% | 100.0% | 102d |
+| diligent team (recall +10pp, half the inconsistency) | 7.9% | 0.0% | 72d |
+| stretched team (recall -10pp, more drift) | 26.9% | 100.0% | 132d |
+| near-perfect recall, inconsistency unchanged | 0.7% | 0.0% | 102d |
 
 The SentinelOps column does not appear here because it does not move: those
 figures are a property of the run, not of anything assumed. Only the size of the
@@ -257,8 +260,8 @@ python -m evaluation
 
 Deterministic given the corpus seed (`20260831`) and the manual
 simulation seed (4242). The corpus fingerprint
-`8052c437f2062b93` pins the exact evidence these numbers were
+`836a9a93fc6ba563` pins the exact evidence these numbers were
 measured on; if it changes, they were measured on something else.
 
-Audit chain over the whole run: **OK - 5703 entries, chain intact**
-(5,703 events).
+Audit chain over the whole run: **OK - 5122 entries, chain intact**
+(5,122 events).

@@ -18,7 +18,7 @@ from sentinelops.stages.prescreen import run as prescreen
 from sentinelops.stages.trigger import run_cycle
 from sentinelops.synth import generate_corpus, seed_database
 
-END_OF_STORY = date(2027, 3, 31)
+END_OF_STORY = date(2027, 9, 30)
 
 
 @pytest.fixture(scope="module")
@@ -256,9 +256,13 @@ def test_assigning_a_severity_moves_the_target_date_and_records_the_override(cha
     conn = chased
     repo = repositories(conn)
     people = load_directory(conn)
+    # Must be one the model advised on: an audit-raised finding has no
+    # suggestion to override, so picking one would test nothing.
     finding = next(
         f for f in repo["findings"].list()
-        if f.status == "open" and f.suggested_severity != "Major"
+        if f.status == "open"
+        and f.suggested_severity is not None
+        and f.suggested_severity != "Major"
     )
     auditor = people.by_role("pa_infosec")[0]
 

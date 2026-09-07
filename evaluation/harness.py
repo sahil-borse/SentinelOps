@@ -34,9 +34,14 @@ RESULTS_PATH = Path(__file__).resolve().parents[1] / "results.md"
 #: The month-ends a scheduled programme would actually run on, plus a final
 #: sweep the following spring once every 2026 period has closed and its grace
 #: window with it.
-CYCLE_DATES = [date(2026, month, 28) for month in range(1, 13)] + [
-    date(2027, 1, 31), date(2027, 2, 28), date(2027, 3, 31),
-]
+#: One cycle a month across the corpus's eighteen-month window, then the
+#: vantage point itself. Month by month rather than all at the end, because
+#: time-to-detection measured over a single catch-up run measures the harness.
+CYCLE_DATES = (
+    [date(2026, month, 28) for month in range(1, 13)]
+    + [date(2027, month, 28) for month in range(1, 9)]
+    + [date(2027, 9, 30)]
+)
 
 
 @dataclass
@@ -48,6 +53,34 @@ class Evaluation:
     baseline: dict[str, Any] = field(default_factory=dict)
     manual: dict[str, Any] = field(default_factory=dict)
     comparison: dict[str, Any] = field(default_factory=dict)
+
+
+class StaleGroundTruth(RuntimeError):
+    """The truth file on disk does not describe the corpus being scored."""
+
+
+def _require_matching_truth(corpus, truth: dict[str, Any]) -> None:
+    """Refuse to score a corpus against ground truth for a different one.
+
+    Both carry the corpus fingerprint, and a mismatch is not a warning: every
+    accuracy figure in `results.md` is computed by joining the run to the truth
+    file on (control, unit, period), so a truth file generated before the corpus
+    changed will happily line up rows that describe *different documents* and
+    produce a precision figure that is simply wrong.
+
+    That is not hypothetical. It happened while the corpus was being reshaped:
+    a stale truth file put recall at 12.8% for a pipeline that had caught almost
+    everything, and the number was plausible enough to have been believed. A
+    loud failure is worth far more here than a plausible one.
+    """
+    on_disk = truth.get("fingerprint", "")
+    actual = corpus.fingerprint()
+    if on_disk != actual:
+        raise StaleGroundTruth(
+            f"the truth file describes corpus {on_disk[:16]} but this run uses "
+            f"{actual[:16]}; regenerate it with `python -m sentinelops.synth` "
+            f"before trusting any accuracy figure"
+        )
 
 
 def run_pipeline(conn, corpus, *, client=None) -> dict[str, Any]:
@@ -87,12 +120,15 @@ def evaluate(
 ) -> tuple[Evaluation, str]:
     corpus = generate_corpus() if seed is None else generate_corpus(seed=seed)
     truth = metrics_module.load_ground_truth(corpus.year)
+    _require_matching_truth(corpus, truth)
     truth_rows = metrics_module.truth_by_instance(truth)
 
     conn = connect(":memory:")
     run_stats = run_pipeline(conn, corpus, client=client)
 
-    verdicts = metrics_module.current_verdicts(conn)
+    # Scored on the original judgement, not the state after remediation — see
+    # `metrics.first_verdicts`.
+    verdicts = metrics_module.first_verdicts(conn)
     pipeline = {
         **run_stats,
         "missed": metrics_module.missed_checks(conn, truth_rows),

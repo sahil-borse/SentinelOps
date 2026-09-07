@@ -32,6 +32,7 @@ LIVE_STATE_TABLES = (
     "auditable_units",
     "control_definitions",
     "check_instances",
+    "inbound_submissions",
     "evidence_submissions",
     "evidence",
     "assessments",
@@ -156,9 +157,9 @@ def test_a_pack_builds_from_a_database_holding_only_the_log(pack, log_only):
         assert count == 0, f"{table} is not empty; the test proves nothing"
 
     assert pack.totals["events"] > 2000
-    assert pack.totals["units"] == 7
+    assert pack.totals["units"] == 11
     assert pack.totals["controls"] == 14
-    assert pack.totals["due"] == 343
+    assert pack.totals["due"] == 532
     assert pack.coverage and pack.exceptions and pack.findings and pack.actions
 
 
@@ -240,10 +241,14 @@ def test_findings_carry_verdict_confidence_and_review_flag(pack):
 
 def test_superseded_findings_are_shown_as_superseded(pack):
     superseded = [f for f in pack.findings if f["superseded_by"]]
-    assert len(superseded) == pack.totals["superseded_findings"] == 6
+    assert len(superseded) == pack.totals["superseded_findings"] == 93
     for finding in superseded:
         assert finding["is_current"] is False
-        assert finding["verdict"] != "compliant"
+    # A superseded assessment is not necessarily a failed one any more: a
+    # finding that took three rounds has a compliant assessment from round two
+    # superseded by round three. What is guaranteed is that the failures are in
+    # there — a corpus where nothing failed would not need a pack.
+    assert any(f["verdict"] != "compliant" for f in superseded)
 
 
 def test_the_finding_register_tells_the_whole_story(pack):
@@ -260,19 +265,30 @@ def test_the_finding_register_tells_the_whole_story(pack):
     for finding in closed:
         assert finding["owner"] and finding["team"], "who owned it"
         assert finding["raised_at"], "when raised"
-        assert finding["severity"], "what the auditor called it"
+        # An activity-track finding carries the severity the auditor accepted;
+        # an audit-track one the severity they assigned outright. Either way
+        # something is recorded — an unassigned severity on a *closed* finding
+        # would mean it was closed without ever being sized.
+        assert finding["severity"] or finding["suggested_severity"], (
+            "what the auditor called it"
+        )
         assert finding["resolution_note"], "the closure remarks"
         assert finding["resolved_at"]
 
+    # Three ways a finding closes, and the register distinguishes all three.
     remediated = [a for a in closed if a["remediation_evidence"]]
-    waived = [a for a in closed if not a["remediation_evidence"]]
-    assert len(remediated) == 6
-    assert len(waived) == 1
+    waived = [a for a in closed if "waived" in (a["resolution_note"] or "")]
+    accepted = [
+        a for a in closed
+        if not a["remediation_evidence"] and a not in waived
+    ]
+    assert len(remediated) >= 6, "fixes that were re-assessed and accepted"
+    assert len(waived) == 1, "one obligation excused rather than met"
+    assert accepted, "audit findings closed on evidence reviewed off-system"
 
     for finding in remediated:
         assert "supersedes" in finding["resolution_note"]
     for finding in waived:
-        assert "waived" in finding["resolution_note"]
         assert "stands" in finding["resolution_note"].lower()
 
 

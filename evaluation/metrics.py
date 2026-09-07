@@ -277,8 +277,35 @@ def action_closure(conn) -> dict[str, Any]:
     }
 
 
+def first_verdicts(conn) -> dict[str, str]:
+    """The verdict on the evidence as originally filed.
+
+    This is the one to score gap detection against, and getting it wrong is a
+    subtle way to make a working pipeline look broken. The truth file records
+    what the *original* submission was — a near-miss, say — and the question
+    "did we catch that?" is answered by the assessment of that submission.
+    `current_verdicts` answers a different question: what is the state now. Once
+    most gaps are remediated the two diverge completely, and scoring recall on
+    the current state counts every successful fix as a missed gap.
+
+    That is exactly what happened when the corpus went from six remediations to
+    seventy-odd: recall read 12.8% against a pipeline that had in fact caught
+    almost everything and then watched it get fixed.
+    """
+    repo = repositories(conn)
+    first: dict[str, Any] = {}
+    for assessment in sorted(repo["assessments"].list(), key=lambda a: a.id):
+        if assessment.supersedes_assessment_id:
+            continue  # a re-assessment of a fix, not the original judgement
+        first.setdefault(assessment.check_instance_id, assessment.verdict)
+    return first
+
+
 def current_verdicts(conn) -> dict[str, str]:
-    """The pipeline's final answer per instance, superseded findings excluded."""
+    """The pipeline's final answer per instance, superseded findings excluded.
+
+    The state of the world now. For "did we catch it?" use `first_verdicts`.
+    """
     repo = repositories(conn)
     findings = repo["assessments"].list()
     superseded = {f.supersedes_assessment_id for f in findings if f.supersedes_assessment_id}

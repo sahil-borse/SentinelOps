@@ -62,11 +62,30 @@ totals = service.counts(conn)
 meter = view.token_meter(conn)
 
 # ---------------------------------------------------------------- controls --
-st.title("SentinelOps")
-st.caption(
-    "Compliance checks that cannot be forgotten, judged the same way everywhere, "
-    "with the audit trail written as it happens."
-)
+title_col, who_col = st.columns([3, 1])
+with title_col:
+    st.title("SentinelOps")
+    st.caption(
+        "Compliance checks that cannot be forgotten, judged the same way "
+        "everywhere, with the audit trail written as it happens."
+    )
+
+# Not authentication — section 11 rules that out — an identity selector. Its
+# job is to make segregation of duties visible: switch to a unit owner and the
+# Close control is not on the page at all.
+people = service.identities(conn)
+with who_col:
+    labels = {
+        f"{row['name']} — {row['role'].replace('_', '/')}"
+        f"{' · ' + row['unit'] if row['unit'] else ''}": row["id"]
+        for row in people
+    }
+    picked = st.selectbox("Acting as", list(labels), key="acting_as")
+    actor = service.acting_as(conn, labels[picked])
+    st.caption(
+        "May close findings" if actor["may_close"]
+        else "May not close findings — section 7"
+    )
 
 # ------------------------------------------------------------ walkthrough --
 step_index = st.session_state.get("step", story.current_step(conn))
@@ -435,6 +454,38 @@ with actions:
         )
         st.caption(f"{len(rows)} open. "
                    f"{totals['actions_resolved']} closed by an auditor to date.")
+    # Section 7: "In the UI the owner's Close control is absent, not disabled."
+    # A greyed-out button still tells the owner that closing is nearly theirs to
+    # do, and invites them to ask why it is off. Absent says the right thing.
+    if rows and actor["may_close"]:
+        with st.form("close_finding", clear_on_submit=True):
+            st.markdown("**Close a finding** — auditor only")
+            target = st.selectbox(
+                "Finding", [r["action"] for r in rows], key="close_target"
+            )
+            remarks = st.text_area(
+                "Closure remarks",
+                placeholder="What satisfied you, and on what evidence.",
+                key="close_remarks", height=70,
+            )
+            if st.form_submit_button("Close finding", use_container_width=True):
+                ok, message = service.close_finding(
+                    conn, target, by=actor["id"], remarks=remarks
+                )
+                st.session_state["closure"] = {"ok": ok, "message": message}
+                st.rerun()
+    elif rows:
+        st.caption(
+            f"Closing a finding is reserved for PA/InfoSec. "
+            f"{actor['name']} is a {actor['role'].replace('_', '/')}."
+        )
+
+    # Anything drawn immediately before st.rerun() is discarded, so the result
+    # is parked in session state and rendered on the next pass.
+    posted = st.session_state.pop("closure", None)
+    if posted:
+        (st.success if posted["ok"] else st.error)(posted["message"])
+
     closed = view.resolved_actions(conn)
     if closed:
         with st.expander(f"{len(closed)} closed", expanded=False):

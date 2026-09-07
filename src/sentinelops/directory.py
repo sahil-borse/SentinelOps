@@ -57,6 +57,10 @@ class Directory:
             current = self.get(current.reports_to)
         return chain
 
+    def all(self) -> list[Identity]:
+        """Everyone, in a stable order. The identity selector reads this."""
+        return sorted(self.people.values(), key=lambda p: p.id)
+
     def by_role(self, role: str) -> list[Identity]:
         return sorted(
             (p for p in self.people.values() if p.role == role), key=lambda p: p.id

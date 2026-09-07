@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
-from .. import directory
+from .. import authority, directory
 from ..directory import Directory
 from ..entities import Finding, Severity
 
@@ -254,6 +254,10 @@ def assign_severity(
     if finding is None:
         raise ValueError(f"no such finding: {finding_id}")
 
+    identity = directory.load(conn).get(by)
+    authority.require(identity.role if identity else None, "assign_severity",
+                      actor_id=by)
+
     was, suggested = finding.severity, finding.suggested_severity
     finding.severity = severity
     finding.severity_assigned_by = by
@@ -337,19 +341,36 @@ def record_owner_progress(
     finding = repo["findings"].get(finding_id)
     if finding is None:
         raise ValueError(f"no such finding: {finding_id}")
+    identity = directory.load(conn).get(by)
+    authority.require(identity.role if identity else None, "set_owner_progress",
+                      actor_id=by)
+    # "own unit only", from the section 7 table. An owner reporting progress on
+    # somebody else's finding is not a permission question, it is a scope one.
+    if identity is not None and identity.auditable_unit != finding.auditable_unit_id:
+        raise authority.AuthorityError(
+            f"{by} owns {identity.auditable_unit}, not "
+            f"{finding.auditable_unit_id}; an owner reports progress on their "
+            "own unit's findings only"
+        )
     return set_progress(repo, finding, progress, by=by)
 
 
 def close_on_repo(
-    repo, finding: Finding, *, by: str, remarks: str, as_of: date
+    repo, finding: Finding, *, by: str, remarks: str, as_of: date,
+    people: Directory | None = None,
 ) -> Finding:
     """Close a finding a caller already has in hand.
 
     Same decision as `close_finding`, minus the lookup — S4 holds the finding
     when a waiver settles it and should not go back to the database for it.
+
+    Both section 7 rules are checked here rather than at the call site, because
+    this is the last point before the state changes and a caller that forgot to
+    ask is exactly the case the control exists for.
     """
     if not remarks.strip():
         raise ValueError("a finding cannot be closed without closure remarks")
+    _authorise_closure(repo, finding, by, people)
     finding.status = "closed"
     finding.closed_by = by
     finding.closed_at = datetime.combine(as_of, time(12, 0))
@@ -368,6 +389,21 @@ def close_on_repo(
         actor_identity=by,
     )
     return finding
+
+
+def _authorise_closure(repo, finding: Finding, by: str,
+                       people: Directory | None) -> None:
+    """Role first, then separation of duty. Both, and in that order."""
+    from .rounds import submitters_of
+
+    if people is not None:
+        identity = people.get(by)
+        authority.require(identity.role if identity else None, "close_finding",
+                          actor_id=by)
+    authority.require_separation(
+        submitters_of(repo, finding.id) | {finding.owner_identity},
+        by, "close_finding",
+    )
 
 
 def close_finding(
@@ -375,9 +411,10 @@ def close_finding(
 ) -> Finding:
     """Only ever the auditor, and only ever with remarks.
 
-    Section 4: the finding stays open until the auditor is satisfied. Whether
-    `by` is permitted to do this is checked in the next slice; the shape of the
-    decision — who, when, and on what grounds — lands here.
+    Section 4: the finding stays open until the auditor is satisfied. Section 7
+    says who that auditor may be, and both halves of that are enforced in
+    `close_on_repo` — this is the same decision with a lookup in front of it, so
+    it must not become a second copy of the logic.
     """
     from ..repositories import repositories
 
@@ -385,24 +422,7 @@ def close_finding(
     finding = repo["findings"].get(finding_id)
     if finding is None:
         raise ValueError(f"no such finding: {finding_id}")
-    if not remarks.strip():
-        raise ValueError("a finding cannot be closed without closure remarks")
-
-    finding.status = "closed"
-    finding.closed_by = by
-    finding.closed_at = datetime.combine(as_of, time(12, 0))
-    finding.closure_remarks = remarks
-    repo["findings"].update(finding)
-    repo["audit"].append(
-        actor="user", owner=by, action="finding_closed",
-        entity_type="Finding", entity_id=finding.id,
-        detail={
-            "closed_by": by,
-            "closure_remarks": remarks,
-            "follow_up_count": finding.follow_up_count,
-            "days_open": (as_of - finding.raised_at.date()).days,
-            "owner_progress_at_closure": finding.owner_progress,
-        },
-        actor_identity=by,
+    return close_on_repo(
+        repo, finding, by=by, remarks=remarks, as_of=as_of,
+        people=directory.load(conn),
     )
-    return finding
