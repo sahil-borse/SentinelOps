@@ -115,7 +115,7 @@ def test_every_citation_the_screen_shows_resolves_in_the_document_it_shows(live)
 def test_a_superseded_citation_still_resolves_in_its_own_source(live):
     """Nothing is orphaned: every citation resolves in some filed document."""
     repo = repositories(live)
-    for finding in repo["findings"].list():
+    for finding in repo["assessments"].list():
         if not finding.cited_spans:
             continue
         documents = repo["evidence"].list(check_instance_id=finding.check_instance_id)
@@ -166,8 +166,8 @@ def test_open_actions_carry_owner_due_date_and_status(live):
 
 def test_finding_detail_returns_the_current_finding_not_a_superseded_one(live):
     repo = repositories(live)
-    findings = repo["findings"].list()
-    superseded = {f.supersedes_finding_id for f in findings if f.supersedes_finding_id}
+    findings = repo["assessments"].list()
+    superseded = {f.supersedes_assessment_id for f in findings if f.supersedes_assessment_id}
     for instance_id in view.assessable_instances(live)[:25]:
         detail = view.finding_detail(live, instance_id)
         assert detail["finding"].id not in superseded
@@ -184,7 +184,7 @@ def test_the_timeline_covers_the_whole_check(live):
     rows = view.timeline(live, instance_id)
     events = [r["event"] for r in rows]
     assert "check_instance_created" in events
-    assert any(e == "finding_recorded" for e in events)
+    assert any(e == "assessment_recorded" for e in events)
     assert [r["seq"] for r in rows] == sorted(r["seq"] for r in rows)
     for row in rows:
         assert row["actor"] in ("system", "ai", "user")
@@ -243,7 +243,7 @@ def test_uploaded_evidence_goes_through_the_normal_path(live):
     target = next(
         i.id for i in repo["instances"].list()
         if i.status == "assessed"
-        and repo["findings"].list(check_instance_id=i.id)[0].verdict != "compliant"
+        and repo["assessments"].list(check_instance_id=i.id)[0].verdict != "compliant"
         and repo["controls"].get(i.control_id).evidence_kind == "document"
     )
     control = repo["controls"].get(repo["instances"].get(target).control_id)
@@ -269,10 +269,10 @@ def test_uploaded_evidence_goes_through_the_normal_path(live):
     assert stored == submission
 
     outcome = service.reassess(live, target, date(2026, 6, 28))
-    assert outcome.new_finding_id
-    assert outcome.superseded_finding_id
-    new = repo["findings"].get(outcome.new_finding_id)
-    assert new.supersedes_finding_id == outcome.superseded_finding_id
+    assert outcome.new_assessment_id
+    assert outcome.superseded_assessment_id
+    new = repo["assessments"].get(outcome.new_assessment_id)
+    assert new.supersedes_assessment_id == outcome.superseded_assessment_id
 
 
 def test_an_upload_is_recorded_in_the_audit_trail(live):
@@ -287,7 +287,7 @@ def test_an_upload_is_recorded_in_the_audit_trail(live):
         e for e in repo["audit"].read_for("CheckInstance", target)
         if e.action == "evidence_uploaded"
     ][-1]
-    assert event.actor == "user"
+    assert event.actor_kind == "user"
     assert event.owner == "D. Ferreira"
     assert event.detail["filename"] == "note.txt"
     assert event.detail["source"] == "dashboard upload"
@@ -419,7 +419,7 @@ def test_the_dashboard_renders_end_to_end(tmp_path, monkeypatch, app_cache_clear
 
     headings = [element.value for element in app.subheader]
     for expected in ("Compliance status by process area",
-                     "Overdue and escalation queue", "Finding detail",
+                     "Overdue and escalation queue", "Assessment detail",
                      "Submit evidence", "Open actions", "Audit"):
         assert expected in headings
 
@@ -555,7 +555,7 @@ def test_step_five_actually_closes_the_loop(live):
 
     after = view.finding_detail(live, outcome.focus)["finding"]
     assert after.id != before.id
-    assert after.supersedes_finding_id == before.id
+    assert after.supersedes_assessment_id == before.id
     assert "same" in " ".join(outcome.detail)
 
 
@@ -599,7 +599,7 @@ def test_every_step_has_a_reason_a_person_would_recognise():
         assert step.button and step.title
         # no identifiers or field names leaking into the narrative
         for jargon in ("decided_by", "CHK-", "CTRL-", "AREA-", "s3_model",
-                       "prescreen", "supersedes_finding_id"):
+                       "prescreen", "supersedes_assessment_id"):
             assert jargon not in step.why, f"{step.key} leaks jargon: {jargon}"
 
 

@@ -8,11 +8,13 @@ from sentinelops.entities import (
     ComplianceException,
     ControlDefinition,
     Evidence,
-    Finding,
-    ProcessArea,
+    Assessment,
+    AuditableUnit,
 )
 
-AREA = ProcessArea("A1", "Payments", "Finance Ops", "K. Rao", {"handles_pii": True})
+AREA = AuditableUnit(
+    "A1", "Payments", "support_function", "ID-RAO", {"handles_pii": True}
+)
 CONTROL = ControlDefinition(
     "C1", "Access review", "Review privileged accounts.", "quarterly",
     {"handles_pii": True}, "document", ["access_review_report"], 100, 3.0,
@@ -20,7 +22,7 @@ CONTROL = ControlDefinition(
 
 
 def _seed(repo):
-    repo["areas"].add(AREA)
+    repo["units"].add(AREA)
     repo["controls"].add(CONTROL)
     instance = CheckInstance(
         "I1", "C1", "A1", "2026-Q1", date(2026, 4, 15), "pending", "Finance Ops", "K. Rao"
@@ -30,9 +32,9 @@ def _seed(repo):
 
 
 def test_process_area_round_trip(repo):
-    repo["areas"].add(AREA)
-    assert repo["areas"].get("A1") == AREA
-    assert repo["areas"].get("A1").attributes["handles_pii"] is True
+    repo["units"].add(AREA)
+    assert repo["units"].get("A1") == AREA
+    assert repo["units"].get("A1").attributes["handles_pii"] is True
 
 
 def test_control_round_trip_keeps_json_fields(repo):
@@ -60,28 +62,36 @@ def test_evidence_and_finding_and_action_round_trip(repo):
     assert repo["evidence"].get("E1") == evidence
     assert repo["evidence"].get("E1").is_remediation is True
 
-    finding = Finding(
-        "F1", "I1", "gap", 0.8, "why", ["span"], ["gap"], "fix it", False,
-        datetime(2026, 4, 3, 10, 0), None,
+    # Named rather than positional: the field list moved in the v3 migration,
+    # and a positional constructor silently puts a value in the wrong slot.
+    assessment = Assessment(
+        id="ASM-1", check_instance_id="I1", verdict="gap", confidence=0.8,
+        rationale="why", cited_spans=["span"], gaps=["gap"],
+        recommended_action="fix it", needs_human_review=False,
+        assessed_at=datetime(2026, 4, 3, 10, 0),
     )
-    repo["findings"].add(finding)
-    assert repo["findings"].get("F1") == finding
+    repo["assessments"].add(assessment)
+    assert repo["assessments"].get("ASM-1") == assessment
 
-    superseding = Finding(
-        "F2", "I1", "compliant", 0.95, "fixed", ["span"], [], "", False,
-        datetime(2026, 5, 1, 10, 0), "F1",
+    superseding = Assessment(
+        id="ASM-2", check_instance_id="I1", verdict="compliant", confidence=0.95,
+        rationale="fixed", cited_spans=["span"], gaps=[], recommended_action="",
+        needs_human_review=False, assessed_at=datetime(2026, 5, 1, 10, 0),
+        supersedes_assessment_id="ASM-1",
     )
-    repo["findings"].add(superseding)
-    assert repo["findings"].get("F2").supersedes_finding_id == "F1"
+    repo["assessments"].add(superseding)
+    assert repo["assessments"].get("ASM-2").supersedes_assessment_id == "ASM-1"
 
-    action = Action("ACT1", "F1", "Revoke", "Finance Ops", "K. Rao", date(2026, 5, 15))
+    action = Action(
+        "ACT1", "ASM-1", "Revoke", "Finance Ops", "K. Rao", date(2026, 5, 15)
+    )
     repo["actions"].add(action)
     assert repo["actions"].get("ACT1") == action
     assert repo["actions"].get("ACT1").resolved_at is None
 
 
 def test_compliance_exception_round_trip(repo):
-    repo["areas"].add(AREA)
+    repo["units"].add(AREA)
     repo["controls"].add(CONTROL)
     exc = ComplianceException(
         "X1", "C1", "A1", "Legacy system retiring", "CFO",

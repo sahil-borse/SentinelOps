@@ -75,11 +75,11 @@ def test_the_categories_are_distinct_in_the_data(flagged):
 def test_overdue_means_nothing_was_filed_and_no_model_was_asked(flagged):
     conn, _ = flagged
     repo = repositories(conn)
-    findings = {f.id: f for f in repo["findings"].list()}
+    findings = {f.id: f for f in repo["assessments"].list()}
     overdue = [f for f in repo["flags"].list() if f.category == "overdue"]
     assert overdue
     for flag in overdue:
-        finding = findings[flag.finding_id]
+        finding = findings[flag.assessment_id]
         assert finding.decided_by == "no_evidence"
         assert finding.verdict == "insufficient_evidence"
         evidence = repo["evidence"].list(check_instance_id=flag.check_instance_id)
@@ -89,11 +89,11 @@ def test_overdue_means_nothing_was_filed_and_no_model_was_asked(flagged):
 def test_gap_means_content_was_assessed_and_failed(flagged):
     conn, _ = flagged
     repo = repositories(conn)
-    findings = {f.id: f for f in repo["findings"].list()}
+    findings = {f.id: f for f in repo["assessments"].list()}
     gaps = [f for f in repo["flags"].list() if f.category == "gap"]
     assert gaps
     for flag in gaps:
-        finding = findings[flag.finding_id]
+        finding = findings[flag.assessment_id]
         assert finding.verdict != "compliant"
         assert finding.decided_by != "no_evidence"
 
@@ -117,11 +117,11 @@ def test_exception_covers_both_the_approved_and_the_lapsed(flagged):
 
 
 def test_categorise_is_a_total_function(corpus):
-    from sentinelops.entities import Finding
+    from sentinelops.entities import Assessment
 
     for decided_by in ("no_evidence", "wrong_evidence_type", "stale_evidence",
                        "structured_threshold", "s3_model", "carried_forward"):
-        finding = Finding(id="F", check_instance_id="I", verdict="gap",
+        finding = Assessment(id="F", check_instance_id="I", verdict="gap",
                           confidence=1.0, rationale="r", decided_by=decided_by)
         assert categorise(finding) in ("gap", "overdue")
 
@@ -227,7 +227,7 @@ def test_an_approved_deviation_raises_no_action(flagged):
 def test_an_action_is_assigned_to_the_owning_team(flagged, corpus):
     conn, _ = flagged
     repo = repositories(conn)
-    teams = {a.id: a.owner_team for a in corpus.areas}
+    teams = {a.id: a.name for a in corpus.areas}
     for flag in repo["flags"].list():
         if flag.category == "exception":
             continue
@@ -235,7 +235,7 @@ def test_an_action_is_assigned_to_the_owning_team(flagged, corpus):
             f"ACT-{flag.check_instance_id.removeprefix('CHK-')}"
         )
         instance = repo["instances"].get(flag.check_instance_id)
-        assert action.owner_team == teams[instance.process_area_id]
+        assert action.owner_team == teams[instance.auditable_unit_id]
 
 
 def test_the_due_date_tightens_with_severity(flagged):
@@ -396,7 +396,7 @@ def test_a_waiver_after_the_fact_excuses_an_already_assessed_failure(conn, corpu
 
     # by April the check is closed as a failure and the work is raised
     assert repo["instances"].get(target).status == "assessed"
-    finding = repo["findings"].list(check_instance_id=target)[0]
+    finding = repo["assessments"].list(check_instance_id=target)[0]
     assert finding.verdict == "insufficient_evidence"
     assert repo["actions"].get("ACT-CRYPTO-KEY-HR-2026-Q1").status == "assigned"
 
@@ -417,10 +417,10 @@ def test_the_waiver_leaves_the_finding_standing(conn, corpus):
         prescreen(conn, as_of)
         flag_run(conn, as_of)
 
-    findings = repo["findings"].list(check_instance_id="CHK-CRYPTO-KEY-HR-2026-Q1")
+    findings = repo["assessments"].list(check_instance_id="CHK-CRYPTO-KEY-HR-2026-Q1")
     assert len(findings) == 1, "no new finding is invented by a waiver"
     assert findings[0].verdict == "insufficient_evidence"
-    assert findings[0].supersedes_finding_id is None
+    assert findings[0].supersedes_assessment_id is None
 
 
 def test_the_waiver_closes_the_flag_and_resolves_the_action(conn, corpus):
@@ -460,7 +460,7 @@ def test_the_waiver_records_who_approved_it_on_the_transition(conn, corpus):
     assert event.detail["exception_id"] == "EXC-004"
     assert event.detail["approved_by"] == "Chief Information Security Officer"
     assert event.detail["excused_verdict"] == "insufficient_evidence"
-    assert event.detail["excused_finding_id"]
+    assert event.detail["excused_assessment_id"]
 
 
 def test_a_compliant_check_is_never_waived(conn, corpus):
@@ -473,7 +473,7 @@ def test_a_compliant_check_is_never_waived(conn, corpus):
         prescreen(conn, as_of)
         flag_run(conn, as_of)
 
-    findings = {f.check_instance_id: f for f in repo["findings"].list()}
+    findings = {f.check_instance_id: f for f in repo["assessments"].list()}
     for instance in repo["instances"].list():
         if instance.status == "waived":
             finding = findings.get(instance.id)

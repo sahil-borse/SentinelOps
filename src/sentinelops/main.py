@@ -16,8 +16,10 @@ from pathlib import Path
 from typing import Any
 
 from .db import connect
-from .demo import DEMO_AREA, DEMO_CONTROL, DEMO_EVIDENCE_TEXT, print_run
-from .entities import Action, CheckInstance, ControlDefinition, Evidence, Finding, ProcessArea
+from .demo import (
+    DEMO_AREA, DEMO_CONTROL, DEMO_EVIDENCE_TEXT, DEMO_OWNER, print_run,
+)
+from .entities import Action, CheckInstance, ControlDefinition, Evidence, Assessment, AuditableUnit
 from .llm import TokenMeter, get_client
 from .llm.prompts import ASSESSMENT_SYSTEM_V1, assessment_schema_v1, assessment_user_v1
 from .llm.protocol import LlmRequest
@@ -28,7 +30,7 @@ DEFAULT_DB = "sentinelops.db"
 
 def run(
     db_path: str = DEFAULT_DB,
-    area: ProcessArea = DEMO_AREA,
+    area: AuditableUnit = DEMO_AREA,
     control: ControlDefinition = DEMO_CONTROL,
     evidence_text: str = DEMO_EVIDENCE_TEXT,
 ) -> dict[str, Any]:
@@ -36,7 +38,7 @@ def run(
     repo = repositories(conn)
     audit = repo["audit"]
 
-    repo["areas"].add(area)
+    repo["units"].add(area)
     repo["controls"].add(control)
 
     # --- the check exists because the calendar says so, not because anyone
@@ -44,12 +46,12 @@ def run(
     instance = CheckInstance(
         id="CHK-0001",
         control_id=control.id,
-        process_area_id=area.id,
+        auditable_unit_id=area.id,
         period="2026-Q1",
         due_date=date(2026, 4, 15),
         status="pending",
-        assigned_team=area.owner_team,
-        owner_name=area.owner_name,
+        assigned_team=area.name,
+        owner_name=DEMO_OWNER.name,
     )
     repo["instances"].add(instance)
     audit.append(
@@ -70,7 +72,7 @@ def run(
         content=evidence_text,
         content_hash=hashlib.sha256(evidence_text.encode()).hexdigest(),
         submitted_at=datetime(2026, 4, 2, 9, 30),
-        author=area.owner_name,
+        author=DEMO_OWNER.name,
         is_remediation=False,
     )
     repo["evidence"].add(evidence)
@@ -105,8 +107,8 @@ def run(
         response = meter.record(client.complete(request))
     assessed = response.parsed_json or {}
 
-    finding = Finding(
-        id="FND-0001",
+    finding = Assessment(
+        id="ASM-0001",
         check_instance_id=instance.id,
         verdict=assessed["verdict"],
         confidence=assessed["confidence"],
@@ -116,16 +118,16 @@ def run(
         recommended_action=assessed["recommended_action"],
         needs_human_review=assessed["needs_human_review"],
         assessed_at=datetime.now(),
-        supersedes_finding_id=None,
+        supersedes_assessment_id=None,
     )
-    repo["findings"].add(finding)
+    repo["assessments"].add(finding)
     instance.status = "assessed"
     repo["instances"].update(instance)
     audit.append(
         actor="ai",
         owner=instance.owner_name,
-        action="finding_recorded",
-        entity_type="Finding",
+        action="assessment_recorded",
+        entity_type="Assessment",
         entity_id=finding.id,
         detail={
             "verdict": finding.verdict,
@@ -138,7 +140,7 @@ def run(
     # --- Slice 7 carries it through remediation to resolution.
     action = Action(
         id="ACT-0001",
-        finding_id=finding.id,
+        assessment_id=finding.id,
         title=finding.recommended_action or f"Remediate {control.title}",
         owner_team=instance.assigned_team,
         owner_name=instance.owner_name,
@@ -156,7 +158,7 @@ def run(
     )
 
     return {
-        "finding": repo["findings"].get(finding.id),
+        "finding": repo["assessments"].get(finding.id),
         "action": repo["actions"].get(action.id),
         "audit_events": audit.read_all(),
         "token_usage": conn.execute("SELECT * FROM token_usage").fetchall(),

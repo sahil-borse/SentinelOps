@@ -133,7 +133,7 @@ def run(
     )
     schema = assessment_schema_v2()
     submissions = {
-        (s.control_id, s.process_area_id, s.period): s
+        (s.control_id, s.auditable_unit_id, s.period): s
         for s in corpus.submissions
         if not s.is_remediation
     }

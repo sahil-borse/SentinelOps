@@ -21,9 +21,9 @@ from ..entities import (
     ComplianceException,
     ControlDefinition,
     EvidenceSubmission,
-    ProcessArea,
+    AuditableUnit,
 )
-from .areas import PROCESS_AREAS
+from .units import AUDITABLE_UNITS, IDENTITIES, IDENTITIES_BY_ID
 from .calendar import SIMULATED_TODAY, due_date, periods_for
 from .controls import CONTROL_SPECS, SPECS_BY_ID, ControlSpec
 from .documents import (
@@ -88,7 +88,7 @@ REMEDIATION_COUNT = 6
 class Corpus:
     seed: int
     year: int
-    areas: list[ProcessArea]
+    areas: list[AuditableUnit]
     controls: list[ControlDefinition]
     exceptions: list[ComplianceException]
     submissions: list[EvidenceSubmission]
@@ -101,6 +101,11 @@ class Corpus:
                  for s in self.submissions]
         parts += [repr(sorted(r.items())) for r in self.truth_rows]
         return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+def _owner_name(unit) -> str:
+    owner = IDENTITIES_BY_ID.get(unit.owner_identity)
+    return owner.name if owner else unit.owner_identity
 
 
 def applies(applies_when: dict[str, Any], attributes: dict[str, Any]) -> bool:
@@ -139,7 +144,7 @@ def _truth_row(**kwargs: Any) -> dict[str, Any]:
     row: dict[str, Any] = {
         "submission_id": None,
         "control_id": None,
-        "process_area_id": None,
+        "auditable_unit_id": None,
         "period": None,
         "defect_kind": None,
         "expected_verdict": None,
@@ -156,12 +161,12 @@ def _truth_row(**kwargs: Any) -> dict[str, Any]:
 
 def generate_corpus(seed: int = DEFAULT_SEED, year: int = DEFAULT_YEAR) -> Corpus:
     rng = Random(seed)
-    areas_by_id = {a.id: a for a in PROCESS_AREAS}
+    areas_by_id = {a.id: a for a in AUDITABLE_UNITS}
 
     corpus = Corpus(
         seed=seed,
         year=year,
-        areas=list(PROCESS_AREAS),
+        areas=list(AUDITABLE_UNITS),
         controls=[spec.definition() for spec in CONTROL_SPECS],
         exceptions=list(COMPLIANCE_EXCEPTIONS),
         submissions=[],
@@ -191,7 +196,7 @@ def generate_corpus(seed: int = DEFAULT_SEED, year: int = DEFAULT_YEAR) -> Corpu
 
     sequence = 0
     for spec in sorted(CONTROL_SPECS, key=lambda s: s.id):
-        for area in sorted(PROCESS_AREAS, key=lambda a: a.id):
+        for area in sorted(AUDITABLE_UNITS, key=lambda a: a.id):
             if not applies(spec.applies_when, area.attributes):
                 continue
             corpus.applicable_pairs.append((spec.id, area.id))
@@ -210,7 +215,7 @@ def generate_corpus(seed: int = DEFAULT_SEED, year: int = DEFAULT_YEAR) -> Corpu
                     corpus.truth_rows.append(
                         _truth_row(
                             control_id=spec.id,
-                            process_area_id=area.id,
+                            auditable_unit_id=area.id,
                             period=period.label,
                             defect_kind="exception_suppressed",
                             note=f"Suppressed by {excused.id}, expires "
@@ -234,7 +239,7 @@ def generate_corpus(seed: int = DEFAULT_SEED, year: int = DEFAULT_YEAR) -> Corpu
                     corpus.truth_rows.append(
                         _truth_row(
                             control_id=spec.id,
-                            process_area_id=area.id,
+                            auditable_unit_id=area.id,
                             period=period.label,
                             defect_kind="missing",
                             expected_verdict=EXPECTED_VERDICT["missing"],
@@ -251,14 +256,14 @@ def generate_corpus(seed: int = DEFAULT_SEED, year: int = DEFAULT_YEAR) -> Corpu
                 submission = EvidenceSubmission(
                     id=f"SUB-{sequence:04d}",
                     control_id=spec.id,
-                    process_area_id=area.id,
+                    auditable_unit_id=area.id,
                     period=period.label,
                     kind=evidence.kind,
                     doc_type=evidence.doc_type,
                     content=evidence.content,
                     content_hash=hashlib.sha256(evidence.content.encode()).hexdigest(),
                     submitted_at=datetime.combine(filed, time(9, 30)),
-                    author=area.owner_name,
+                    author=_owner_name(area),
                     is_remediation=False,
                 )
                 corpus.submissions.append(submission)
@@ -266,7 +271,7 @@ def generate_corpus(seed: int = DEFAULT_SEED, year: int = DEFAULT_YEAR) -> Corpu
                     _truth_row(
                         submission_id=submission.id,
                         control_id=spec.id,
-                        process_area_id=area.id,
+                        auditable_unit_id=area.id,
                         period=period.label,
                         defect_kind=quality,
                         expected_verdict=evidence.expected_verdict,
@@ -292,7 +297,7 @@ def _add_remediations(corpus: Corpus, rng: Random) -> None:
     new one.
     """
     specs_by_id = {s.id: s for s in CONTROL_SPECS}
-    areas_by_id = {a.id: a for a in PROCESS_AREAS}
+    areas_by_id = {a.id: a for a in AUDITABLE_UNITS}
     by_id = {s.id: s for s in corpus.submissions}
 
     candidates = [
@@ -307,7 +312,7 @@ def _add_remediations(corpus: Corpus, rng: Random) -> None:
     for row in candidates:
         original = by_id[row["submission_id"]]
         spec = specs_by_id[original.control_id]
-        area = areas_by_id[original.process_area_id]
+        area = areas_by_id[original.auditable_unit_id]
         period = next(
             p for p in periods_for(spec.frequency, corpus.year) if p.label == original.period
         )
@@ -320,14 +325,14 @@ def _add_remediations(corpus: Corpus, rng: Random) -> None:
         submission = EvidenceSubmission(
             id=f"SUB-{sequence:04d}",
             control_id=spec.id,
-            process_area_id=area.id,
+            auditable_unit_id=area.id,
             period=period.label,
             kind=evidence.kind,
             doc_type=evidence.doc_type,
             content=evidence.content,
             content_hash=hashlib.sha256(evidence.content.encode()).hexdigest(),
             submitted_at=datetime.combine(filed, time(16, 0)),
-            author=area.owner_name,
+            author=_owner_name(area),
             is_remediation=True,
         )
         corpus.submissions.append(submission)
@@ -335,7 +340,7 @@ def _add_remediations(corpus: Corpus, rng: Random) -> None:
             _truth_row(
                 submission_id=submission.id,
                 control_id=spec.id,
-                process_area_id=area.id,
+                auditable_unit_id=area.id,
                 period=period.label,
                 defect_kind="remediation",
                 expected_verdict="compliant",
@@ -362,7 +367,7 @@ def _exception_truth(
         [
             period.label
             for period in periods_for(spec.frequency, corpus.year)
-            if suppresses(exception, exception.control_id, exception.process_area_id,
+            if suppresses(exception, exception.control_id, exception.auditable_unit_id,
                           period.end)
         ]
         if spec
@@ -371,7 +376,7 @@ def _exception_truth(
     return {
         "id": exception.id,
         "control_id": exception.control_id,
-        "process_area_id": exception.process_area_id,
+        "auditable_unit_id": exception.auditable_unit_id,
         "status": exception.status,
         "approved_by": exception.approved_by,
         "granted_at": exception.granted_at.isoformat(),
@@ -430,8 +435,13 @@ def seed_database(conn, corpus: Corpus) -> None:
 
 
 def _seed(repo, corpus: Corpus) -> None:
+    # Identities first: a unit points at its owner, and the audit trail
+    # attributes everything to somebody, so the roster has to exist before
+    # anything can reference it.
+    for identity in IDENTITIES:
+        repo["identities"].add(identity)
     for area in corpus.areas:
-        repo["areas"].add(area)
+        repo["units"].add(area)
     for control in corpus.controls:
         repo["controls"].add(control)
     for exception in corpus.exceptions:
@@ -447,7 +457,7 @@ def _seed(repo, corpus: Corpus) -> None:
             entity_id=exception.id,
             detail={
                 "control_id": exception.control_id,
-                "process_area_id": exception.process_area_id,
+                "auditable_unit_id": exception.auditable_unit_id,
                 "rationale": exception.rationale,
                 "approved_by": exception.approved_by,
                 "granted_at": exception.granted_at.isoformat(),

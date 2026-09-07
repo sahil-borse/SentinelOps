@@ -11,13 +11,17 @@ happy path proves nothing about the assessment step.
 
 from __future__ import annotations
 
-from ..entities import ControlDefinition, ProcessArea
+from ..entities import AuditableUnit, ControlDefinition, Identity
 
-DEMO_AREA = ProcessArea(
+DEMO_OWNER = Identity(
+    id="ID-MEHTA", name="R. Mehta", role="unit_owner", auditable_unit="AREA-CUSTOPS",
+)
+
+DEMO_AREA = AuditableUnit(
     id="AREA-CUSTOPS",
     name="Customer Operations",
-    owner_team="Customer Operations",
-    owner_name="R. Mehta",
+    kind="support_function",
+    owner_identity=DEMO_OWNER.id,
     attributes={
         "handles_pii": True,
         "customer_facing": True,

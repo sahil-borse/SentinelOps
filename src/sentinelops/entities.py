@@ -1,7 +1,14 @@
-"""The eight domain entities of section 3, as plain dataclasses.
+"""The domain entities of section 3, as plain dataclasses.
 
 No behaviour lives here beyond identity and defaults; persistence is the
 repositories' job and rules are the stages' job.
+
+Migrating from the v2 model to v3. Two names change meaning rather than simply
+moving, so the order of the migration matters: the v2 `Assessment` — an AI verdict
+on a piece of evidence — becomes `Assessment` here, which vacates the name
+before a later slice reuses it for the central tracked object. Doing it the
+other way round would leave every reference to `Assessment` ambiguous, and a wrong
+call would be silent.
 """
 
 from __future__ import annotations
@@ -26,14 +33,46 @@ ExceptionStatus = Literal["active", "expired", "revoked"]
 FlagCategory = Literal["gap", "exception", "overdue"]
 Actor = Literal["system", "ai", "user"]
 Frequency = Literal["monthly", "quarterly", "annual"]
+UnitKind = Literal["support_function", "project_team", "department"]
+Role = Literal["pa_infosec", "unit_owner", "management"]
+
+#: Identities the system itself acts as. Real people have their own ids; these
+#: exist so that "who did this?" always has an answer, even when the answer is
+#: "the scheduler" or "the assessor".
+SYSTEM_IDENTITY = "ID-SYSTEM"
+ASSESSOR_IDENTITY = "ID-ASSESSOR"
 
 
 @dataclass
-class ProcessArea:
+class Identity:
+    """A person, or the system acting as one.
+
+    Everything that happens is attributable. `reports_to` is what escalation
+    walks: an owner escalates to whoever they report to, rather than to a
+    string assembled from a team name.
+    """
+
     id: str
     name: str
-    owner_team: str
-    owner_name: str
+    role: Role
+    auditable_unit: str | None = None
+    reports_to: str | None = None
+
+
+@dataclass
+class AuditableUnit:
+    """Anything findings can be raised against.
+
+    Not only support functions: a project team, a department and IT are all
+    auditable, and the stakeholder was explicit that the subject should be
+    modelled generically. `kind` is what distinguishes them, and it is the only
+    thing that does — nothing downstream branches on it.
+    """
+
+    id: str
+    name: str
+    kind: UnitKind
+    owner_identity: str
     attributes: dict[str, Any] = field(default_factory=dict)
 
 
@@ -59,7 +98,7 @@ class ControlDefinition:
 class CheckInstance:
     id: str
     control_id: str
-    process_area_id: str
+    auditable_unit_id: str
     period: str
     due_date: date
     status: CheckStatus
@@ -93,7 +132,7 @@ class EvidenceSubmission:
 
     id: str
     control_id: str
-    process_area_id: str
+    auditable_unit_id: str
     period: str
     kind: EvidenceKind
     doc_type: str
@@ -105,7 +144,7 @@ class EvidenceSubmission:
 
 
 @dataclass
-class Finding:
+class Assessment:
     id: str
     check_instance_id: str
     verdict: Verdict
@@ -116,7 +155,6 @@ class Finding:
     recommended_action: str = ""
     needs_human_review: bool = False
     assessed_at: datetime | None = None
-    supersedes_finding_id: str | None = None
     # Set when S2 carried this verdict forward from an earlier period because
     # the evidence had not changed. Non-null *is* the carried_forward flag, and
     # it names the finding it came from, so the trail stays followable.
@@ -126,6 +164,9 @@ class Finding:
     criteria_hash: str = ""
     prompt_version: str = ""
     evidence_hash: str = ""
+    #: Set when a re-assessment replaces this one. An assessment is immutable;
+    #: a later verdict supersedes it rather than editing it.
+    supersedes_assessment_id: str | None = None
     # Which tier decided: a pre-screen rule name, or "s3_model" once a model
     # has been asked. The share of findings that never say "s3_model" is the
     # cost story.
@@ -135,7 +176,7 @@ class Finding:
 @dataclass
 class Action:
     id: str
-    finding_id: str
+    assessment_id: str
     title: str
     owner_team: str
     owner_name: str
@@ -161,7 +202,7 @@ class Flag:
     id: str
     category: FlagCategory
     control_id: str
-    process_area_id: str
+    auditable_unit_id: str
     severity: float
     severity_band: str
     rationale: str
@@ -169,7 +210,7 @@ class Flag:
     owner_team: str
     owner_name: str
     check_instance_id: str | None = None
-    finding_id: str | None = None
+    assessment_id: str | None = None
     exception_id: str | None = None
     status: str = "open"
 
@@ -178,7 +219,7 @@ class Flag:
 class ComplianceException:
     id: str
     control_id: str
-    process_area_id: str
+    auditable_unit_id: str
     rationale: str
     approved_by: str
     granted_at: date
@@ -203,7 +244,7 @@ class AuditEvent:
 
     id: int | None
     ts: datetime
-    actor: Actor
+    actor_kind: Actor
     owner: str
     action: str
     entity_type: str
@@ -212,3 +253,6 @@ class AuditEvent:
     seq: int = 0
     prev_hash: str = ""
     entry_hash: str = ""
+    #: Who did it, when a person did. Empty for the scheduler and the assessor,
+    #: which have their own identities but are not people.
+    actor_identity: str = ""

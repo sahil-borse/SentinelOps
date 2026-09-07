@@ -206,7 +206,7 @@ with right:
 st.divider()
 
 # ------------------------------------------------ finding detail + citation --
-st.subheader("Finding detail")
+st.subheader("Assessment detail")
 pickable = view.assessable_instances(conn)
 if not pickable:
     st.info("No checks assessed yet — press **Run cycle now**.")
@@ -284,7 +284,7 @@ else:
                 language="text",
             )
             if len(detail["history"]) > 1:
-                st.markdown("**Finding history**")
+                st.markdown("**Assessment history**")
                 for item in detail["history"]:
                     marker = "current" if item.id == finding.id else "superseded"
                     st.caption(f"{item.id} — {item.verdict} ({marker})")
@@ -294,18 +294,18 @@ else:
             if st.button("Re-assess this check now", use_container_width=True):
                 with st.spinner("Binding remediation and re-running S2/S3…"):
                     outcome = service.reassess(conn, selected, today)
-                if outcome.new_finding_id:
+                if outcome.new_assessment_id:
                     message = (
                         f"Re-checked: **{outcome.verdict}** — "
-                        f"{outcome.new_finding_id} supersedes "
-                        f"{outcome.superseded_finding_id}."
+                        f"{outcome.new_assessment_id} supersedes "
+                        f"{outcome.superseded_assessment_id}."
                         + (" The action closed." if outcome.resolved
                            else " The action stayed open.")
                     )
                 else:
                     message = outcome.reason
                 st.session_state["recheck"] = {
-                    "ok": bool(outcome.new_finding_id), "message": message,
+                    "ok": bool(outcome.new_assessment_id), "message": message,
                 }
                 st.rerun()
 
@@ -385,12 +385,12 @@ with upload:
                 ]
                 if recheck:
                     outcome = service.reassess(conn, target, today)
-                    if outcome.new_finding_id:
+                    if outcome.new_assessment_id:
                         lines.append(
                             f"Re-checked: **{outcome.verdict}** "
                             f"(decided by `{outcome.decided_by}`). "
-                            f"{outcome.new_finding_id} supersedes "
-                            f"{outcome.superseded_finding_id}."
+                            f"{outcome.new_assessment_id} supersedes "
+                            f"{outcome.superseded_assessment_id}."
                         )
                         lines.append(
                             "**The action closed.**" if outcome.resolved
@@ -400,7 +400,7 @@ with upload:
                         lines.append(f"Not re-checked: {outcome.reason}")
                 else:
                     lines.append(
-                        "Press **Re-assess this check now** in Finding detail "
+                        "Press **Re-assess this check now** in Assessment detail "
                         "above to have it judged."
                     )
                 st.session_state["selected"] = target

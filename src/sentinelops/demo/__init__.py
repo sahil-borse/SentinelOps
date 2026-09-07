@@ -5,7 +5,7 @@ pipeline and nothing else, and so slice 2's synthetic generator has an obvious
 place to displace.
 """
 
-from .fixtures import DEMO_AREA, DEMO_CONTROL, DEMO_EVIDENCE_TEXT
+from .fixtures import DEMO_AREA, DEMO_CONTROL, DEMO_EVIDENCE_TEXT, DEMO_OWNER
 from .report import print_run
 
-__all__ = ["DEMO_AREA", "DEMO_CONTROL", "DEMO_EVIDENCE_TEXT", "print_run"]
+__all__ = ["DEMO_AREA", "DEMO_CONTROL", "DEMO_EVIDENCE_TEXT", "DEMO_OWNER", "print_run"]

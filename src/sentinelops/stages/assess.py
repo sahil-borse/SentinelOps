@@ -20,7 +20,7 @@ the enum whatever comes back; and an instruction found inside the evidence is
 reported, not obeyed.
 
 **Provenance travels with the verdict.** Criteria hash, prompt version and
-evidence hash go onto every Finding, so any decision can be reproduced months
+evidence hash go onto every Assessment, so any decision can be reproduced months
 later — or shown to have been made against criteria that have since changed.
 """
 
@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
-from ..entities import CheckInstance, ControlDefinition, Evidence, Finding
+from ..entities import CheckInstance, ControlDefinition, Evidence, Assessment
 from ..llm import TokenMeter, get_client
 from ..llm.parsing import extract_json, validate
 from ..llm.prompts.assessment import (
@@ -213,10 +213,10 @@ def _finding(
     decided_by: str,
     as_of: date,
     model: str = "",
-) -> Finding:
-    sequence = len(repo["findings"].list(check_instance_id=instance.id)) + 1
-    finding = Finding(
-        id=f"FND-{instance.id.removeprefix('CHK-')}-{sequence}",
+) -> Assessment:
+    sequence = len(repo["assessments"].list(check_instance_id=instance.id)) + 1
+    finding = Assessment(
+        id=f"ASM-{instance.id.removeprefix('CHK-')}-{sequence}",
         check_instance_id=instance.id,
         verdict=verdict,
         confidence=confidence,
@@ -231,19 +231,19 @@ def _finding(
         prompt_version=PROMPT_VERSION,
         evidence_hash=evidence.content_hash,
     )
-    repo["findings"].add(finding)
+    repo["assessments"].add(finding)
     instance.status = "assessed"
     repo["instances"].update(instance)
     repo["audit"].append(
         actor="ai",
         owner=instance.owner_name,
-        action="finding_recorded",
-        entity_type="Finding",
+        action="assessment_recorded",
+        entity_type="Assessment",
         entity_id=finding.id,
         detail={
             "check_instance_id": instance.id,
             "control_id": instance.control_id,
-            "process_area_id": instance.process_area_id,
+            "auditable_unit_id": instance.auditable_unit_id,
             "period": instance.period,
             "verdict": verdict,
             "confidence": confidence,
@@ -275,7 +275,7 @@ def assess_one(
     as_of: date,
     report: AssessmentReport,
     limit: int = RETRIEVE_LIMIT,
-) -> Finding:
+) -> Assessment:
     client = client or get_client()
     request, selected, chunks = build_request(control, evidence, limit)
 
@@ -381,9 +381,11 @@ def _run(
     client=None,
     limit: int = RETRIEVE_LIMIT,
 ) -> AssessmentReport:
+    from .. import directory
     from ..repositories import repositories
 
     repo = repositories(conn)
+    people = directory.load(conn)
     controls = {c.id: c for c in repo["controls"].list()}
     client = client or get_client()
     report = AssessmentReport(as_of=as_of)

@@ -22,8 +22,8 @@ def test_audit_log_exposes_only_append_reads_and_verification():
 
 def test_append_and_read_back(repo):
     repo["audit"].append("system", "R. Mehta", "check_created", "CheckInstance", "C1")
-    repo["audit"].append("ai", "R. Mehta", "finding_recorded", "Finding", "F1")
+    repo["audit"].append("ai", "R. Mehta", "assessment_recorded", "Assessment", "F1")
     events = repo["audit"].read_all()
-    assert [e.action for e in events] == ["check_created", "finding_recorded"]
+    assert [e.action for e in events] == ["check_created", "assessment_recorded"]
     assert [e.id for e in events] == [1, 2]
-    assert repo["audit"].read_for("Finding", "F1")[0].actor == "ai"
+    assert repo["audit"].read_for("Assessment", "F1")[0].actor_kind == "ai"

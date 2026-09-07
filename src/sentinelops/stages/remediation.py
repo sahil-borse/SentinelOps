@@ -9,7 +9,7 @@ told it is fixed, and an auditor watching the demo should not have to either.
 Re-assessment is not a special case pretending to be one. The remediation
 evidence goes through the same S2 rules and, if they cannot decide it, the same
 S3 call as the original — same prompt, same criteria, same citation check. The
-only difference is bookkeeping: the new Finding records `supersedes_finding_id`,
+only difference is bookkeeping: the new Assessment records `supersedes_assessment_id`,
 so the trail keeps both the failure and the fix rather than overwriting one with
 the other.
 
@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
-from ..entities import Action, Evidence, Finding
+from ..entities import Action, Evidence, Assessment
 from ..periods import periods_for
 from .assess import assess_one, AssessmentReport
 from .flag import resolve, transition
@@ -38,8 +38,8 @@ PASSING = ("compliant",)
 class ReassessmentResult:
     check_instance_id: str
     remediation_evidence_id: str | None = None
-    superseded_finding_id: str | None = None
-    new_finding_id: str | None = None
+    superseded_assessment_id: str | None = None
+    new_assessment_id: str | None = None
     verdict: str | None = None
     decided_by: str | None = None
     action_id: str | None = None
@@ -61,7 +61,7 @@ def pending_remediation(repo, instance, as_of: date | None = None) -> Any | None
         s
         for s in repo["submissions"].list(
             control_id=instance.control_id,
-            process_area_id=instance.process_area_id,
+            auditable_unit_id=instance.auditable_unit_id,
             period=instance.period,
         )
         if s.is_remediation
@@ -133,13 +133,13 @@ def _reassess(
 
     control = repo["controls"].get(instance.control_id)
     prior = sorted(
-        repo["findings"].list(check_instance_id=check_instance_id), key=lambda f: f.id
+        repo["assessments"].list(check_instance_id=check_instance_id), key=lambda f: f.id
     )
     if not prior:
         result.reason = "nothing to supersede: this instance has no finding yet"
         return result
     superseded = prior[-1]
-    result.superseded_finding_id = superseded.id
+    result.superseded_assessment_id = superseded.id
 
     submission = pending_remediation(repo, instance, as_of)
     if submission is None:
@@ -147,7 +147,7 @@ def _reassess(
         return result
 
     action = next(
-        (a for a in repo["actions"].list(finding_id=superseded.id)), None
+        (a for a in repo["actions"].list(assessment_id=superseded.id)), None
     ) or next(
         (
             a
@@ -171,7 +171,7 @@ def _reassess(
         detail={
             "evidence_id": evidence.id,
             "submission_id": submission.id,
-            "supersedes_finding_id": superseded.id,
+            "supersedes_assessment_id": superseded.id,
             "submitted_at": submission.submitted_at.isoformat(),
         },
     )
@@ -208,13 +208,13 @@ def _reassess(
             client=client, as_of=as_of, report=report,
         )
 
-    finding.supersedes_finding_id = superseded.id
-    repo["findings"].update(finding)
+    finding.supersedes_assessment_id = superseded.id
+    repo["assessments"].update(finding)
     repo["audit"].append(
         actor="system",
         owner=instance.owner_name,
-        action="finding_superseded",
-        entity_type="Finding",
+        action="assessment_superseded",
+        entity_type="Assessment",
         entity_id=superseded.id,
         detail={
             "superseded_by": finding.id,
@@ -223,7 +223,7 @@ def _reassess(
             "check_instance_id": instance.id,
         },
     )
-    result.new_finding_id = finding.id
+    result.new_assessment_id = finding.id
     result.verdict = finding.verdict
     result.decided_by = finding.decided_by
 
@@ -232,9 +232,9 @@ def _reassess(
         transition(
             repo, action, "reassessed", actor="system", owner=instance.owner_name,
             detail={
-                "finding_id": finding.id,
+                "assessment_id": finding.id,
                 "verdict": finding.verdict,
-                "supersedes_finding_id": superseded.id,
+                "supersedes_assessment_id": superseded.id,
             },
         )
         if finding.verdict in PASSING:
@@ -273,7 +273,7 @@ def reassess_all(conn, as_of: date, *, client=None) -> list[ReassessmentResult]:
     repo = repositories(conn)
     waiting = sorted(
         {
-            s.control_id + "|" + s.process_area_id + "|" + s.period
+            s.control_id + "|" + s.auditable_unit_id + "|" + s.period
             for s in repo["submissions"].list()
             if s.is_remediation
         }
@@ -286,6 +286,6 @@ def reassess_all(conn, as_of: date, *, client=None) -> list[ReassessmentResult]:
             f"{area_id.removeprefix('AREA-')}-{period}"
         )
         result = reassess(conn, instance_id, as_of, client=client)
-        if result.new_finding_id:
+        if result.new_assessment_id:
             results.append(result)
     return results

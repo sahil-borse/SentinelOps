@@ -29,7 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ..entities import ControlDefinition, ProcessArea
+from ..entities import ControlDefinition, AuditableUnit
 
 #: Attributes a process area is allowed to carry. An `applies_when` naming
 #: anything else is a bug, not an expression that matches nothing — see
@@ -62,7 +62,7 @@ class Applicability:
     """The decision for one control against one area, with its reasoning."""
 
     control_id: str
-    process_area_id: str
+    auditable_unit_id: str
     applicable: bool
     conditions: list[Condition]
 
@@ -83,7 +83,7 @@ def _matches(expected: Any, actual: Any) -> bool:
     return actual == expected
 
 
-def evaluate(control: ControlDefinition, area: ProcessArea) -> Applicability:
+def evaluate(control: ControlDefinition, area: AuditableUnit) -> Applicability:
     """Decide one control against one area. Pure; no I/O, no clock, no model."""
     conditions = [
         Condition(
@@ -97,14 +97,14 @@ def evaluate(control: ControlDefinition, area: ProcessArea) -> Applicability:
     ]
     return Applicability(
         control_id=control.id,
-        process_area_id=area.id,
+        auditable_unit_id=area.id,
         applicable=all(c.matched for c in conditions),
         conditions=conditions,
     )
 
 
 def applicable_controls(
-    controls: list[ControlDefinition], area: ProcessArea
+    controls: list[ControlDefinition], area: AuditableUnit
 ) -> list[ControlDefinition]:
     """The control set for one area, in a stable order.
 
@@ -116,7 +116,7 @@ def applicable_controls(
 
 
 def applicability_matrix(
-    controls: list[ControlDefinition], areas: list[ProcessArea]
+    controls: list[ControlDefinition], areas: list[AuditableUnit]
 ) -> dict[str, list[str]]:
     """area_id -> sorted control ids. The whole of S0's output."""
     return {
@@ -126,7 +126,7 @@ def applicability_matrix(
 
 
 def applicable_pairs(
-    controls: list[ControlDefinition], areas: list[ProcessArea]
+    controls: list[ControlDefinition], areas: list[AuditableUnit]
 ) -> list[tuple[str, str]]:
     """(control_id, area_id) for every applicable combination."""
     return [
@@ -162,11 +162,13 @@ def run(conn) -> dict[str, list[str]]:
     the trail can answer "why was this area ever expected to run that check?"
     long after the fact.
     """
+    from .. import directory
     from ..repositories import repositories
 
     repo = repositories(conn)
+    people = directory.load(conn)
     controls = repo["controls"].list()
-    areas = repo["areas"].list()
+    areas = repo["units"].list()
 
     problems = validate_expressions(controls)
     if problems:
@@ -177,9 +179,9 @@ def run(conn) -> dict[str, list[str]]:
     for area_id, control_ids in matrix.items():
         repo["audit"].append(
             actor="system",
-            owner=areas_by_id[area_id].owner_name,
+            owner=people.owner_name(areas_by_id[area_id]),
             action="applicability_evaluated",
-            entity_type="ProcessArea",
+            entity_type="AuditableUnit",
             entity_id=area_id,
             detail={
                 "applicable_count": len(control_ids),

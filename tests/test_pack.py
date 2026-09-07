@@ -27,12 +27,13 @@ PACK_MODULE = SRC / "pack.py"
 
 #: Every table that records current state. The pack may read none of them.
 LIVE_STATE_TABLES = (
-    "process_areas",
+    "identities",
+    "auditable_units",
     "control_definitions",
     "check_instances",
     "evidence_submissions",
     "evidence",
-    "findings",
+    "assessments",
     "actions",
     "flags",
     "compliance_exceptions",
@@ -73,12 +74,12 @@ def log_only(run_conn):
     rows = run_conn.execute("SELECT * FROM audit_events ORDER BY seq").fetchall()
     for row in rows:
         bare.execute(
-            "INSERT INTO audit_events (ts, actor, owner, action, entity_type,"
-            " entity_id, detail, seq, prev_hash, entry_hash)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (row["ts"], row["actor"], row["owner"], row["action"],
-             row["entity_type"], row["entity_id"], row["detail"], row["seq"],
-             row["prev_hash"], row["entry_hash"]),
+            "INSERT INTO audit_events (ts, actor_kind, actor_identity, owner,"
+            " action, entity_type, entity_id, detail, seq, prev_hash, entry_hash)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (row["ts"], row["actor_kind"], row["actor_identity"], row["owner"],
+             row["action"], row["entity_type"], row["entity_id"], row["detail"],
+             row["seq"], row["prev_hash"], row["entry_hash"]),
         )
     bare.commit()
     yield bare
@@ -133,7 +134,7 @@ def test_the_generator_names_no_live_state_table():
 
 
 def test_the_generator_imports_no_live_state_repository():
-    """It may know what an AuditEvent is; it may not know how to load a Finding."""
+    """It may know what an AuditEvent is; it may not know how to load a Assessment."""
     tree = ast.parse(PACK_MODULE.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
@@ -153,7 +154,7 @@ def test_a_pack_builds_from_a_database_holding_only_the_log(pack, log_only):
         assert count == 0, f"{table} is not empty; the test proves nothing"
 
     assert pack.totals["events"] > 2000
-    assert pack.totals["areas"] == 7
+    assert pack.totals["units"] == 7
     assert pack.totals["controls"] == 14
     assert pack.totals["due"] == 343
     assert pack.coverage and pack.exceptions and pack.findings and pack.actions
@@ -165,7 +166,7 @@ def test_the_pack_matches_what_the_live_tables_say(pack, run_conn):
 
     repo = repositories(run_conn)
     assert pack.totals["due"] == len(repo["instances"].list())
-    assert pack.totals["findings"] == len(repo["findings"].list())
+    assert pack.totals["assessments"] == len(repo["assessments"].list())
     assert pack.totals["actions"] == len(repo["actions"].list())
     assert pack.totals["exceptions"] == len(repo["exceptions"].list())
     assert pack.totals["actions_resolved"] == len(
@@ -254,7 +255,7 @@ def test_the_action_register_tells_the_whole_story(pack):
     assert resolved
 
     for action in resolved:
-        assert action["finding_id"], "what was found"
+        assert action["assessment_id"], "what was found"
         assert action["owner"] and action["team"], "who owned it"
         assert action["raised_at"], "when raised"
         assert action["resolution_note"], "how closed"
@@ -287,7 +288,7 @@ def test_the_chronological_trail_is_complete_and_ordered(pack):
     assert len(pack.events) == pack.totals["events"]
     assert [e.seq for e in pack.events] == sorted(e.seq for e in pack.events)
     for event in pack.events:
-        assert event.ts and event.actor and event.owner
+        assert event.ts and event.actor_kind and event.owner
 
 
 def test_every_event_type_is_one_the_pack_recognises(pack):
@@ -330,7 +331,7 @@ def _log_spanning_dates(conn):
             actor="system", owner="R. Mehta", action="check_instance_created",
             entity_type="CheckInstance", entity_id=f"CHK-X-A-2026-{month:02d}",
             detail={"control_id": "CTRL-X", "control_title": "Control X",
-                    "process_area_id": "AREA-A", "area_name": "Area A",
+                    "auditable_unit_id": "AREA-A", "area_name": "Area A",
                     "period": f"2026-{month:02d}", "frequency": "monthly",
                     "due_date": "2026-01-15", "assigned_team": "Team A"},
             ts=datetime(2026, month, 15, 9, 0),

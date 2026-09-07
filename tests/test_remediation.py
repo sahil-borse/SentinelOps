@@ -47,7 +47,7 @@ def _first_remediable(conn):
             continue
         instance_id = (
             f"CHK-{submission.control_id.removeprefix('CTRL-')}-"
-            f"{submission.process_area_id.removeprefix('AREA-')}-{submission.period}"
+            f"{submission.auditable_unit_id.removeprefix('AREA-')}-{submission.period}"
         )
         if repo["instances"].get(instance_id):
             return instance_id
@@ -67,14 +67,14 @@ def test_a_new_finding_supersedes_the_one_that_failed(remediated):
     conn, results = remediated
     repo = repositories(conn)
     for result in results:
-        new = repo["findings"].get(result.new_finding_id)
-        old = repo["findings"].get(result.superseded_finding_id)
-        assert new.supersedes_finding_id == old.id
+        new = repo["assessments"].get(result.new_assessment_id)
+        old = repo["assessments"].get(result.superseded_assessment_id)
+        assert new.supersedes_assessment_id == old.id
         assert new.id != old.id
         assert old.verdict != "compliant"
         assert new.verdict == "compliant"
         # the failure is kept, not overwritten
-        assert repo["findings"].get(old.id).verdict == old.verdict
+        assert repo["assessments"].get(old.id).verdict == old.verdict
 
 
 def test_the_action_resolves_with_a_note_naming_the_finding(remediated):
@@ -84,8 +84,8 @@ def test_the_action_resolves_with_a_note_naming_the_finding(remediated):
         action = repo["actions"].get(result.action_id)
         assert action.status == "resolved"
         assert action.resolved_at is not None
-        assert result.new_finding_id in action.resolution_note
-        assert result.superseded_finding_id in action.resolution_note
+        assert result.new_assessment_id in action.resolution_note
+        assert result.superseded_assessment_id in action.resolution_note
 
 
 def test_the_action_walks_the_whole_lifecycle_in_order(remediated):
@@ -132,30 +132,30 @@ def test_reassess_does_not_wait_for_the_next_cycle(flagged):
     """One instance, re-checked on demand, with no scheduling run in between."""
     conn = flagged
     instance_id = _first_remediable(conn)
-    before = len(repositories(conn)["findings"].list())
+    before = len(repositories(conn)["assessments"].list())
 
     result = reassess(conn, instance_id, END_OF_STORY)
 
-    assert result.new_finding_id
+    assert result.new_assessment_id
     assert result.resolved is True
-    assert len(repositories(conn)["findings"].list()) == before + 1
+    assert len(repositories(conn)["assessments"].list()) == before + 1
 
 
 def test_reassess_on_an_unknown_instance_says_so(flagged):
     result = reassess(flagged, "CHK-NOT-A-THING-2026-Q1", END_OF_STORY)
-    assert result.new_finding_id is None
+    assert result.new_assessment_id is None
     assert result.reason == "no such check instance"
 
 
 def test_reassess_with_nothing_to_reassess_is_a_clean_no_op(flagged):
     conn = flagged
     repo = repositories(conn)
-    before = len(repo["findings"].list())
+    before = len(repo["assessments"].list())
     result = reassess(conn, "CHK-CUST-COMPLAINTS-CUSTOPS-2026-07", END_OF_STORY)
 
-    assert result.new_finding_id is None
+    assert result.new_assessment_id is None
     assert "no unbound remediation evidence" in result.reason
-    assert len(repo["findings"].list()) == before
+    assert len(repo["assessments"].list()) == before
 
 
 def test_reassess_twice_binds_the_remediation_only_once(flagged):
@@ -164,8 +164,8 @@ def test_reassess_twice_binds_the_remediation_only_once(flagged):
     first = reassess(conn, instance_id, END_OF_STORY)
     second = reassess(conn, instance_id, END_OF_STORY)
 
-    assert first.new_finding_id
-    assert second.new_finding_id is None
+    assert first.new_assessment_id
+    assert second.new_assessment_id is None
     assert "no unbound remediation evidence" in second.reason
     assert len(
         repositories(conn)["evidence"].list(check_instance_id=instance_id)
@@ -184,7 +184,7 @@ def test_a_failed_remediation_leaves_the_action_open(flagged):
     # replace the pending remediation with one of the wrong document type
     for submission in repo["submissions"].list(
         control_id=instance.control_id,
-        process_area_id=instance.process_area_id,
+        auditable_unit_id=instance.auditable_unit_id,
         period=instance.period,
     ):
         if submission.is_remediation:
@@ -209,7 +209,7 @@ def test_a_failed_remediation_still_supersedes_and_still_records(flagged):
     instance = repo["instances"].get(instance_id)
     for submission in repo["submissions"].list(
         control_id=instance.control_id,
-        process_area_id=instance.process_area_id,
+        auditable_unit_id=instance.auditable_unit_id,
         period=instance.period,
     ):
         if submission.is_remediation:
@@ -217,8 +217,8 @@ def test_a_failed_remediation_still_supersedes_and_still_records(flagged):
             repo["submissions"].update(submission)
 
     result = reassess(conn, instance_id, END_OF_STORY)
-    new = repo["findings"].get(result.new_finding_id)
-    assert new.supersedes_finding_id == result.superseded_finding_id
+    new = repo["assessments"].get(result.new_assessment_id)
+    assert new.supersedes_assessment_id == result.superseded_assessment_id
     flags = repo["flags"].list(check_instance_id=instance_id)
     assert all(f.status == "open" for f in flags), "the problem is still open"
 
@@ -231,7 +231,7 @@ def test_a_failed_remediation_gets_a_fresh_flag_on_the_next_pass(flagged):
     instance = repo["instances"].get(instance_id)
     for submission in repo["submissions"].list(
         control_id=instance.control_id,
-        process_area_id=instance.process_area_id,
+        auditable_unit_id=instance.auditable_unit_id,
         period=instance.period,
     ):
         if submission.is_remediation:
@@ -243,7 +243,7 @@ def test_a_failed_remediation_gets_a_fresh_flag_on_the_next_pass(flagged):
 
     new_flags = [
         f for f in repo["flags"].list(check_instance_id=instance_id)
-        if f.finding_id == result.new_finding_id
+        if f.assessment_id == result.new_assessment_id
     ]
     assert new_flags, "the current failure must be flagged"
     assert new_flags[0].id in report.flags
@@ -272,7 +272,7 @@ def test_a_document_remediation_goes_through_the_model(flagged):
     assert by_model
     repo = repositories(conn)
     for result in by_model:
-        finding = repo["findings"].get(result.new_finding_id)
+        finding = repo["assessments"].get(result.new_assessment_id)
         assert finding.cited_spans, "still cited, even on the second pass"
         assert finding.prompt_version
 
@@ -303,8 +303,8 @@ def test_the_whole_lifecycle_is_reconstructable(remediated):
     assert action_events[-1].action == "action_resolved"
     assert all(e.owner for e in action_events)
 
-    superseded = repo["audit"].read_for("Finding", result.superseded_finding_id)
-    assert any(e.action == "finding_superseded" for e in superseded)
+    superseded = repo["audit"].read_for("Assessment", result.superseded_assessment_id)
+    assert any(e.action == "assessment_superseded" for e in superseded)
 
 
 def test_every_transition_records_who(remediated):
@@ -313,7 +313,7 @@ def test_every_transition_records_who(remediated):
     for result in results:
         for event in repo["audit"].read_for("Action", result.action_id):
             assert event.owner
-            assert event.actor in ("system", "ai", "user")
+            assert event.actor_kind in ("system", "ai", "user")
             assert "from_status" in event.detail or event.action == "action_raised"
 
 
@@ -326,9 +326,9 @@ def test_the_person_who_filed_the_fix_is_named(remediated):
             if e.action == "remediation_submitted"
         ]
         assert len(submitted) == 1
-        assert submitted[0].actor == "user"
+        assert submitted[0].actor_kind == "user"
         assert submitted[0].owner
-        assert submitted[0].detail["supersedes_finding_id"] == result.superseded_finding_id
+        assert submitted[0].detail["supersedes_assessment_id"] == result.superseded_assessment_id
 
 
 def test_actions_raised_versus_resolved_is_answerable(remediated):

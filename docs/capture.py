@@ -70,7 +70,7 @@ def main() -> int:
         print("step 3 — the near miss")
         click(page, "Show me one", settle_ms=6000)
         shoot(page, "04-near-miss-walkthrough")
-        page.get_by_text("Finding detail", exact=True).first.scroll_into_view_if_needed()
+        page.get_by_text("Assessment detail", exact=True).first.scroll_into_view_if_needed()
         settle(page, 1500)
         shoot(page, "05-citation-highlighted")
 

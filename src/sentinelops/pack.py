@@ -18,7 +18,7 @@ cannot: there is one source.
 Building it this way immediately found three holes, which is the point of
 building it this way:
 
-  * `finding_recorded` stored the *number* of cited spans rather than their
+  * `assessment_recorded` stored the *number* of cited spans rather than their
     text, so the log could say a verdict was cited but not what it cited;
   * exceptions that never lapsed produced no event at all, so an approved
     deviation existed only as a row somebody inserted;
@@ -56,8 +56,8 @@ KNOWN_ACTIONS = (
     "check_instance_escalated",
     "evidence_bound",
     "remediation_submitted",
-    "finding_recorded",
-    "finding_superseded",
+    "assessment_recorded",
+    "assessment_superseded",
     "flag_raised",
     "flag_closed",
     "action_raised",
@@ -89,7 +89,8 @@ def load_events(
     rather than of structure.
     """
     rows = conn.execute(
-        "SELECT seq, ts, actor, owner, action, entity_type, entity_id, detail,"
+        "SELECT seq, ts, actor_kind, actor_identity, owner, action,"
+        " entity_type, entity_id, detail,"
         " prev_hash, entry_hash FROM audit_events ORDER BY seq"
     ).fetchall()
     events = []
@@ -101,7 +102,8 @@ def load_events(
             continue
         events.append(
             AuditEvent(
-                id=row["seq"], ts=stamp, actor=row["actor"], owner=row["owner"],
+                id=row["seq"], ts=stamp, actor_kind=row["actor_kind"],
+                actor_identity=row["actor_identity"], owner=row["owner"],
                 action=row["action"], entity_type=row["entity_type"],
                 entity_id=row["entity_id"], detail=json.loads(row["detail"]),
                 seq=row["seq"], prev_hash=row["prev_hash"],
@@ -163,7 +165,7 @@ def build(
     organisation: str = "Northwind Group (fictional)",
     period_start: date,
     period_end: date,
-    scope: str = "All process areas, all applicable controls",
+    scope: str = "All auditable units, all applicable controls",
 ) -> AuditPack:
     """Reconstruct the whole pack from a list of events. Pure; no I/O."""
     pack = AuditPack(
@@ -192,8 +194,8 @@ def build(
             instances[event.entity_id] = {
                 "control_id": detail.get("control_id", "?"),
                 "control_title": detail.get("control_title", detail.get("control_id", "?")),
-                "area_id": detail.get("process_area_id", "?"),
-                "area_name": detail.get("area_name", detail.get("process_area_id", "?")),
+                "area_id": detail.get("auditable_unit_id", "?"),
+                "area_name": detail.get("area_name", detail.get("auditable_unit_id", "?")),
                 "period": detail.get("period", "?"),
                 "due_date": detail.get("due_date", ""),
                 "frequency": detail.get("frequency", "?"),
@@ -201,7 +203,7 @@ def build(
                 "team": detail.get("assigned_team", ""),
                 "status": "pending",
             }
-            key = (detail.get("process_area_id", "?"), detail.get("control_id", "?"))
+            key = (detail.get("auditable_unit_id", "?"), detail.get("control_id", "?"))
             row = coverage.setdefault(
                 key,
                 CoverageRow(
@@ -228,7 +230,7 @@ def build(
             exceptions[event.entity_id] = {
                 "id": event.entity_id,
                 "control_id": detail.get("control_id", "?"),
-                "area_id": detail.get("process_area_id", "?"),
+                "area_id": detail.get("auditable_unit_id", "?"),
                 "rationale": detail.get("rationale", ""),
                 "approved_by": detail.get("approved_by", event.owner),
                 "granted_at": detail.get("granted_at", ""),
@@ -241,7 +243,7 @@ def build(
         elif event.action == "exception_expired":
             record = exceptions.setdefault(event.entity_id, {
                 "id": event.entity_id, "control_id": detail.get("control_id", "?"),
-                "area_id": detail.get("process_area_id", "?"), "rationale": "",
+                "area_id": detail.get("auditable_unit_id", "?"), "rationale": "",
                 "approved_by": "", "granted_at": "", "expires_at": "",
                 "status": "expired", "lapsed_on": None, "detected_on": None,
             })
@@ -249,13 +251,13 @@ def build(
             record["lapsed_on"] = detail.get("expired_on", "")
             record["detected_on"] = detail.get("detected_on", "")
 
-        elif event.action == "finding_recorded":
+        elif event.action == "assessment_recorded":
             instance_id = detail.get("check_instance_id", "")
             findings[event.entity_id] = {
                 "id": event.entity_id,
                 "instance_id": instance_id,
                 "control_id": detail.get("control_id", ""),
-                "area_id": detail.get("process_area_id", ""),
+                "area_id": detail.get("auditable_unit_id", ""),
                 "period": detail.get("period", ""),
                 "verdict": detail.get("verdict", "?"),
                 "confidence": detail.get("confidence", ""),
@@ -275,7 +277,7 @@ def build(
             if instance_id in instances:
                 instances[instance_id]["status"] = "completed"
 
-        elif event.action == "finding_superseded":
+        elif event.action == "assessment_superseded":
             superseded.add(event.entity_id)
             if event.entity_id in findings:
                 findings[event.entity_id]["superseded_by"] = detail.get("superseded_by")
@@ -284,7 +286,7 @@ def build(
             actions[event.entity_id] = {
                 "id": event.entity_id,
                 "instance_id": detail.get("check_instance_id", ""),
-                "finding_id": detail.get("finding_id", ""),
+                "assessment_id": detail.get("assessment_id", ""),
                 "category": detail.get("category", "?"),
                 "severity": detail.get("severity", ""),
                 "band": detail.get("severity_band", ""),
@@ -339,13 +341,13 @@ def build(
     pack.totals = {
         "events": len(events),
         "instances": len(instances),
-        "areas": len({i["area_id"] for i in instances.values()}),
+        "units": len({i["area_id"] for i in instances.values()}),
         "controls": len({i["control_id"] for i in instances.values()}),
         "due": sum(r.due for r in pack.coverage),
         "completed": sum(r.completed for r in pack.coverage),
         "waived": sum(r.waived for r in pack.coverage),
         "unexamined": sum(r.unexamined for r in pack.coverage),
-        "findings": len(pack.findings),
+        "assessments": len(pack.findings),
         "current_findings": len(current),
         "superseded_findings": len(superseded),
         "non_compliant": len([f for f in current if f["verdict"] != "compliant"]),
@@ -424,10 +426,10 @@ def render_markdown(pack: AuditPack) -> str:
     add("| | |")
     add("|---|---|")
     for label, key in (
-        ("Process areas", "areas"), ("Controls exercised", "controls"),
+        ("Auditable units", "units"), ("Controls exercised", "controls"),
         ("Checks due", "due"), ("Checks completed", "completed"),
         ("Checks waived", "waived"), ("Checks not examined", "unexamined"),
-        ("Findings recorded", "findings"),
+        ("Findings recorded", "assessments"),
         ("Findings superseded by re-assessment", "superseded_findings"),
         ("Current non-compliant findings", "non_compliant"),
         ("Flagged for human review", "human_review"),
@@ -506,7 +508,7 @@ def render_markdown(pack: AuditPack) -> str:
         add(f"### {action['id']} — {action['status']}")
         add("")
         add(
-            f"- **Raised** {action['raised_at']:%Y-%m-%d} from {action['finding_id']} "
+            f"- **Raised** {action['raised_at']:%Y-%m-%d} from {action['assessment_id']} "
             f"({action['category']}, severity {action['severity']} "
             f"{action['band']})  \n"
             f"- **Owner** {action['owner']} ({action['team']}) · due "
@@ -539,7 +541,7 @@ def render_markdown(pack: AuditPack) -> str:
     add("|---|---|---|---|---|---|")
     for event in pack.events:
         add(
-            f"| {event.seq} | {event.ts:%Y-%m-%d %H:%M:%S} | {event.actor} "
+            f"| {event.seq} | {event.ts:%Y-%m-%d %H:%M:%S} | {event.actor_kind} "
             f"| {event.owner} | {event.action} | {event.entity_type}:{event.entity_id} |"
         )
     return "\n".join(lines)
@@ -603,10 +605,10 @@ def render_html(pack: AuditPack) -> str:
         "<table>",
     ]
     for label, key in (
-        ("Process areas", "areas"), ("Controls exercised", "controls"),
+        ("Auditable units", "units"), ("Controls exercised", "controls"),
         ("Checks due", "due"), ("Checks completed", "completed"),
         ("Checks waived", "waived"), ("Checks not examined", "unexamined"),
-        ("Findings recorded", "findings"),
+        ("Findings recorded", "assessments"),
         ("Findings superseded by re-assessment", "superseded_findings"),
         ("Current non-compliant findings", "non_compliant"),
         ("Flagged for human review", "human_review"),
@@ -683,7 +685,7 @@ def render_html(pack: AuditPack) -> str:
             f"<tr><td>{e(action['id'])}<br><span class='meta'>{e(action['status'])}"
             f"</span></td>"
             f"<td>{e(action['category'])} · severity {action['severity']}"
-            f"<br><span class='meta'>{e(action['finding_id'])}</span></td>"
+            f"<br><span class='meta'>{e(action['assessment_id'])}</span></td>"
             f"<td>{e(action['owner'])}<br><span class='meta'>{e(action['team'])}</span></td>"
             f"<td>{action['raised_at']:%Y-%m-%d}</td><td>{action['due_date']}</td>"
             f"<td>{e(str(action['remediation_evidence'] or '—'))}</td>"
@@ -701,7 +703,7 @@ def render_html(pack: AuditPack) -> str:
     for event in pack.events:
         out.append(
             f"<tr><td>{event.seq}</td><td>{event.ts:%Y-%m-%d %H:%M:%S}</td>"
-            f"<td>{e(event.actor)}</td><td>{e(event.owner)}</td>"
+            f"<td>{e(event.actor_kind)}</td><td>{e(event.owner)}</td>"
             f"<td>{e(event.action)}</td>"
             f"<td>{e(event.entity_type)}:{e(event.entity_id)}</td></tr>"
         )

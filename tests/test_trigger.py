@@ -84,7 +84,7 @@ def test_every_instance_lands_on_an_applicable_pair(seeded, corpus):
     run_cycle(seeded, END_OF_STORY)
     pairs = set(corpus.applicable_pairs)
     for instance in repositories(seeded)["instances"].list():
-        assert (instance.control_id, instance.process_area_id) in pairs
+        assert (instance.control_id, instance.auditable_unit_id) in pairs
 
 
 # --- idempotency -----------------------------------------------------------
@@ -123,7 +123,7 @@ def test_no_duplicate_control_area_period_survives(seeded):
     run_cycle(seeded, END_OF_STORY)
     run_cycle(seeded, END_OF_STORY)
     keys = [
-        (i.control_id, i.process_area_id, i.period)
+        (i.control_id, i.auditable_unit_id, i.period)
         for i in repositories(seeded)["instances"].list()
     ]
     assert len(keys) == len(set(keys))
@@ -144,11 +144,11 @@ def test_evidence_moves_an_instance_to_submitted(seeded):
     ]
     assert submitted
     submissions = {
-        (s.control_id, s.process_area_id, s.period)
+        (s.control_id, s.auditable_unit_id, s.period)
         for s in repositories(seeded)["submissions"].list()
     }
     for instance in submitted:
-        assert (instance.control_id, instance.process_area_id, instance.period) in submissions
+        assert (instance.control_id, instance.auditable_unit_id, instance.period) in submissions
 
 
 def test_a_missing_submission_goes_overdue(seeded):
@@ -187,7 +187,7 @@ def test_an_exception_granted_later_waives_an_open_instance(conn, corpus):
         ComplianceException(
             id="EXC-LATE",
             control_id="CTRL-CHANGE-MGMT",
-            process_area_id="AREA-FINREP",
+            auditable_unit_id="AREA-FINREP",
             rationale="Change freeze agreed after the period opened.",
             approved_by="Finance Control Board",
             granted_at=date(2026, 2, 1),
@@ -242,8 +242,10 @@ def test_escalation_stops_at_the_top_of_the_chain(seeded):
 
 def test_escalation_walks_up_the_owner_chain(seeded, corpus):
     run_cycle(seeded, END_OF_STORY)
+    from sentinelops import directory
+
     area = next(a for a in corpus.areas if a.id == "AREA-CUSTOPS")
-    chain = owner_chain(area)
+    chain = owner_chain(area, directory.load(seeded))
     events = [
         e
         for e in repositories(seeded)["audit"].read_for(
@@ -252,7 +254,7 @@ def test_escalation_walks_up_the_owner_chain(seeded, corpus):
         if e.action == "check_instance_escalated"
     ]
     assert [e.detail["escalated_to"] for e in events] == [chain[1][0], chain[2][0]]
-    assert events[-1].detail["team"] == "Group Compliance"
+    assert events[-1].detail["escalated_to"] == chain[2][0]
 
 
 def test_the_escalation_interval_is_configurable(seeded):
@@ -339,7 +341,7 @@ def test_a_revoked_exception_suppresses_nothing(seeded):
 
 def test_covers_ignores_status_flips_but_not_revocation():
     base = dict(
-        id="X", control_id="C", process_area_id="A", rationale="r",
+        id="X", control_id="C", auditable_unit_id="A", rationale="r",
         approved_by="b", granted_at=date(2026, 1, 1), expires_at=date(2026, 6, 30),
     )
     inside, outside = date(2026, 3, 31), date(2026, 9, 30)
@@ -354,11 +356,11 @@ def test_covers_ignores_status_flips_but_not_revocation():
 def test_every_new_instance_is_routed_to_its_owning_team(seeded, corpus):
     result = run_cycle(seeded, END_OF_STORY)
     assigned = [n for n in result.notifications if n.kind == "assigned"]
-    teams = {a.id: a.owner_team for a in corpus.areas}
+    teams = {a.id: a.name for a in corpus.areas}
     assert len(assigned) == 343
     for notification in assigned:
         instance = repositories(seeded)["instances"].get(notification.entity_id)
-        assert notification.to_team == teams[instance.process_area_id]
+        assert notification.to_team == teams[instance.auditable_unit_id]
 
 
 def test_notifications_are_logged_and_never_sent(seeded):
@@ -415,7 +417,7 @@ def test_every_state_change_appends_an_event_with_the_full_shape(seeded):
     run_cycle(seeded, END_OF_STORY)
     for event in repositories(seeded)["audit"].read_all():
         assert isinstance(event.ts, datetime)
-        assert event.actor in ("system", "ai", "user")
+        assert event.actor_kind in ("system", "ai", "user")
         assert event.owner and event.action and event.entity_type and event.entity_id
         assert isinstance(event.detail, dict)
 
@@ -448,7 +450,7 @@ def test_a_cycle_records_whether_a_human_started_it(seeded):
     ]
     assert [e.detail["trigger"] for e in events] == ["scheduler", "manual"]
     assert [e.detail["human_triggered"] for e in events] == [False, True]
-    assert [e.actor for e in events] == ["system", "user"]
+    assert [e.actor_kind for e in events] == ["system", "user"]
 
 
 def test_a_cycle_is_bracketed_by_a_start_and_a_completion(seeded):
@@ -647,7 +649,7 @@ def test_waives_and_covers_are_complementary():
     from sentinelops.stages.trigger import covers, waives
 
     exception = ComplianceException(
-        id="X", control_id="C", process_area_id="A", rationale="r",
+        id="X", control_id="C", auditable_unit_id="A", rationale="r",
         approved_by="b", granted_at=date(2026, 5, 11), expires_at=date(2026, 6, 19),
         status="active",
     )

@@ -33,12 +33,12 @@
   "exceptions": [
     {
       "approved_by": "Group Risk Committee",
+      "auditable_unit_id": "AREA-PLATFORM",
       "control_id": "CTRL-BCP-TEST",
       "expected_effect": "suppression",
       "expires_at": "2026-12-31",
       "granted_at": "2026-01-15",
       "id": "EXC-001",
-      "process_area_id": "AREA-PLATFORM",
       "status": "active",
       "suppresses_periods": [
         "2026"
@@ -46,12 +46,12 @@
     },
     {
       "approved_by": "Chief Procurement Officer",
+      "auditable_unit_id": "AREA-MKTG",
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "expected_effect": "suppression",
       "expires_at": "2026-06-30",
       "granted_at": "2026-01-01",
       "id": "EXC-002",
-      "process_area_id": "AREA-MKTG",
       "status": "active",
       "suppresses_periods": [
         "2026-Q1",
@@ -60,28 +60,28 @@
     },
     {
       "approved_by": "Finance Control Board",
+      "auditable_unit_id": "AREA-FINREP",
       "control_id": "CTRL-INCIDENT-PM",
       "expected_effect": "none",
       "expires_at": "2026-12-31",
       "granted_at": "2026-02-01",
       "id": "EXC-003",
-      "process_area_id": "AREA-FINREP",
       "status": "revoked",
       "suppresses_periods": []
     },
     {
       "approved_by": "Chief Information Security Officer",
+      "auditable_unit_id": "AREA-HR",
       "control_id": "CTRL-CRYPTO-KEY",
       "expected_effect": "waiver",
       "expires_at": "2026-06-19",
       "granted_at": "2026-05-11",
       "id": "EXC-004",
-      "process_area_id": "AREA-HR",
       "status": "active",
       "suppresses_periods": []
     }
   ],
-  "fingerprint": "7e7ee16b4e1eebd922c4a4d0aa5b00852fb4bc407162c727cb959ea168c4a9f4",
+  "fingerprint": "8052c437f2062b935e26ba987167d121dc7fc8281be1c269355370f3cec5c82e",
   "generated_by": "sentinelops.synth.generate",
   "quality_to_expected_verdict": {
     "adversarial": "gap",
@@ -95,6 +95,7 @@
   },
   "rows": [
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "compliant",
@@ -104,11 +105,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-09, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0001"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "compliant",
@@ -118,11 +119,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-08, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0002"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "compliant",
@@ -132,11 +133,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-12, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0003"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "compliant",
@@ -146,11 +147,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-13, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0004"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "compliant",
@@ -160,11 +161,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-09, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0005"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "compliant",
@@ -174,11 +175,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-05, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0006"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "missing",
@@ -188,11 +189,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "compliant",
@@ -202,11 +203,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-12, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0007"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "compliant",
@@ -216,11 +217,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-03, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0008"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "compliant",
@@ -230,11 +231,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-13, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0009"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "stale",
@@ -244,11 +245,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-21, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0010"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "near_miss",
@@ -258,11 +259,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-08, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0011"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "non_compliant",
@@ -272,11 +273,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-05, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0012"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "compliant",
@@ -286,11 +287,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-08, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0013"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "compliant",
@@ -300,11 +301,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-07, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0014"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "non_compliant",
@@ -314,11 +315,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-04, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0015"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "near_miss",
@@ -328,11 +329,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-05, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0016"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "missing",
@@ -342,11 +343,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "wrong_type",
@@ -356,11 +357,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-09, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0017"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "compliant",
@@ -370,11 +371,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-08, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0018"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "near_miss",
@@ -384,11 +385,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-03, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0019"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "compliant",
@@ -398,11 +399,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-11, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0020"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "partial",
@@ -412,11 +413,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-11, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0021"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "near_miss",
@@ -426,11 +427,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-13, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0022"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "near_miss",
@@ -440,11 +441,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-10, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0023"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "compliant",
@@ -454,11 +455,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-09, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0024"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "compliant",
@@ -468,11 +469,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-06, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0025"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "compliant",
@@ -482,11 +483,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-08, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0026"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "missing",
@@ -496,11 +497,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "compliant",
@@ -510,11 +511,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-05, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0027"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "compliant",
@@ -524,11 +525,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-11, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0028"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "compliant",
@@ -538,11 +539,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-06, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0029"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "missing",
@@ -552,11 +553,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-01",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "non_compliant",
@@ -566,11 +567,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-08, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0030"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -580,11 +581,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-01, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0031"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -594,11 +595,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-05, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0032"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "near_miss",
@@ -608,11 +609,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-02, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0033"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -622,11 +623,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-14, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0034"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "missing",
@@ -636,11 +637,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-07",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "stale",
@@ -650,11 +651,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-18, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0035"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -664,11 +665,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-10, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0036"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "missing",
@@ -678,11 +679,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-10",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -692,11 +693,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-03, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0037"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "non_compliant",
@@ -706,11 +707,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-06, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0038"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -720,11 +721,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-02, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0039"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -734,11 +735,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-12, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0040"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -748,11 +749,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-03, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0041"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -762,11 +763,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-04, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0042"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -776,11 +777,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-13, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0043"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -790,11 +791,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-09, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0044"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "missing",
@@ -804,11 +805,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-07",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -818,11 +819,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-01, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0045"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -832,11 +833,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-04, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0046"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "near_miss",
@@ -846,11 +847,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-08, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0047"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "missing",
@@ -860,11 +861,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-11",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -874,11 +875,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-13, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0048"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -888,11 +889,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-03, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0049"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "missing",
@@ -902,11 +903,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-02",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -916,11 +917,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-14, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0050"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -930,11 +931,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-08, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0051"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -944,11 +945,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-14, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0052"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "wrong_type",
@@ -958,11 +959,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-02, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0053"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "missing",
@@ -972,11 +973,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-07",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -986,11 +987,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-01, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0054"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "near_miss",
@@ -1000,11 +1001,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-07, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0055"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -1014,11 +1015,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-05, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0056"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "near_miss",
@@ -1028,11 +1029,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-11, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0057"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -1042,11 +1043,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-10, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0058"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -1056,11 +1057,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-11, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0059"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -1070,11 +1071,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-04, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0060"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "near_miss",
@@ -1084,11 +1085,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-06, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0061"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "missing",
@@ -1098,11 +1099,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-04",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -1112,11 +1113,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-03, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0062"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "non_compliant",
@@ -1126,11 +1127,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-01, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0063"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -1140,11 +1141,11 @@
       "is_remediation": false,
       "note": "Filed 2026-08-04, due 2026-08-15.",
       "period": "2026-07",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0064"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "wrong_type",
@@ -1154,11 +1155,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-05, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0065"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -1168,11 +1169,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-13, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0066"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -1182,11 +1183,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-07, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0067"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "compliant",
@@ -1196,11 +1197,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-08, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0068"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-BACKUP-VERIFY",
       "defect_kind": "near_miss",
@@ -1210,11 +1211,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-06, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0069"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BCP-TEST",
       "defect_kind": "compliant",
@@ -1224,11 +1225,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-21, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0070"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-BCP-TEST",
       "defect_kind": "compliant",
@@ -1238,11 +1239,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-11, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0071"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-BCP-TEST",
       "defect_kind": "compliant",
@@ -1252,11 +1253,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-22, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0072"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-BCP-TEST",
       "defect_kind": "exception_suppressed",
@@ -1266,11 +1267,11 @@
       "is_remediation": false,
       "note": "Suppressed by EXC-001, expires 2026-12-31.",
       "period": "2026",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1280,11 +1281,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-03, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0073"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1294,11 +1295,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-09, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0074"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "wrong_type",
@@ -1308,11 +1309,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-02, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0075"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1322,11 +1323,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-14, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0076"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "near_miss",
@@ -1336,11 +1337,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-06, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0077"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "non_compliant",
@@ -1350,11 +1351,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-04, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0078"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1364,11 +1365,11 @@
       "is_remediation": false,
       "note": "Filed 2026-08-07, due 2026-08-15.",
       "period": "2026-07",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0079"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1378,11 +1379,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-03, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0080"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1392,11 +1393,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-08, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0081"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "partial",
@@ -1406,11 +1407,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-07, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0082"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "missing",
@@ -1420,11 +1421,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-11",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "partial",
@@ -1434,11 +1435,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-14, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0083"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1448,11 +1449,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-06, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0084"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "partial",
@@ -1462,11 +1463,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-06, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0085"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "wrong_type",
@@ -1476,11 +1477,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-05, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0086"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1490,11 +1491,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-10, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0087"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1504,11 +1505,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-06, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0088"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "missing",
@@ -1518,11 +1519,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-06",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "partial",
@@ -1532,11 +1533,11 @@
       "is_remediation": false,
       "note": "Filed 2026-08-02, due 2026-08-15.",
       "period": "2026-07",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0089"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1546,11 +1547,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-08, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0090"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "partial",
@@ -1560,11 +1561,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-01, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0091"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1574,11 +1575,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-03, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0092"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1588,11 +1589,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-10, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0093"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1602,11 +1603,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-04, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0094"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "missing",
@@ -1616,11 +1617,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-01",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1630,11 +1631,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-14, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0095"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "near_miss",
@@ -1644,11 +1645,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-14, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0096"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1658,11 +1659,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-01, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0097"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "near_miss",
@@ -1672,11 +1673,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-04, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0098"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "non_compliant",
@@ -1686,11 +1687,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-08, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0099"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "missing",
@@ -1700,11 +1701,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-07",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1714,11 +1715,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-06, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0100"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "near_miss",
@@ -1728,11 +1729,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-07, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0101"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1742,11 +1743,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-13, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0102"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1756,11 +1757,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-13, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0103"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "wrong_type",
@@ -1770,11 +1771,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-04, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0104"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "missing",
@@ -1784,11 +1785,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-01",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1798,11 +1799,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-02, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0105"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1812,11 +1813,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-01, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0106"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "near_miss",
@@ -1826,11 +1827,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-05, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0107"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "wrong_type",
@@ -1840,11 +1841,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-01, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0108"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "near_miss",
@@ -1854,11 +1855,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-05, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0109"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1868,11 +1869,11 @@
       "is_remediation": false,
       "note": "Filed 2026-08-10, due 2026-08-15.",
       "period": "2026-07",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0110"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1882,11 +1883,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-12, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0111"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "partial",
@@ -1896,11 +1897,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-08, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0112"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1910,11 +1911,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-03, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0113"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "non_compliant",
@@ -1924,11 +1925,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-03, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0114"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1938,11 +1939,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-12, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0115"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1952,11 +1953,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-07, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0116"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "near_miss",
@@ -1966,11 +1967,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-13, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0117"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "missing",
@@ -1980,11 +1981,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-03",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -1994,11 +1995,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-08, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0118"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2008,11 +2009,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-13, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0119"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "stale",
@@ -2022,11 +2023,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-18, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0120"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "partial",
@@ -2036,11 +2037,11 @@
       "is_remediation": false,
       "note": "Filed 2026-08-08, due 2026-08-15.",
       "period": "2026-07",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0121"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "partial",
@@ -2050,11 +2051,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-14, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0122"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2064,11 +2065,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-01, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0123"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "near_miss",
@@ -2078,11 +2079,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-12, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0124"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "partial",
@@ -2092,11 +2093,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-11, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0125"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "near_miss",
@@ -2106,11 +2107,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-11, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0126"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "missing",
@@ -2120,11 +2121,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-01",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2134,11 +2135,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-03, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0127"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "near_miss",
@@ -2148,11 +2149,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-02, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0128"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2162,11 +2163,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-04, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0129"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "non_compliant",
@@ -2176,11 +2177,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-08, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0130"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "near_miss",
@@ -2190,11 +2191,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-10, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0131"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "missing",
@@ -2204,11 +2205,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-07",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "wrong_type",
@@ -2218,11 +2219,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-07, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0132"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "non_compliant",
@@ -2232,11 +2233,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-03, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0133"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2246,11 +2247,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-13, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0134"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2260,11 +2261,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-05, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0135"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2274,11 +2275,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-02, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0136"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2288,11 +2289,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-12, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0137"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2302,11 +2303,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-11, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0138"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2316,11 +2317,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-05, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0139"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2330,11 +2331,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-06, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0140"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2344,11 +2345,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-11, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0141"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "non_compliant",
@@ -2358,11 +2359,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-04, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0142"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "non_compliant",
@@ -2372,11 +2373,11 @@
       "is_remediation": false,
       "note": "Filed 2026-08-03, due 2026-08-15.",
       "period": "2026-07",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0143"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2386,11 +2387,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-07, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0144"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "missing",
@@ -2400,11 +2401,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-09",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "compliant",
@@ -2414,11 +2415,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-12, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0145"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "non_compliant",
@@ -2428,11 +2429,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-14, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0146"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-CHANGE-MGMT",
       "defect_kind": "missing",
@@ -2442,11 +2443,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-12",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "compliant",
@@ -2456,11 +2457,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-13, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0147"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "compliant",
@@ -2470,11 +2471,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-01, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0148"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "compliant",
@@ -2484,11 +2485,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-12, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0149"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "compliant",
@@ -2498,11 +2499,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-11, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0150"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "missing",
@@ -2512,11 +2513,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "partial",
@@ -2526,11 +2527,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-07, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0151"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "compliant",
@@ -2540,11 +2541,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-06, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0152"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "compliant",
@@ -2554,11 +2555,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-09, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0153"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "wrong_type",
@@ -2568,11 +2569,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-10, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0154"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "partial",
@@ -2582,11 +2583,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-13, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0155"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "near_miss",
@@ -2596,11 +2597,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-06, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0156"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "wrong_type",
@@ -2610,11 +2611,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-10, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0157"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "stale",
@@ -2624,11 +2625,11 @@
       "is_remediation": false,
       "note": "Filed 2025-08-24, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0158"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "wrong_type",
@@ -2638,11 +2639,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-01, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0159"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "compliant",
@@ -2652,11 +2653,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-10, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0160"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CRYPTO-KEY",
       "defect_kind": "compliant",
@@ -2666,11 +2667,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-12, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0161"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -2680,11 +2681,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-04, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0162"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "missing",
@@ -2694,11 +2695,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-02",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "wrong_type",
@@ -2708,11 +2709,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-06, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0163"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "near_miss",
@@ -2722,11 +2723,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-01, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0164"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -2736,11 +2737,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-12, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0165"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "near_miss",
@@ -2750,11 +2751,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-14, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0166"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "missing",
@@ -2764,11 +2765,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-07",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -2778,11 +2779,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-12, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0167"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -2792,11 +2793,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-06, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0168"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "non_compliant",
@@ -2806,11 +2807,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-09, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0169"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "near_miss",
@@ -2820,11 +2821,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-13, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0170"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -2834,11 +2835,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-14, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0171"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "stale",
@@ -2848,11 +2849,11 @@
       "is_remediation": false,
       "note": "Filed 2025-10-18, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0172"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -2862,11 +2863,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-02, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0173"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -2876,11 +2877,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-03, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0174"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "non_compliant",
@@ -2890,11 +2891,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-10, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0175"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -2904,11 +2905,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-05, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0176"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "near_miss",
@@ -2918,11 +2919,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-08, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0177"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -2932,11 +2933,11 @@
       "is_remediation": false,
       "note": "Filed 2026-08-10, due 2026-08-15.",
       "period": "2026-07",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0178"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -2946,11 +2947,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-13, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0179"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "partial",
@@ -2960,11 +2961,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-01, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0180"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "partial",
@@ -2974,11 +2975,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-04, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0181"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -2988,11 +2989,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-04, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0182"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "stale",
@@ -3002,11 +3003,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-17, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0183"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -3016,11 +3017,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-14, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0184"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -3030,11 +3031,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-03, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0185"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -3044,11 +3045,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-01, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0186"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "partial",
@@ -3058,11 +3059,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-02, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0187"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "stale",
@@ -3072,11 +3073,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-15, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0188"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -3086,11 +3087,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-09, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0189"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -3100,11 +3101,11 @@
       "is_remediation": false,
       "note": "Filed 2026-08-02, due 2026-08-15.",
       "period": "2026-07",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0190"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -3114,11 +3115,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-13, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0191"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -3128,11 +3129,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-08, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0192"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "partial",
@@ -3142,11 +3143,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-02, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0193"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "compliant",
@@ -3156,11 +3157,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-04, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0194"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-CUST-COMPLAINTS",
       "defect_kind": "near_miss",
@@ -3170,11 +3171,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-12, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0195"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "stale",
@@ -3184,11 +3185,11 @@
       "is_remediation": false,
       "note": "Filed 2025-08-24, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0196"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": "PAIR-RETENTION-Q2",
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "near_miss",
@@ -3198,11 +3199,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-04, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0197"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "compliant",
@@ -3212,11 +3213,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-07, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0198"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "near_miss",
@@ -3226,11 +3227,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-03, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0199"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "near_miss",
@@ -3240,11 +3241,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-06, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0200"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": "PAIR-RETENTION-Q2",
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "near_miss",
@@ -3254,11 +3255,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-05, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0201"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "partial",
@@ -3268,11 +3269,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-04, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0202"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "compliant",
@@ -3282,11 +3283,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-02, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0203"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "non_compliant",
@@ -3296,11 +3297,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-02, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0204"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "near_miss",
@@ -3310,11 +3311,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-09, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0205"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "missing",
@@ -3324,11 +3325,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "stale",
@@ -3338,11 +3339,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-24, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0206"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "missing",
@@ -3352,11 +3353,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "partial",
@@ -3366,11 +3367,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-01, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0207"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "adversarial",
@@ -3380,11 +3381,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-05, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0208"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-DATA-RETENTION",
       "defect_kind": "compliant",
@@ -3394,11 +3395,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-02, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0209"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-DPIA",
       "defect_kind": "compliant",
@@ -3408,11 +3409,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-01, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0210"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-DPIA",
       "defect_kind": "partial",
@@ -3422,11 +3423,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-05, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0211"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-DPIA",
       "defect_kind": "stale",
@@ -3436,11 +3437,11 @@
       "is_remediation": false,
       "note": "Filed 2024-10-28, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0212"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-DPIA",
       "defect_kind": "non_compliant",
@@ -3450,11 +3451,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-02, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0213"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3464,11 +3465,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-06, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0214"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "partial",
@@ -3478,11 +3479,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-06, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0215"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "partial",
@@ -3492,11 +3493,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-08, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0216"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3506,11 +3507,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-11, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0217"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3520,11 +3521,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-14, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0218"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "partial",
@@ -3534,11 +3535,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-07, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0219"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "non_compliant",
@@ -3548,11 +3549,11 @@
       "is_remediation": false,
       "note": "Filed 2026-08-09, due 2026-08-15.",
       "period": "2026-07",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0220"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3562,11 +3563,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-11, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0221"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3576,11 +3577,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-09, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0222"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "missing",
@@ -3590,11 +3591,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-10",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3604,11 +3605,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-10, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0223"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "near_miss",
@@ -3618,11 +3619,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-12, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0224"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3632,11 +3633,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-13, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0225"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3646,11 +3647,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-03, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0226"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "near_miss",
@@ -3660,11 +3661,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-01, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0227"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3674,11 +3675,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-10, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0228"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3688,11 +3689,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-04, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0229"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3702,11 +3703,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-06, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0230"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "partial",
@@ -3716,11 +3717,11 @@
       "is_remediation": false,
       "note": "Filed 2026-08-06, due 2026-08-15.",
       "period": "2026-07",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0231"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3730,11 +3731,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-09, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0232"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3744,11 +3745,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-03, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0233"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3758,11 +3759,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-06, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0234"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3772,11 +3773,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-14, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0235"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "wrong_type",
@@ -3786,11 +3787,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-06, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0236"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "near_miss",
@@ -3800,11 +3801,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-06, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0237"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "non_compliant",
@@ -3814,11 +3815,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-10, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0238"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3828,11 +3829,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-01, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0239"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "non_compliant",
@@ -3842,11 +3843,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-01, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0240"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3856,11 +3857,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-13, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0241"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3870,11 +3871,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-08, due 2026-07-15.",
       "period": "2026-06",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0242"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "missing",
@@ -3884,11 +3885,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-07",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "stale",
@@ -3898,11 +3899,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-18, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0243"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3912,11 +3913,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-03, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0244"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "partial",
@@ -3926,11 +3927,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-11, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0245"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "wrong_type",
@@ -3940,11 +3941,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-09, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0246"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "non_compliant",
@@ -3954,11 +3955,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-04, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0247"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "partial",
@@ -3968,11 +3969,11 @@
       "is_remediation": false,
       "note": "Filed 2026-02-07, due 2026-02-15.",
       "period": "2026-01",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0248"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -3982,11 +3983,11 @@
       "is_remediation": false,
       "note": "Filed 2026-03-10, due 2026-03-15.",
       "period": "2026-02",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0249"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "partial",
@@ -3996,11 +3997,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-13, due 2026-04-15.",
       "period": "2026-03",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0250"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -4010,11 +4011,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-12, due 2026-05-15.",
       "period": "2026-04",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0251"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "non_compliant",
@@ -4024,11 +4025,11 @@
       "is_remediation": false,
       "note": "Filed 2026-06-14, due 2026-06-15.",
       "period": "2026-05",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0252"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "missing",
@@ -4038,11 +4039,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-06",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -4052,11 +4053,11 @@
       "is_remediation": false,
       "note": "Filed 2026-08-04, due 2026-08-15.",
       "period": "2026-07",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0253"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -4066,11 +4067,11 @@
       "is_remediation": false,
       "note": "Filed 2026-09-10, due 2026-09-15.",
       "period": "2026-08",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0254"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -4080,11 +4081,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-07, due 2026-10-15.",
       "period": "2026-09",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0255"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "non_compliant",
@@ -4094,11 +4095,11 @@
       "is_remediation": false,
       "note": "Filed 2026-11-11, due 2026-11-15.",
       "period": "2026-10",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0256"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "near_miss",
@@ -4108,11 +4109,11 @@
       "is_remediation": false,
       "note": "Filed 2026-12-10, due 2026-12-15.",
       "period": "2026-11",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0257"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-INCIDENT-PM",
       "defect_kind": "compliant",
@@ -4122,11 +4123,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-02, due 2027-01-15.",
       "period": "2026-12",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0258"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-SUPPLIER-ATTEST",
       "defect_kind": "compliant",
@@ -4136,11 +4137,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-08, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0259"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-SUPPLIER-ATTEST",
       "defect_kind": "compliant",
@@ -4150,11 +4151,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-25, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0260"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-SUPPLIER-ATTEST",
       "defect_kind": "compliant",
@@ -4164,11 +4165,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-16, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0261"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-SUPPLIER-ATTEST",
       "defect_kind": "compliant",
@@ -4178,11 +4179,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-20, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0262"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-SUPPLIER-ATTEST",
       "defect_kind": "compliant",
@@ -4192,11 +4193,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-02, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0263"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "compliant",
@@ -4206,11 +4207,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-11, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0264"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "stale",
@@ -4220,11 +4221,11 @@
       "is_remediation": false,
       "note": "Filed 2025-11-22, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0265"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "compliant",
@@ -4234,11 +4235,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-01, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0266"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "near_miss",
@@ -4248,11 +4249,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-13, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0267"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "exception_suppressed",
@@ -4262,11 +4263,11 @@
       "is_remediation": false,
       "note": "Suppressed by EXC-002, expires 2026-06-30.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "exception_suppressed",
@@ -4276,11 +4277,11 @@
       "is_remediation": false,
       "note": "Suppressed by EXC-002, expires 2026-06-30.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "compliant",
@@ -4290,11 +4291,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-05, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0268"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "non_compliant",
@@ -4304,11 +4305,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-10, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0269"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "compliant",
@@ -4318,11 +4319,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-09, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0270"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "partial",
@@ -4332,11 +4333,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-08, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0271"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "compliant",
@@ -4346,11 +4347,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-11, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0272"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "missing",
@@ -4360,11 +4361,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "missing",
@@ -4374,11 +4375,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "compliant",
@@ -4388,11 +4389,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-02, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0273"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "near_miss",
@@ -4402,11 +4403,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-08, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0274"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "compliant",
@@ -4416,11 +4417,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-12, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0275"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "stale",
@@ -4430,11 +4431,11 @@
       "is_remediation": false,
       "note": "Filed 2025-08-24, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0276"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "stale",
@@ -4444,11 +4445,11 @@
       "is_remediation": false,
       "note": "Filed 2025-11-22, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0277"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "wrong_type",
@@ -4458,11 +4459,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-13, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0278"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-THIRD-PARTY-ACCESS",
       "defect_kind": "stale",
@@ -4472,11 +4473,11 @@
       "is_remediation": false,
       "note": "Filed 2026-05-24, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0279"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "near_miss",
@@ -4486,11 +4487,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-08, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0280"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4500,11 +4501,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-01, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0281"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4514,11 +4515,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-08, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0282"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "near_miss",
@@ -4528,11 +4529,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-02, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0283"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4542,11 +4543,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-05, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0284"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "missing",
@@ -4556,11 +4557,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4570,11 +4571,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-02, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0285"
     },
     {
+      "auditable_unit_id": "AREA-FINREP",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "near_miss",
@@ -4584,11 +4585,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-02, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-FINREP",
       "remediates_submission_id": null,
       "submission_id": "SUB-0286"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4598,11 +4599,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-03, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0287"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4612,11 +4613,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-06, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0288"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "near_miss",
@@ -4626,11 +4627,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-05, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0289"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4640,11 +4641,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-06, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": "SUB-0290"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "stale",
@@ -4654,11 +4655,11 @@
       "is_remediation": false,
       "note": "Filed 2025-08-24, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0291"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4668,11 +4669,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-07, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0292"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4682,11 +4683,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-06, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0293"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4696,11 +4697,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-12, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0294"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4710,11 +4711,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-01, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0295"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "non_compliant",
@@ -4724,11 +4725,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-06, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0296"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4738,11 +4739,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-05, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0297"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4752,11 +4753,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-12, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0298"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "near_miss",
@@ -4766,11 +4767,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-07, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0299"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "near_miss",
@@ -4780,11 +4781,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-08, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0300"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4794,11 +4795,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-12, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0301"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4808,11 +4809,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-12, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0302"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "non_compliant",
@@ -4822,11 +4823,11 @@
       "is_remediation": false,
       "note": "Filed 2026-04-12, due 2026-04-15.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0303"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4836,11 +4837,11 @@
       "is_remediation": false,
       "note": "Filed 2026-07-04, due 2026-07-15.",
       "period": "2026-Q2",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0304"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "near_miss",
@@ -4850,11 +4851,11 @@
       "is_remediation": false,
       "note": "Filed 2026-10-03, due 2026-10-15.",
       "period": "2026-Q3",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0305"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-TRAINING",
       "defect_kind": "compliant",
@@ -4864,11 +4865,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-08, due 2027-01-15.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0306"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-VENDOR-DD",
       "defect_kind": "missing",
@@ -4878,11 +4879,11 @@
       "is_remediation": false,
       "note": "No evidence was ever submitted for this period.",
       "period": "2026",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": null,
       "submission_id": null
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-VENDOR-DD",
       "defect_kind": "non_compliant",
@@ -4892,11 +4893,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-25, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": null,
       "submission_id": "SUB-0307"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-VENDOR-DD",
       "defect_kind": "compliant",
@@ -4906,11 +4907,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-16, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": null,
       "submission_id": "SUB-0308"
     },
     {
+      "auditable_unit_id": "AREA-PLATFORM",
       "consistency_pair_id": null,
       "control_id": "CTRL-VENDOR-DD",
       "defect_kind": "near_miss",
@@ -4920,11 +4921,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-13, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-PLATFORM",
       "remediates_submission_id": null,
       "submission_id": "SUB-0309"
     },
     {
+      "auditable_unit_id": "AREA-PROC",
       "consistency_pair_id": null,
       "control_id": "CTRL-VENDOR-DD",
       "defect_kind": "compliant",
@@ -4934,11 +4935,11 @@
       "is_remediation": false,
       "note": "Filed 2027-01-13, due 2027-01-30.",
       "period": "2026",
-      "process_area_id": "AREA-PROC",
       "remediates_submission_id": null,
       "submission_id": "SUB-0310"
     },
     {
+      "auditable_unit_id": "AREA-MKTG",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "remediation",
@@ -4948,11 +4949,11 @@
       "is_remediation": true,
       "note": "Remediation for SUB-0011, filed 2027-02-07.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-MKTG",
       "remediates_submission_id": "SUB-0011",
       "submission_id": "SUB-0311"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "remediation",
@@ -4962,11 +4963,11 @@
       "is_remediation": true,
       "note": "Remediation for SUB-0012, filed 2026-05-07.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": "SUB-0012",
       "submission_id": "SUB-0312"
     },
     {
+      "auditable_unit_id": "AREA-PAYMENTS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-EXPORT",
       "defect_kind": "remediation",
@@ -4976,11 +4977,11 @@
       "is_remediation": true,
       "note": "Remediation for SUB-0015, filed 2027-01-20.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-PAYMENTS",
       "remediates_submission_id": "SUB-0015",
       "submission_id": "SUB-0313"
     },
     {
+      "auditable_unit_id": "AREA-CUSTOPS",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "remediation",
@@ -4990,11 +4991,11 @@
       "is_remediation": true,
       "note": "Remediation for SUB-0016, filed 2026-05-12.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-CUSTOPS",
       "remediates_submission_id": "SUB-0016",
       "submission_id": "SUB-0314"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "remediation",
@@ -5004,11 +5005,11 @@
       "is_remediation": true,
       "note": "Remediation for SUB-0019, filed 2026-05-10.",
       "period": "2026-Q1",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": "SUB-0019",
       "submission_id": "SUB-0315"
     },
     {
+      "auditable_unit_id": "AREA-HR",
       "consistency_pair_id": null,
       "control_id": "CTRL-ACCESS-REVIEW",
       "defect_kind": "remediation",
@@ -5018,7 +5019,6 @@
       "is_remediation": true,
       "note": "Remediation for SUB-0022, filed 2027-02-05.",
       "period": "2026-Q4",
-      "process_area_id": "AREA-HR",
       "remediates_submission_id": "SUB-0022",
       "submission_id": "SUB-0316"
     }

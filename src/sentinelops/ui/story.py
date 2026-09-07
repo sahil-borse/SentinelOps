@@ -64,13 +64,13 @@ def _has_overdue(conn) -> bool:
 
 def _has_model_finding(conn) -> bool:
     return any(
-        f.decided_by == "s3_model" for f in repositories(conn)["findings"].list()
+        f.decided_by == "s3_model" for f in repositories(conn)["assessments"].list()
     )
 
 
 def _has_remediation(conn) -> bool:
     return any(
-        f.supersedes_finding_id for f in repositories(conn)["findings"].list()
+        f.supersedes_assessment_id for f in repositories(conn)["assessments"].list()
     )
 
 
@@ -126,7 +126,7 @@ STEPS: tuple[Step, ...] = (
         key="fix",
         title="5 · Fix one, and prove it is fixed",
         why=(
-            "Finding a problem is half the job. The team files corrected evidence, "
+            "Assessment a problem is half the job. The team files corrected evidence, "
             "it is re-checked against the same criteria, and the action closes — "
             "with the original failure still on the record, not overwritten."
         ),
@@ -157,12 +157,12 @@ def current_step(conn) -> int:
 
 def _area_spread(conn) -> list[tuple[str, int]]:
     counts: dict[str, int] = {}
-    names = {a.id: a.name for a in repositories(conn)["areas"].list()}
+    names = {a.id: a.name for a in repositories(conn)["units"].list()}
     for instance in _instances(conn):
-        counts[instance.process_area_id] = counts.get(instance.process_area_id, 0) + 1
+        counts[instance.auditable_unit_id] = counts.get(instance.auditable_unit_id, 0) + 1
     controls: dict[str, set] = {}
     for instance in _instances(conn):
-        controls.setdefault(instance.process_area_id, set()).add(instance.control_id)
+        controls.setdefault(instance.auditable_unit_id, set()).add(instance.control_id)
     return sorted(
         ((names.get(area, area), len(kinds)) for area, kinds in controls.items()),
         key=lambda row: -row[1],
@@ -176,8 +176,8 @@ def pick_near_miss(conn) -> str | None:
     written around, and falls back to any model-decided failure that cited text.
     """
     repo = repositories(conn)
-    findings = repo["findings"].list()
-    superseded = {f.supersedes_finding_id for f in findings if f.supersedes_finding_id}
+    findings = repo["assessments"].list()
+    superseded = {f.supersedes_assessment_id for f in findings if f.supersedes_assessment_id}
     candidates = []
     for finding in findings:
         if finding.id in superseded or finding.decided_by != "s3_model":
@@ -196,9 +196,9 @@ def pick_near_miss(conn) -> str | None:
 def pick_fix_target(conn) -> str | None:
     """An open failure whose control takes a prose document, so a fix can be written."""
     repo = repositories(conn)
-    findings = {f.check_instance_id: f for f in repo["findings"].list()}
-    superseded = {f.supersedes_finding_id for f in repo["findings"].list()
-                  if f.supersedes_finding_id}
+    findings = {f.check_instance_id: f for f in repo["assessments"].list()}
+    superseded = {f.supersedes_assessment_id for f in repo["assessments"].list()
+                  if f.supersedes_assessment_id}
     candidates = []
     for instance in _instances(conn):
         finding = findings.get(instance.id)
@@ -225,7 +225,7 @@ def remediation_text(conn, instance_id: str) -> str:
     instance = repo["instances"].get(instance_id)
     control = repo["controls"].get(instance.control_id)
     lines = [
-        f"{control.title} - {instance.process_area_id} - {instance.period}",
+        f"{control.title} - {instance.auditable_unit_id} - {instance.period}",
         f"Prepared by: {instance.owner_name} ({instance.assigned_team})",
         f"Reference: {control.id}/{instance.period} (corrected resubmission)",
         "",
@@ -303,7 +303,7 @@ def run(conn, key: str) -> Outcome:
         return Outcome(
             f"“{control.title}” — filed, complete-looking, and **{finding.verdict}**.",
             [
-                "Scroll to **Finding detail** below: the document is shown in full "
+                "Scroll to **Assessment detail** below: the document is shown in full "
                 "with the failing sentence highlighted in yellow.",
                 "That is the difference between an assistant that says *gap* and a "
                 "system that can show you the sentence, in your own document, that "
@@ -319,7 +319,7 @@ def run(conn, key: str) -> Outcome:
         return Outcome(
             f"**{meter['zero_model_share']:.0%} of decisions cost nothing at all.**",
             [
-                f"Of {meter['findings']} checks decided so far, "
+                f"Of {meter['assessments']} checks decided so far, "
                 f"**{meter['decided_by_rule']} were settled by rule** — no evidence "
                 "filed, wrong document type, or a number measured against a "
                 "threshold. None of those need an AI to answer.",
@@ -352,7 +352,7 @@ def run(conn, key: str) -> Outcome:
             is_remediation=True,
         )
         result = service.reassess(conn, target, service.current_date(conn))
-        if not result.new_finding_id:
+        if not result.new_assessment_id:
             return Outcome(
                 "The correction could not be re-checked.",
                 [result.reason],
@@ -374,7 +374,7 @@ def run(conn, key: str) -> Outcome:
                 "The action stayed open — the correction did not clear the "
                 "finding. A fix that does not fix it is not a resolution."
             )
-        return Outcome("Finding → action → correction → re-check → closed.", detail,
+        return Outcome("Assessment → action → correction → re-check → closed.", detail,
                        focus=target)
 
     if key == "prove":
@@ -383,7 +383,7 @@ def run(conn, key: str) -> Outcome:
             conn,
             period_start=date(2026, 1, 1),
             period_end=date(2026, 12, 31),
-            scope="All process areas, all applicable controls",
+            scope="All auditable units, all applicable controls",
         )
         if not chain.ok:
             return Outcome(

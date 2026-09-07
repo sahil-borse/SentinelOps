@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
+from .. import directory
 from ..repositories import repositories
 
 #: Verdicts and statuses that read as a problem, for colouring.
@@ -232,15 +233,17 @@ class AreaStatus:
 def status_by_area(conn) -> list[AreaStatus]:
     """One row per process area: what is due, what failed, how bad."""
     repo = repositories(conn)
+    people = directory.load(conn)
     rows = {
         area.id: AreaStatus(
-            area_id=area.id, name=area.name, team=area.owner_team,
-            owner=area.owner_name, criticality=area.attributes.get("criticality", ""),
+            area_id=area.id, name=area.name, team=area.name,
+            owner=people.owner_name(area),
+            criticality=area.attributes.get("criticality", ""),
         )
-        for area in repo["areas"].list()
+        for area in repo["units"].list()
     }
     for instance in repo["instances"].list():
-        row = rows.get(instance.process_area_id)
+        row = rows.get(instance.auditable_unit_id)
         if row is None:
             continue
         row.due += 1
@@ -254,7 +257,7 @@ def status_by_area(conn) -> list[AreaStatus]:
             row.pending += 1
 
     for flag in repo["flags"].list():
-        row = rows.get(flag.process_area_id)
+        row = rows.get(flag.auditable_unit_id)
         if row is None or flag.status != "open":
             continue
         if flag.category in ("gap", "overdue"):
@@ -290,7 +293,7 @@ def overdue_queue(conn, as_of: date) -> list[dict[str, Any]]:
         queue.append({
             "instance": instance.id,
             "control": instance.control_id,
-            "area": instance.process_area_id,
+            "area": instance.auditable_unit_id,
             "period": instance.period,
             "due": instance.due_date,
             "days_late": max(late, 0),
@@ -322,7 +325,7 @@ def open_actions(conn) -> list[dict[str, Any]]:
             "owner": action.owner_name,
             "due": action.due_date,
             "status": action.status,
-            "finding": action.finding_id,
+            "finding": action.assessment_id,
             "raised": raised.get(action.id),
         })
     return sorted(rows, key=lambda r: (r["due"], r["action"]))
@@ -346,11 +349,11 @@ def finding_detail(conn, instance_id: str) -> dict[str, Any] | None:
     """The current finding for a check, plus the document it was drawn from."""
     repo = repositories(conn)
     findings = sorted(
-        repo["findings"].list(check_instance_id=instance_id), key=lambda f: f.id
+        repo["assessments"].list(check_instance_id=instance_id), key=lambda f: f.id
     )
     if not findings:
         return None
-    superseded = {f.supersedes_finding_id for f in findings if f.supersedes_finding_id}
+    superseded = {f.supersedes_assessment_id for f in findings if f.supersedes_assessment_id}
     current = next((f for f in reversed(findings) if f.id not in superseded), findings[-1])
     evidence = sorted(
         repo["evidence"].list(check_instance_id=instance_id),
@@ -369,7 +372,7 @@ def finding_detail(conn, instance_id: str) -> dict[str, Any] | None:
 def timeline(conn, instance_id: str) -> list[dict[str, Any]]:
     """Every event touching one check, in the order it was written."""
     repo = repositories(conn)
-    findings = repo["findings"].list(check_instance_id=instance_id)
+    findings = repo["assessments"].list(check_instance_id=instance_id)
     wanted_ids = {instance_id} | {f.id for f in findings}
     wanted_ids |= {
         f.id for f in repo["flags"].list(check_instance_id=instance_id)
@@ -384,7 +387,7 @@ def timeline(conn, instance_id: str) -> list[dict[str, Any]]:
         rows.append({
             "seq": event.seq,
             "when": event.ts,
-            "actor": event.actor,
+            "actor": event.actor_kind,
             "owner": event.owner,
             "event": event.action,
             "entity": f"{event.entity_type}:{event.entity_id}",
@@ -401,8 +404,8 @@ def token_meter(conn) -> dict[str, Any]:
         " COALESCE(SUM(cost_usd),0) cost FROM token_usage"
     ).fetchone()
     repo = repositories(conn)
-    findings = repo["findings"].list()
-    superseded = {f.supersedes_finding_id for f in findings if f.supersedes_finding_id}
+    findings = repo["assessments"].list()
+    superseded = {f.supersedes_assessment_id for f in findings if f.supersedes_assessment_id}
     current = [f for f in findings if f.id not in superseded]
     by_rule = len([f for f in current if not str(f.decided_by).startswith("s3_")])
     return {
@@ -412,7 +415,7 @@ def token_meter(conn) -> dict[str, Any]:
         "cached_tokens": row["cached"],
         "total_tokens": row["input"] + row["output"],
         "cost_usd": row["cost"],
-        "findings": len(current),
+        "assessments": len(current),
         "decided_by_rule": by_rule,
         "zero_model_share": by_rule / len(current) if current else 0.0,
     }
@@ -421,7 +424,7 @@ def token_meter(conn) -> dict[str, Any]:
 def assessable_instances(conn) -> list[str]:
     """Checks with a finding, newest period first — the pickable list."""
     repo = repositories(conn)
-    with_findings = {f.check_instance_id for f in repo["findings"].list()}
+    with_findings = {f.check_instance_id for f in repo["assessments"].list()}
     return sorted(with_findings, reverse=True)
 
 

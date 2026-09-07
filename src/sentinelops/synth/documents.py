@@ -25,9 +25,10 @@ from datetime import date, timedelta
 from random import Random
 from typing import Any
 
-from ..entities import ProcessArea
+from ..entities import AuditableUnit
 from .calendar import Period
 from .controls import ControlSpec
+from .units import IDENTITIES_BY_ID
 
 QUALITIES = (
     "compliant",
@@ -95,8 +96,13 @@ class RenderedEvidence:
     expected_verdict: str
 
 
+def _owner_name(unit) -> str:
+    owner = IDENTITIES_BY_ID.get(unit.owner_identity)
+    return owner.name if owner else unit.owner_identity
+
+
 def build_context(
-    spec: ControlSpec, area: ProcessArea, period: Period, rng: Random
+    spec: ControlSpec, area: AuditableUnit, period: Period, rng: Random
 ) -> dict[str, Any]:
     """Counts and names the clause templates interpolate.
 
@@ -108,8 +114,10 @@ def build_context(
         "n": n,
         "j": max(1, n - rng.randrange(2, 7)),
         "k": rng.randrange(2, 6),
-        "owner": area.owner_name,
-        "team": area.owner_team,
+        # The unit records who owns it, not what they are called; the name
+        # comes from the directory. The unit *is* the team.
+        "owner": _owner_name(area),
+        "team": area.name,
         "area": area.name,
         "period": period.label,
         "year": period.start.year,
@@ -145,7 +153,7 @@ def _clause_states(
 
 def render_document(
     spec: ControlSpec,
-    area: ProcessArea,
+    area: AuditableUnit,
     period: Period,
     quality: str,
     rng: Random,
@@ -242,7 +250,7 @@ def _breach(metrics: dict[str, Any], metric: str, rule: dict[str, float], hard: 
 
 def render_structured(
     spec: ControlSpec,
-    area: ProcessArea,
+    area: AuditableUnit,
     period: Period,
     quality: str,
     rng: Random,
@@ -279,7 +287,7 @@ def render_structured(
 
 def render(
     spec: ControlSpec,
-    area: ProcessArea,
+    area: AuditableUnit,
     period: Period,
     quality: str,
     rng: Random,

@@ -27,13 +27,13 @@ def print_run(result: dict[str, Any]) -> None:
         print(f"  cited span    : {span}")
     for gap in finding.gaps:
         print(f"  gap           : {gap}")
-    print(f"  supersedes    : {finding.supersedes_finding_id}")
+    print(f"  supersedes    : {finding.supersedes_assessment_id}")
 
     _rule("ACTION")
     print(f"  {action.id}  status={action.status}  due {action.due_date}")
     print(f"  {action.title}")
     print(f"  assigned to   : {action.owner_team} / {action.owner_name}")
-    print(f"  raised from   : {action.finding_id}")
+    print(f"  raised from   : {action.assessment_id}")
 
     _rule("AUDIT TRAIL")
     for event in result["audit_events"]:
@@ -158,7 +158,7 @@ def print_lifecycle(conn, check_instance_id: str) -> None:
     repo = repositories(conn)
     instance = repo["instances"].get(check_instance_id)
     findings = sorted(
-        repo["findings"].list(check_instance_id=check_instance_id), key=lambda f: f.id
+        repo["assessments"].list(check_instance_id=check_instance_id), key=lambda f: f.id
     )
     actions = [
         a for a in repo["actions"].list()
@@ -166,13 +166,13 @@ def print_lifecycle(conn, check_instance_id: str) -> None:
     ]
 
     _rule(f"LIFECYCLE — {check_instance_id}")
-    print(f"  {instance.control_id} / {instance.process_area_id} / {instance.period}")
+    print(f"  {instance.control_id} / {instance.auditable_unit_id} / {instance.period}")
     print(f"  due {instance.due_date}   owner {instance.assigned_team}"
           f" / {instance.owner_name}   status {instance.status}")
 
     events = list(repo["audit"].read_for("CheckInstance", check_instance_id))
     for finding in findings:
-        events += repo["audit"].read_for("Finding", finding.id)
+        events += repo["audit"].read_for("Assessment", finding.id)
     for action in actions:
         events += repo["audit"].read_for("Action", action.id)
     for flag in repo["flags"].list(check_instance_id=check_instance_id):
@@ -190,8 +190,8 @@ def print_lifecycle(conn, check_instance_id: str) -> None:
     print()
     for finding in findings:
         marker = "superseded by " + (
-            next((f.id for f in findings if f.supersedes_finding_id == finding.id), "-")
-        ) if any(f.supersedes_finding_id == finding.id for f in findings) else "current"
+            next((f.id for f in findings if f.supersedes_assessment_id == finding.id), "-")
+        ) if any(f.supersedes_assessment_id == finding.id for f in findings) else "current"
         print(f"  {finding.id:<44} {finding.verdict:<22} {marker}")
     for action in actions:
         print(f"  {action.id:<44} {action.status:<22} due {action.due_date}")

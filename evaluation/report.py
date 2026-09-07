@@ -185,13 +185,13 @@ over {baseline_gap.total} scored instances.
 
 ### 5. Zero-model-call share — {_pct(p['zero_model']['share'])}
 
-{p['zero_model']['decided_by_rules']} of {p['zero_model']['findings']} current
+{p['zero_model']['decided_by_rules']} of {p['zero_model']['assessments']} current
 findings were reached by rule, not by a model.
 
 By tier:
 
 {_table([(tier, str(count)) for tier, count in p['zero_model']['by_tier'].items()],
-        ('decided_by', 'findings'))}
+        ('decided_by', 'assessments'))}
 
 **This number is a property of the corpus mix, not a universal constant.** It is
 this high because the corpus contains {counts.get('missing', 0)} instances with no

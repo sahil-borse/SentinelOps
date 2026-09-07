@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sentinelops.entities import ControlDefinition, ProcessArea
+from sentinelops.entities import ControlDefinition, AuditableUnit
 from sentinelops.stages.applicability import (
     KNOWN_ATTRIBUTES,
     applicability_matrix,
@@ -15,7 +15,7 @@ from sentinelops.stages.applicability import (
     run,
     validate_expressions,
 )
-from sentinelops.synth import PROCESS_AREAS, generate_corpus, seed_database
+from sentinelops.synth import AUDITABLE_UNITS, generate_corpus, seed_database
 from sentinelops.synth.generate import applies as generator_applies
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "sentinelops"
@@ -30,7 +30,7 @@ def _area(ident="A1", **attributes):
         "criticality": "low",
     }
     merged.update(attributes)
-    return ProcessArea(ident, ident, "Team", "Owner", merged)
+    return AuditableUnit(ident, ident, "support_function", "ID-OWNER", merged)
 
 
 def _control(ident="C1", applies_when=None):
@@ -56,7 +56,7 @@ def corpus():
 
 def test_an_empty_expression_applies_everywhere():
     control = _control(applies_when={})
-    for area in PROCESS_AREAS:
+    for area in AUDITABLE_UNITS:
         assert evaluate(control, area).applicable
 
 
@@ -82,7 +82,7 @@ def test_multiple_attributes_must_all_hold():
 
 def test_a_missing_attribute_does_not_match():
     control = _control(applies_when={"handles_pii": True})
-    area = ProcessArea("A9", "A9", "Team", "Owner", {})
+    area = AuditableUnit("A9", "A9", "support_function", "ID-OWNER", {})
     assert not evaluate(control, area).applicable
 
 
@@ -132,7 +132,7 @@ def test_the_engine_and_the_generator_agree_on_every_combination(corpus):
 def test_no_submission_in_the_corpus_sits_outside_the_matrix(corpus):
     pairs = set(applicable_pairs(corpus.controls, corpus.areas))
     for submission in corpus.submissions:
-        assert (submission.control_id, submission.process_area_id) in pairs
+        assert (submission.control_id, submission.auditable_unit_id) in pairs
 
 
 # --- different areas, different obligations --------------------------------
@@ -173,12 +173,12 @@ def test_an_area_matching_no_controls_still_gets_an_audit_event(conn):
     from sentinelops.repositories import repositories
 
     repo = repositories(conn)
-    repo["areas"].add(_area("AREA-EMPTY", handles_pii=False, has_suppliers=False,
+    repo["units"].add(_area("AREA-EMPTY", handles_pii=False, has_suppliers=False,
                             criticality="low"))
     repo["controls"].add(_control("C-PII", {"handles_pii": True}))
 
     assert run(conn) == {"AREA-EMPTY": []}
-    event = repo["audit"].read_for("ProcessArea", "AREA-EMPTY")[0]
+    event = repo["audit"].read_for("AuditableUnit", "AREA-EMPTY")[0]
     assert event.detail["applicable_count"] == 0
     assert event.detail["evaluated_count"] == 1
 
@@ -228,7 +228,7 @@ def test_the_stage_refuses_to_run_on_an_invalid_expression(conn):
     from sentinelops.repositories import repositories
 
     repo = repositories(conn)
-    repo["areas"].add(_area("AREA-X", handles_pii=True))
+    repo["units"].add(_area("AREA-X", handles_pii=True))
     repo["controls"].add(_control("C-TYPO", {"handles_pii_data": True}))
 
     with pytest.raises(ValueError, match="handles_pii_data"):
@@ -349,16 +349,18 @@ def test_that_guard_would_actually_fire(tmp_path):
 # --- the audit trail -------------------------------------------------------
 
 def test_each_area_gets_one_audit_event_naming_its_control_set(conn, corpus):
+    from sentinelops import directory
     from sentinelops.repositories import repositories
 
     seed_database(conn, corpus)
     matrix = run(conn)
     repo = repositories(conn)
+    people = directory.load(conn)
 
     for area in corpus.areas:
         events = [
             e
-            for e in repo["audit"].read_for("ProcessArea", area.id)
+            for e in repo["audit"].read_for("AuditableUnit", area.id)
             if e.action == "applicability_evaluated"
         ]
         assert len(events) == 1
@@ -366,8 +368,8 @@ def test_each_area_gets_one_audit_event_naming_its_control_set(conn, corpus):
         assert detail["applicable_controls"] == matrix[area.id]
         assert detail["applicable_count"] == len(matrix[area.id])
         assert detail["evaluated_count"] == len(corpus.controls)
-        assert events[0].owner == area.owner_name
-        assert events[0].actor == "system"
+        assert events[0].owner == people.owner_name(area)
+        assert events[0].actor_kind == "system"
 
 
 # --- the demo rendering ----------------------------------------------------

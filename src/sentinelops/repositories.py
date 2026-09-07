@@ -25,21 +25,23 @@ from .entities import (
     ControlDefinition,
     Evidence,
     EvidenceSubmission,
-    Finding,
-    ProcessArea,
+    Assessment,
+    Identity,
+    AuditableUnit,
 )
 
 # entity -> (table, {field: storage kind}) for the fields that are not scalars
 _SPEC: dict[type, tuple[str, dict[str, str]]] = {
-    ProcessArea: ("process_areas", {"attributes": "json"}),
+    Identity: ("identities", {}),
+    AuditableUnit: ("auditable_units", {"attributes": "json"}),
     ControlDefinition: ("control_definitions", {"applies_when": "json",
                         "required_evidence_types": "json", "thresholds": "json"}),
     CheckInstance: ("check_instances", {"due_date": "date"}),
     Evidence: ("evidence", {"submitted_at": "datetime", "is_remediation": "bool"}),
     EvidenceSubmission: ("evidence_submissions", {"submitted_at": "datetime",
                          "is_remediation": "bool"}),
-    Finding: ("findings", {"cited_spans": "json", "gaps": "json",
-              "needs_human_review": "bool", "assessed_at": "datetime"}),
+    Assessment: ("assessments", {"cited_spans": "json", "gaps": "json",
+                 "needs_human_review": "bool", "assessed_at": "datetime"}),
     Action: ("actions", {"due_date": "date", "resolved_at": "datetime"}),
     Flag: ("flags", {"raised_at": "datetime"}),
     ComplianceException: ("compliance_exceptions", {"granted_at": "date",
@@ -240,7 +242,8 @@ def canonical_payload(event: AuditEvent) -> str:
         {
             "seq": event.seq,
             "ts": event.ts.isoformat(),
-            "actor": event.actor,
+            "actor_kind": event.actor_kind,
+            "actor_identity": event.actor_identity,
             "owner": event.owner,
             "action": event.action,
             "entity_type": event.entity_type,
@@ -302,6 +305,7 @@ class AuditLog:
         entity_id: str,
         detail: dict[str, Any] | None = None,
         ts: datetime | None = None,
+        actor_identity: str = "",
     ) -> AuditEvent:
         tail = self.conn.execute(
             "SELECT seq, entry_hash FROM audit_events ORDER BY seq DESC LIMIT 1"
@@ -309,7 +313,8 @@ class AuditLog:
         event = AuditEvent(
             id=None,
             ts=ts or _stamp(),
-            actor=actor,  # type: ignore[arg-type]
+            actor_kind=actor,  # type: ignore[arg-type]
+            actor_identity=actor_identity,
             owner=owner,
             action=action,
             entity_type=entity_type,
@@ -393,12 +398,13 @@ class AuditLog:
 def repositories(conn: sqlite3.Connection) -> dict[str, Any]:
     """Every repository for a connection, in one call."""
     return {
-        "areas": Repository(conn, ProcessArea),
+        "identities": Repository(conn, Identity),
+        "units": Repository(conn, AuditableUnit),
         "controls": Repository(conn, ControlDefinition),
         "instances": Repository(conn, CheckInstance),
         "evidence": WriteOnceRepository(conn, Evidence),
         "submissions": Repository(conn, EvidenceSubmission),
-        "findings": Repository(conn, Finding),
+        "assessments": Repository(conn, Assessment),
         "actions": Repository(conn, Action),
         "flags": Repository(conn, Flag),
         "exceptions": Repository(conn, ComplianceException),

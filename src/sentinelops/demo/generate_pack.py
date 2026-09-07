@@ -42,7 +42,7 @@ def main() -> None:
         events,
         period_start=date(2026, 1, 1),
         period_end=date(2026, 12, 31),
-        scope="All process areas, all applicable controls, calendar year 2026",
+        scope="All auditable units, all applicable controls, calendar year 2026",
     )
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "audit_pack_2026.md").write_text(render_markdown(pack), encoding="utf-8")
@@ -50,8 +50,8 @@ def main() -> None:
 
     print(f"events replayed        {pack.totals['events']:,}")
     print(f"chain                  {'VERIFIED' if pack.chain['ok'] else 'FAILED'}")
-    for key in ("areas", "controls", "due", "completed", "waived", "unexamined",
-                "findings", "superseded_findings", "non_compliant", "human_review",
+    for key in ("units", "controls", "due", "completed", "waived", "unexamined",
+                "assessments", "superseded_findings", "non_compliant", "human_review",
                 "decided_without_a_model", "exceptions", "actions",
                 "actions_resolved"):
         print(f"{key:<22} {pack.totals[key]:,}")

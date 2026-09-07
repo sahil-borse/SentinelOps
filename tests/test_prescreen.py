@@ -47,7 +47,7 @@ def screened(scheduled):
 def test_no_evidence_resolves_to_insufficient_evidence(screened):
     conn, report = screened
     repo = repositories(conn)
-    finding = repo["findings"].list(
+    finding = repo["assessments"].list(
         check_instance_id="CHK-CUST-COMPLAINTS-CUSTOPS-2026-07"
     )[0]
     assert finding.verdict == "insufficient_evidence"
@@ -71,7 +71,7 @@ def test_wrong_evidence_type_never_reaches_a_model(screened, corpus):
     repo = repositories(conn)
     controls = {c.id: c for c in corpus.controls}
     findings = [
-        f for f in repo["findings"].list() if f.decided_by == "wrong_evidence_type"
+        f for f in repo["assessments"].list() if f.decided_by == "wrong_evidence_type"
     ]
     assert findings
     assert report.exits["wrong_evidence_type"] == len(findings)
@@ -110,7 +110,7 @@ def test_identical_evidence_carries_the_prior_finding_forward(conn):
     report = prescreen(conn, END_OF_STORY)
     assert report.exits["carried_forward"] == 1
 
-    february = repo["findings"].list(check_instance_id="CHK-X-A-2026-02")[0]
+    february = repo["assessments"].list(check_instance_id="CHK-X-A-2026-02")[0]
     assert february.carried_forward_from == january.id
     assert february.verdict == january.verdict == "partial"
     assert february.cited_spans == january.cited_spans
@@ -144,12 +144,12 @@ def test_different_evidence_does_not_carry_forward(conn):
 
 def test_identical_evidence_in_another_area_does_not_carry_forward(conn):
     """The consistency pair must be judged twice over, not copied across."""
-    from sentinelops.entities import ProcessArea
+    from sentinelops.entities import AuditableUnit
 
     repo = _one_instance(conn)
     _assessed_period(repo, "2026-01", "shared report body")
-    repo["areas"].add(
-        ProcessArea("AREA-B", "Area B", "Team B", "B. Owner",
+    repo["units"].add(
+        AuditableUnit("AREA-B", "Area B", "support_function", "ID-B",
                     {"handles_pii": True, "customer_facing": False,
                      "has_suppliers": False, "region": "NA", "criticality": "low"})
     )
@@ -159,7 +159,7 @@ def test_identical_evidence_in_another_area_does_not_carry_forward(conn):
     )
     repo["submissions"].add(
         EvidenceSubmission(
-            id="SUB-B", control_id="CTRL-X", process_area_id="AREA-B",
+            id="SUB-B", control_id="CTRL-X", auditable_unit_id="AREA-B",
             period="2026-01", kind="document", doc_type="report",
             content="shared report body",
             content_hash="hash-of-shared report body",
@@ -184,7 +184,7 @@ def test_the_corpus_never_repeats_evidence_across_periods(screened, corpus):
     for submission in corpus.submissions:
         if submission.is_remediation:
             continue
-        key = (submission.control_id, submission.process_area_id,
+        key = (submission.control_id, submission.auditable_unit_id,
                submission.content_hash)
         assert key not in seen or seen[key] == submission.period
         seen[key] = submission.period
@@ -195,7 +195,7 @@ def test_the_corpus_never_repeats_evidence_across_periods(screened, corpus):
 def test_stale_evidence_is_a_gap_by_rule(screened):
     conn, report = screened
     repo = repositories(conn)
-    findings = [f for f in repo["findings"].list() if f.decided_by == "stale_evidence"]
+    findings = [f for f in repo["assessments"].list() if f.decided_by == "stale_evidence"]
     assert findings
     assert report.exits["stale_evidence"] == len(findings)
     for finding in findings:
@@ -229,7 +229,7 @@ def test_structured_evidence_is_evaluated_in_code(screened):
     conn, report = screened
     repo = repositories(conn)
     findings = [
-        f for f in repo["findings"].list() if f.decided_by == "structured_threshold"
+        f for f in repo["assessments"].list() if f.decided_by == "structured_threshold"
     ]
     assert findings
     assert report.exits["structured_threshold"] == len(findings)
@@ -315,7 +315,7 @@ def test_only_ambiguous_document_evidence_survives(screened, corpus):
         assert control.evidence_kind == "document"
         assert evidence.doc_type in control.required_evidence_types
         assert instance.status == "submitted", "still awaiting a verdict"
-        assert repo["findings"].list(check_instance_id=instance_id) == []
+        assert repo["assessments"].list(check_instance_id=instance_id) == []
 
 
 def test_no_structured_instance_ever_survives_to_s3(screened, corpus):
@@ -333,7 +333,7 @@ def test_pending_instances_are_not_judged(scheduled):
     report = prescreen(scheduled, date(2026, 2, 28))
     for instance in repo["instances"].list():
         if instance.status == "pending":
-            assert repo["findings"].list(check_instance_id=instance.id) == []
+            assert repo["assessments"].list(check_instance_id=instance.id) == []
     assert report.skipped_not_due >= 0
 
 
@@ -421,7 +421,7 @@ def test_the_report_accounts_for_every_considered_instance(screened):
 def test_the_zero_model_share_is_real(screened):
     conn, report = screened
     repo = repositories(conn)
-    decided = [f for f in repo["findings"].list() if f.decided_by in RULES]
+    decided = [f for f in repo["assessments"].list() if f.decided_by in RULES]
     assert len(decided) == report.resolved
     assert report.zero_model_share == pytest.approx(
         report.resolved / report.considered
@@ -454,7 +454,7 @@ def test_every_prescreen_finding_records_zero_model_calls(screened):
     conn, _ = screened
     events = [
         e for e in repositories(conn)["audit"].read_all()
-        if e.action == "finding_recorded"
+        if e.action == "assessment_recorded"
     ]
     assert events
     assert all(e.detail["model_calls"] == 0 for e in events)
@@ -462,11 +462,11 @@ def test_every_prescreen_finding_records_zero_model_calls(screened):
 
 def test_running_the_pre_screen_twice_decides_nothing_new(screened):
     conn, first = screened
-    before = len(repositories(conn)["findings"].list())
+    before = len(repositories(conn)["assessments"].list())
     second = prescreen(conn, END_OF_STORY)
     assert second.considered == len(first.to_assess)
     assert second.resolved == 0
-    assert len(repositories(conn)["findings"].list()) == before
+    assert len(repositories(conn)["assessments"].list()) == before
 
 
 # --- zero model calls ------------------------------------------------------
@@ -528,7 +528,7 @@ def _evidence(identifier, instance_id, content):
 def _submission(identifier, content, submitted, is_remediation=False,
                 doc_type="report", period="2026-01", control_id="CTRL-X"):
     return EvidenceSubmission(
-        id=identifier, control_id=control_id, process_area_id="AREA-A",
+        id=identifier, control_id=control_id, auditable_unit_id="AREA-A",
         period=period, kind="document", doc_type=doc_type, content=content,
         content_hash=f"hash-of-{content}", submitted_at=submitted,
         author="A. Owner", is_remediation=is_remediation,
@@ -536,11 +536,11 @@ def _submission(identifier, content, submitted, is_remediation=False,
 
 
 def _seed_minimal(repo, freshness_days=100, control_id="CTRL-X"):
-    from sentinelops.entities import ProcessArea
+    from sentinelops.entities import AuditableUnit
 
-    if repo["areas"].get("AREA-A") is None:
-        repo["areas"].add(
-            ProcessArea("AREA-A", "Area A", "Team A", "A. Owner",
+    if repo["units"].get("AREA-A") is None:
+        repo["units"].add(
+            AuditableUnit("AREA-A", "Area A", "support_function", "ID-A",
                         {"handles_pii": True, "customer_facing": False,
                          "has_suppliers": False, "region": "EMEA",
                          "criticality": "high"})
@@ -569,7 +569,7 @@ def _one_instance(conn, freshness_days=100, period="2026-01", control_id="CTRL-X
 
 def _assessed_period(repo, period, content, control_id="CTRL-X"):
     """A period S3 has already judged, with its evidence on file."""
-    from sentinelops.entities import Finding
+    from sentinelops.entities import Assessment
 
     instance_id = f"CHK-X-A-{period}"
     instance = repo["instances"].get(instance_id)
@@ -586,8 +586,8 @@ def _assessed_period(repo, period, content, control_id="CTRL-X"):
                  content_hash=f"hash-of-{content}",
                  submitted_at=datetime(2026, 2, 5, 9, 0), author="A. Owner")
     )
-    finding = Finding(
-        id=f"FND-X-A-{period}-1", check_instance_id=instance_id,
+    finding = Assessment(
+        id=f"ASM-X-A-{period}-1", check_instance_id=instance_id,
         verdict="partial", confidence=0.72,
         rationale="Clause 2 is only partially evidenced.",
         cited_spans=["the reviewer field was left blank"],
@@ -596,7 +596,7 @@ def _assessed_period(repo, period, content, control_id="CTRL-X"):
         needs_human_review=False, assessed_at=datetime(2026, 2, 20, 9, 0),
         decided_by="s3_model",
     )
-    repo["findings"].add(finding)
+    repo["assessments"].add(finding)
     return finding
 
 

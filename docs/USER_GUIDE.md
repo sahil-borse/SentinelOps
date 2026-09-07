@@ -4,6 +4,11 @@ Every screenshot below was taken by driving the real application in a real
 browser ([`docs/capture.py`](capture.py)). Nothing is a mock-up, so if the
 interface changes and this guide is not re-captured, the difference will show.
 
+> **The images are one slice behind.** The v3 migration renamed the AI verdict
+> from *Finding* to *Assessment*, so some captions in the screenshots still read
+> "Finding detail". The text below is current; the pictures are re-taken once the
+> migration settles, with `python docs/capture.py`.
+
 **Contents**
 
 1. [Install and start](#1-install-and-start)
@@ -99,7 +104,7 @@ Press **Show me one**.
 
 ![The near-miss, selected](images/04-near-miss-walkthrough.png)
 
-Then scroll down to **Finding detail**. This is the view the whole system is
+Then scroll down to **Assessment detail**. This is the view the whole system is
 built around:
 
 ![The cited sentence, highlighted in the source](images/05-citation-highlighted.png)
@@ -146,8 +151,8 @@ same assessment as the original — same criteria, same citation rule. If it
 passes, the action closes.
 
 **Both findings are kept.** The failure is marked superseded rather than
-deleted, so the record still shows what was wrong and when. In *Finding detail*
-the **Finding history** panel lists both.
+deleted, so the record still shows what was wrong and when. In *Assessment detail*
+the **Assessment history** panel lists both.
 
 ### Step 6 — Prove none of this was edited afterwards
 

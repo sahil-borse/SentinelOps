@@ -30,7 +30,10 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from ..entities import Action, CheckInstance, ControlDefinition, Finding, Flag
+from .. import directory
+from ..entities import (
+    Action, CheckInstance, ControlDefinition, Assessment, Flag,
+)
 
 #: How badly each verdict failed. Compliant never reaches this stage.
 VERDICT_WEIGHT: dict[str, float] = {
@@ -138,7 +141,7 @@ def explain_severity(
     )
 
 
-def categorise(finding: Finding) -> str:
+def categorise(finding: Assessment) -> str:
     """Which of the three this finding is. Exactly one, never two.
 
     `no_evidence` is the overdue case and is the only one that reaches this
@@ -153,6 +156,7 @@ def categorise(finding: Finding) -> str:
 
 def _flag(
     repo,
+    people,
     *,
     category: str,
     control: ControlDefinition,
@@ -161,7 +165,7 @@ def _flag(
     rationale: str,
     as_of: date,
     instance: CheckInstance | None = None,
-    finding: Finding | None = None,
+    finding: Assessment | None = None,
     exception_id: str | None = None,
     flag_id: str | None = None,
 ) -> Flag:
@@ -170,22 +174,22 @@ def _flag(
         id=flag_id or f"FLG-{category.upper()}-{anchor}",
         category=category,
         control_id=control.id,
-        process_area_id=area.id,
+        auditable_unit_id=area.id,
         severity=severity,
         severity_band=severity_band(severity),
         rationale=rationale,
         raised_at=datetime.combine(as_of, datetime.min.time()),
-        owner_team=area.owner_team,
-        owner_name=area.owner_name,
+        owner_team=area.name,
+        owner_name=people.owner_name(area),
         check_instance_id=instance.id if instance is not None else None,
-        finding_id=finding.id if finding is not None else None,
+        assessment_id=finding.id if finding is not None else None,
         exception_id=exception_id,
         status="open",
     )
     repo["flags"].add(flag)
     repo["audit"].append(
         actor="system",
-        owner=area.owner_name,
+        owner=people.owner_name(area),
         action="flag_raised",
         entity_type="Flag",
         entity_id=flag.id,
@@ -195,7 +199,7 @@ def _flag(
             "severity_band": flag.severity_band,
             "rationale": rationale,
             "check_instance_id": flag.check_instance_id,
-            "finding_id": flag.finding_id,
+            "assessment_id": flag.assessment_id,
             "exception_id": exception_id,
         },
     )
@@ -203,7 +207,7 @@ def _flag(
 
 
 def raise_action(
-    repo, flag: Flag, instance: CheckInstance, finding: Finding, as_of: date
+    repo, flag: Flag, instance: CheckInstance, finding: Assessment, as_of: date
 ) -> Action:
     """Create the work, then route it. Two transitions, two events.
 
@@ -214,7 +218,7 @@ def raise_action(
     sla = ACTION_SLA_DAYS[flag.severity_band]
     action = Action(
         id=f"ACT-{flag.check_instance_id.removeprefix('CHK-')}",
-        finding_id=finding.id,
+        assessment_id=finding.id,
         title=finding.recommended_action
         or f"Remediate {flag.category} on {instance.control_id} ({instance.period})",
         owner_team=flag.owner_team,
@@ -231,7 +235,7 @@ def raise_action(
         entity_id=action.id,
         detail={
             "flag_id": flag.id,
-            "finding_id": finding.id,
+            "assessment_id": finding.id,
             "check_instance_id": instance.id,
             "category": flag.category,
             "severity": flag.severity,
@@ -293,20 +297,21 @@ def _run(conn, as_of: date) -> FlagReport:
     from ..repositories import repositories
 
     repo = repositories(conn)
+    people = directory.load(conn)
     controls = {c.id: c for c in repo["controls"].list()}
-    areas = {a.id: a for a in repo["areas"].list()}
+    areas = {a.id: a for a in repo["units"].list()}
     instances = {i.id: i for i in repo["instances"].list()}
     existing = {f.id for f in repo["flags"].list()}
-    actioned = {a.finding_id for a in repo["actions"].list()}
+    actioned = {a.assessment_id for a in repo["actions"].list()}
     report = FlagReport(as_of=as_of)
 
     # --- gaps and overdues, from findings ---------------------------------
-    findings = repo["findings"].list()
+    findings = repo["assessments"].list()
     # A finding that something else supersedes is history: the re-assessment
     # that replaced it is the current answer, and flagging both would double
     # count one problem. Note the direction — it is the *superseded* one that is
     # skipped, not the one carrying the pointer.
-    superseded = {f.supersedes_finding_id for f in findings if f.supersedes_finding_id}
+    superseded = {f.supersedes_assessment_id for f in findings if f.supersedes_assessment_id}
     open_action_ids = {
         a.id for a in repo["actions"].list() if a.status in OPEN_ACTION_STATUSES
     }
@@ -317,7 +322,7 @@ def _run(conn, as_of: date) -> FlagReport:
         instance = instances.get(finding.check_instance_id)
         if instance is None:
             continue
-        control, area = controls[instance.control_id], areas[instance.process_area_id]
+        control, area = controls[instance.control_id], areas[instance.auditable_unit_id]
 
         category = categorise(finding)
         days_overdue = max((as_of - instance.due_date).days, 0)
@@ -332,7 +337,7 @@ def _run(conn, as_of: date) -> FlagReport:
             continue
 
         flag = _flag(
-            repo, category=category, control=control, area=area, severity=severity,
+            repo, people, category=category, control=control, area=area, severity=severity,
             rationale=explain_severity(
                 control, area.attributes["criticality"], finding.verdict, days_overdue
             ),
@@ -354,13 +359,13 @@ def _run(conn, as_of: date) -> FlagReport:
     for instance in sorted(instances.values(), key=lambda i: i.id):
         if instance.status != "waived":
             continue
-        control, area = controls[instance.control_id], areas[instance.process_area_id]
+        control, area = controls[instance.control_id], areas[instance.auditable_unit_id]
         flag_id = f"FLG-EXCEPTION-{instance.id}"
         if flag_id in existing:
             continue
         severity = severity_of(control, area.attributes["criticality"], "waived", 0)
         flag = _flag(
-            repo, category="exception", control=control, area=area,
+            repo, people, category="exception", control=control, area=area,
             severity=severity,
             rationale=(
                 "Approved deviation: the obligation was excused rather than met. "
@@ -380,14 +385,14 @@ def _run(conn, as_of: date) -> FlagReport:
         if flag_id in existing:
             continue
         control = controls.get(exception.control_id)
-        area = areas.get(exception.process_area_id)
+        area = areas.get(exception.auditable_unit_id)
         if control is None or area is None:
             continue
         severity = severity_of(
             control, area.attributes["criticality"], "insufficient_evidence", 0
         )
         flag = _flag(
-            repo, category="exception", control=control, area=area,
+            repo, people, category="exception", control=control, area=area,
             severity=severity,
             rationale=(
                 f"Deviation {exception.id} lapsed on {exception.expires_at}; the "

@@ -75,7 +75,7 @@ def open_database(path: Path | None = None, *, fresh: bool = False):
 
 
 def is_seeded(conn) -> bool:
-    return bool(repositories(conn)["areas"].list())
+    return bool(repositories(conn)["units"].list())
 
 
 def seed(conn) -> None:
@@ -151,7 +151,7 @@ def submit_evidence(
     submission = EvidenceSubmission(
         id=f"SUB-UI-{existing:04d}",
         control_id=instance.control_id,
-        process_area_id=instance.process_area_id,
+        auditable_unit_id=instance.auditable_unit_id,
         period=instance.period,
         kind="structured" if doc_type.endswith(("_table", "_log", "_export")) else "document",
         doc_type=doc_type,
@@ -227,8 +227,8 @@ def verify_chain(conn):
 def counts(conn) -> dict[str, Any]:
     repo = repositories(conn)
     instances = repo["instances"].list()
-    findings = repo["findings"].list()
-    superseded = {f.supersedes_finding_id for f in findings if f.supersedes_finding_id}
+    findings = repo["assessments"].list()
+    superseded = {f.supersedes_assessment_id for f in findings if f.supersedes_assessment_id}
     current = [f for f in findings if f.id not in superseded]
     flags = [f for f in repo["flags"].list() if f.status == "open"]
     return {
@@ -237,7 +237,7 @@ def counts(conn) -> dict[str, Any]:
         "overdue": len([i for i in instances if i.status == "overdue"]),
         "waived": len([i for i in instances if i.status == "waived"]),
         "pending": len([i for i in instances if i.status == "pending"]),
-        "findings": len(current),
+        "assessments": len(current),
         "non_compliant": len([f for f in current if f.verdict != "compliant"]),
         "needs_review": len([f for f in current if f.needs_human_review]),
         "flags_gap": len([f for f in flags if f.category == "gap"]),

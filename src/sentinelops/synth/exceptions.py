@@ -38,7 +38,7 @@ COMPLIANCE_EXCEPTIONS: list[ComplianceException] = [
     ComplianceException(
         id="EXC-001",
         control_id="CTRL-BCP-TEST",
-        process_area_id="AREA-PLATFORM",
+        auditable_unit_id="AREA-PLATFORM",
         rationale=(
             "Continuity exercise deferred while the disaster recovery estate is "
             "migrated to the new region. Migration completes Q1 2027."
@@ -51,7 +51,7 @@ COMPLIANCE_EXCEPTIONS: list[ComplianceException] = [
     ComplianceException(
         id="EXC-002",
         control_id="CTRL-THIRD-PARTY-ACCESS",
-        process_area_id="AREA-MKTG",
+        auditable_unit_id="AREA-MKTG",
         rationale=(
             "Third-party access recertification waived for the agency roster "
             "pending consolidation of marketing suppliers under a single master "
@@ -65,7 +65,7 @@ COMPLIANCE_EXCEPTIONS: list[ComplianceException] = [
     ComplianceException(
         id="EXC-003",
         control_id="CTRL-INCIDENT-PM",
-        process_area_id="AREA-FINREP",
+        auditable_unit_id="AREA-FINREP",
         rationale=(
             "Post-mortem requirement waived during the reporting platform "
             "freeze. Withdrawn after the audit committee objected."
@@ -78,7 +78,7 @@ COMPLIANCE_EXCEPTIONS: list[ComplianceException] = [
     ComplianceException(
         id="EXC-004",
         control_id="CTRL-CRYPTO-KEY",
-        process_area_id="AREA-HR",
+        auditable_unit_id="AREA-HR",
         rationale=(
             "Q1 key rotation for the HR data store was not carried out before "
             "the payroll platform migration froze the key management service. "
@@ -106,6 +106,6 @@ def suppresses(
     return (
         exception.status == "active"
         and exception.control_id == control_id
-        and exception.process_area_id == area_id
+        and exception.auditable_unit_id == area_id
         and exception.granted_at <= on <= exception.expires_at
     )

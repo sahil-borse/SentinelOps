@@ -53,12 +53,12 @@ def outcomes(conn, corpus):
             continue  # the remediation shares coordinates with what it answers
         key = (
             f"CHK-{row['control_id'].removeprefix('CTRL-')}-"
-            f"{row['process_area_id'].removeprefix('AREA-')}-{row['period']}"
+            f"{row['auditable_unit_id'].removeprefix('AREA-')}-{row['period']}"
         )
         truth[key] = row
 
     paired = []
-    for finding in repositories(conn)["findings"].list():
+    for finding in repositories(conn)["assessments"].list():
         if finding.decided_by != "s3_model":
             continue
         row = truth.get(finding.check_instance_id)

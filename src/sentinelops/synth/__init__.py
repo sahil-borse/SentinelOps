@@ -9,7 +9,7 @@
 The truth file is written by this package and read by nothing inside it.
 """
 
-from .areas import PROCESS_AREAS
+from .units import AUDITABLE_UNITS, IDENTITIES, IDENTITIES
 from .calendar import SIMULATED_TODAY, Period, due_date, periods_for
 from .controls import CONTROL_DEFINITIONS, CONTROL_SPECS, STRUCTURED_CONTROL_IDS
 from .exceptions import COMPLIANCE_EXCEPTIONS
@@ -30,7 +30,8 @@ __all__ = [
     "Corpus",
     "DEFAULT_SEED",
     "DEFAULT_YEAR",
-    "PROCESS_AREAS",
+    "AUDITABLE_UNITS",
+    "IDENTITIES",
     "Period",
     "SIMULATED_TODAY",
     "STRUCTURED_CONTROL_IDS",

@@ -93,7 +93,7 @@ class ManualAssumptions:
 class ManualReview:
     instance_key: str
     control_id: str
-    process_area_id: str
+    auditable_unit_id: str
     period: str
     performed: bool
     reviewer: str | None
@@ -164,7 +164,7 @@ def simulate(
     }
 
     truth_rows = {
-        (r["control_id"], r["process_area_id"], r["period"]): r
+        (r["control_id"], r["auditable_unit_id"], r["period"]): r
         for r in corpus.truth_rows
         if not r["is_remediation"] and r["defect_kind"] != "exception_suppressed"
     }
@@ -189,7 +189,7 @@ def simulate(
                 ManualReview(
                     instance_key=f"CHK-{control_id.removeprefix('CTRL-')}-"
                                  f"{area_id.removeprefix('AREA-')}-{period_label}",
-                    control_id=control_id, process_area_id=area_id,
+                    control_id=control_id, auditable_unit_id=area_id,
                     period=period_label, performed=False, reviewer=None,
                     verdict=None, truth_verdict=expected, due_date=deadline,
                     detected_on=detected, defect_kind=kind,
@@ -212,7 +212,7 @@ def simulate(
             ManualReview(
                 instance_key=f"CHK-{control_id.removeprefix('CTRL-')}-"
                              f"{area_id.removeprefix('AREA-')}-{period_label}",
-                control_id=control_id, process_area_id=area_id, period=period_label,
+                control_id=control_id, auditable_unit_id=area_id, period=period_label,
                 performed=True, reviewer=reviewer, verdict=verdict,
                 truth_verdict=expected, due_date=deadline, detected_on=detected,
                 defect_kind=kind,
@@ -235,7 +235,7 @@ def disagreement_on_identical_evidence(corpus, outcome: ManualOutcome) -> dict:
         key = (submission.control_id, submission.content_hash)
         instance_key = (
             f"CHK-{submission.control_id.removeprefix('CTRL-')}-"
-            f"{submission.process_area_id.removeprefix('AREA-')}-{submission.period}"
+            f"{submission.auditable_unit_id.removeprefix('AREA-')}-{submission.period}"
         )
         by_hash.setdefault(key, []).append(instance_key)
 

@@ -4,7 +4,7 @@ The system prompt is a module constant with no interpolation of any kind. It is
 sent first and byte-identical on every call, so the provider cache can hit and
 so the same evidence judged against the same criteria yields the same verdict
 whichever process area it belongs to. Changing it means adding a _V3, not
-editing a string in place — the version travels onto every Finding, and a
+editing a string in place — the version travels onto every Assessment, and a
 verdict you cannot reproduce is a verdict you cannot defend.
 
 **The evidence is untrusted.** It was written by the party who benefits from a
@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Any
 
-#: Travels onto every Finding this prompt produces.
+#: Travels onto every Assessment this prompt produces.
 PROMPT_VERSION = "assessment_v2"
 
 EVIDENCE_OPEN = "<<<UNTRUSTED_EVIDENCE>>>"

@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
-from ..entities import CheckInstance, ControlDefinition, Evidence, Finding
+from ..entities import CheckInstance, ControlDefinition, Evidence, Assessment
 from ..periods import periods_for
 
 #: Statuses S2 will look at. `pending` means not yet due — there is nothing to
@@ -89,8 +89,8 @@ def evidence_id_for(submission_id: str) -> str:
     return f"EV-{submission_id}"
 
 
-def finding_id_for(instance_id: str, sequence: int) -> str:
-    return f"FND-{instance_id.removeprefix('CHK-')}-{sequence}"
+def assessment_id_for(instance_id: str, sequence: int) -> str:
+    return f"ASM-{instance_id.removeprefix('CHK-')}-{sequence}"
 
 
 def bind_evidence(repo, instance: CheckInstance, submission) -> Evidence:
@@ -219,10 +219,10 @@ def _write_finding(
     needs_human_review: bool = False,
     carried_forward_from: str | None = None,
     as_of: date | None = None,
-) -> Finding:
-    sequence = len(repo["findings"].list(check_instance_id=instance.id)) + 1
-    finding = Finding(
-        id=finding_id_for(instance.id, sequence),
+) -> Assessment:
+    sequence = len(repo["assessments"].list(check_instance_id=instance.id)) + 1
+    finding = Assessment(
+        id=assessment_id_for(instance.id, sequence),
         check_instance_id=instance.id,
         verdict=verdict,
         confidence=confidence,
@@ -232,18 +232,18 @@ def _write_finding(
         recommended_action=recommended_action,
         needs_human_review=needs_human_review,
         assessed_at=datetime.combine(as_of, datetime.min.time()) if as_of else datetime.now(),
-        supersedes_finding_id=None,
+        supersedes_assessment_id=None,
         carried_forward_from=carried_forward_from,
         decided_by=decided_by,
     )
-    repo["findings"].add(finding)
+    repo["assessments"].add(finding)
     instance.status = "assessed"
     repo["instances"].update(instance)
     repo["audit"].append(
         actor="system",
         owner=instance.owner_name,
-        action="finding_recorded",
-        entity_type="Finding",
+        action="assessment_recorded",
+        entity_type="Assessment",
         entity_id=finding.id,
         # The trail carries the citation *text*, not a count of citations. An
         # auditor reading the log alone has to be able to see what was quoted;
@@ -251,7 +251,7 @@ def _write_finding(
         detail={
             "check_instance_id": instance.id,
             "control_id": instance.control_id,
-            "process_area_id": instance.process_area_id,
+            "auditable_unit_id": instance.auditable_unit_id,
             "period": instance.period,
             "verdict": verdict,
             "confidence": confidence,
@@ -276,31 +276,31 @@ def _prior_findings_by_hash(repo, instances: dict[str, CheckInstance]) -> dict:
     have changed, so the prior finding is carried forward instead of being
     bought again.
     """
-    index: dict[tuple[str, str, str], tuple[str, Finding]] = {}
+    index: dict[tuple[str, str, str], tuple[str, Assessment]] = {}
     evidence_by_instance: dict[str, Evidence] = {}
     for evidence in repo["evidence"].list():
         evidence_by_instance.setdefault(evidence.check_instance_id, evidence)
 
-    for finding in repo["findings"].list():
+    for finding in repo["assessments"].list():
         instance = instances.get(finding.check_instance_id)
         evidence = evidence_by_instance.get(finding.check_instance_id)
         if instance is None or evidence is None:
             continue
-        key = (instance.control_id, instance.process_area_id, evidence.content_hash)
+        key = (instance.control_id, instance.auditable_unit_id, evidence.content_hash)
         held = index.get(key)
         if held is None or instance.period < held[0]:
             index[key] = (instance.period, finding)
     return index
 
 
-def _remember(carried: dict, instance: CheckInstance, evidence: Evidence, finding: Finding) -> None:
+def _remember(carried: dict, instance: CheckInstance, evidence: Evidence, finding: Assessment) -> None:
     """Index a finding so a later period with identical evidence can reuse it.
 
     Updated as the loop writes findings, not only from what was already on disk:
     otherwise January's verdict would be invisible to February within the same
     run, and the rule would only ever fire across separate cycles.
     """
-    key = (instance.control_id, instance.process_area_id, evidence.content_hash)
+    key = (instance.control_id, instance.auditable_unit_id, evidence.content_hash)
     held = carried.get(key)
     if held is None or instance.period < held[0]:
         carried[key] = (instance.period, finding)
@@ -319,9 +319,11 @@ def run(conn, as_of: date, *, year: int = 2026) -> PrescreenReport:
 
 
 def _run(conn, as_of: date, *, year: int = 2026) -> PrescreenReport:
+    from .. import directory
     from ..repositories import repositories
 
     repo = repositories(conn)
+    people = directory.load(conn)
     controls = {c.id: c for c in repo["controls"].list()}
     instances = {i.id: i for i in repo["instances"].list()}
     report = PrescreenReport(as_of=as_of)
@@ -338,7 +340,7 @@ def _run(conn, as_of: date, *, year: int = 2026) -> PrescreenReport:
             continue  # slice 7 re-assesses these through the action loop
         if submission.submitted_at.date() > as_of:
             continue
-        key = (submission.control_id, submission.process_area_id, submission.period)
+        key = (submission.control_id, submission.auditable_unit_id, submission.period)
         submissions.setdefault(key, []).append(submission)
     for filings in submissions.values():
         filings.sort(key=lambda s: s.submitted_at)
@@ -353,7 +355,7 @@ def _run(conn, as_of: date, *, year: int = 2026) -> PrescreenReport:
         report.considered += 1
         control = controls[instance.control_id]
         period_end = period_ends[(instance.control_id, instance.period)]
-        key = (instance.control_id, instance.process_area_id, instance.period)
+        key = (instance.control_id, instance.auditable_unit_id, instance.period)
         filings = submissions.get(key, [])
 
         # 1 — nothing was ever filed
@@ -404,7 +406,7 @@ def _run(conn, as_of: date, *, year: int = 2026) -> PrescreenReport:
 
         # 3 — byte-identical to evidence already judged for this control here
         prior = carried.get(
-            (instance.control_id, instance.process_area_id, evidence.content_hash)
+            (instance.control_id, instance.auditable_unit_id, evidence.content_hash)
         )
         if prior is not None and prior[0] != instance.period:
             prior_period, prior_finding = prior

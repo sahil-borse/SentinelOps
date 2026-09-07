@@ -47,7 +47,7 @@ def main() -> None:
     ):
         submission, row = _sample(corpus, predicate)
         _rule(f"{label}  ({submission.id})")
-        print(f"  {submission.control_id} / {submission.process_area_id} /"
+        print(f"  {submission.control_id} / {submission.auditable_unit_id} /"
               f" {submission.period}   doc_type={submission.doc_type}")
         print()
         for line in submission.content.splitlines():
@@ -58,7 +58,7 @@ def main() -> None:
     _rule("EXCEPTIONS")
     for exception in corpus.exceptions:
         print(f"  {exception.id}  {exception.status:<8} {exception.control_id}"
-              f" / {exception.process_area_id}")
+              f" / {exception.auditable_unit_id}")
         print(f"        {exception.granted_at} -> {exception.expires_at}"
               f"   approved by {exception.approved_by}")
 

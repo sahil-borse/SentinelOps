@@ -32,7 +32,9 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
-from ..entities import CheckInstance, ComplianceException, ControlDefinition, ProcessArea
+from ..entities import CheckInstance, ComplianceException, ControlDefinition, AuditableUnit
+from .. import directory
+from ..directory import Directory
 from ..periods import due_date, periods_for
 from .applicability import applicability_matrix, validate_expressions
 
@@ -115,13 +117,22 @@ def instance_id(control_id: str, area_id: str, period: str) -> str:
     return f"CHK-{control}-{area}-{period}"
 
 
-def owner_chain(area: ProcessArea) -> list[tuple[str, str]]:
-    """Who hears about it, in order. Level 0 owns it; 1 and 2 get escalations."""
-    return [
-        (area.owner_name, area.owner_team),
-        (f"Head of {area.owner_team}", area.owner_team),
-        ("Group Compliance", "Group Compliance"),
+def owner_chain(unit: AuditableUnit, people: Directory) -> list[tuple[str, str]]:
+    """Who hears about it, in order. Level 0 owns it; 1 and 2 get escalations.
+
+    Walks `reports_to` rather than assembling a manager from a team name, so
+    every rung is a person who exists. If the reporting line runs out before the
+    top rung, the last real person is repeated rather than inventing one.
+    """
+    chain = [
+        (person.name, unit.name if person.auditable_unit else "Group Compliance")
+        for person in people.escalation_chain(unit.owner_identity)
     ]
+    if not chain:
+        chain = [(people.owner_name(unit), unit.name)]
+    while len(chain) < 3:
+        chain.append(chain[-1])
+    return chain
 
 
 def covers(
@@ -138,7 +149,7 @@ def covers(
     return (
         exception.status in ("active", "expired")
         and exception.control_id == control_id
-        and exception.process_area_id == area_id
+        and exception.auditable_unit_id == area_id
         and exception.granted_at <= period_end <= exception.expires_at
     )
 
@@ -172,7 +183,7 @@ def waives(
     return (
         exception.status == "active"
         and exception.control_id == control_id
-        and exception.process_area_id == area_id
+        and exception.auditable_unit_id == area_id
         and period_end <= exception.expires_at
         and exception.granted_at <= as_of <= exception.expires_at
     )
@@ -189,7 +200,9 @@ def _log(repo, notification: Notification, actor: str = "system") -> None:
     )
 
 
-def _expire_exceptions(repo, as_of: date, result: CycleResult) -> None:
+def _expire_exceptions(
+    repo, as_of: date, result: CycleResult, people: Directory
+) -> None:
     """A lapsed waiver is news. It raises an alert of its own."""
     for exception in repo["exceptions"].list(status="active"):
         if exception.expires_at >= as_of:
@@ -198,16 +211,16 @@ def _expire_exceptions(repo, as_of: date, result: CycleResult) -> None:
         repo["exceptions"].update(exception)
         result.expired_exceptions.append(exception.id)
 
-        area = repo["areas"].get(exception.process_area_id)
+        area = repo["units"].get(exception.auditable_unit_id)
         repo["audit"].append(
             actor="system",
-            owner=area.owner_name,
+            owner=people.owner_name(area),
             action="exception_expired",
             entity_type="ComplianceException",
             entity_id=exception.id,
             detail={
                 "control_id": exception.control_id,
-                "process_area_id": exception.process_area_id,
+                "auditable_unit_id": exception.auditable_unit_id,
                 "expired_on": exception.expires_at.isoformat(),
                 "detected_on": as_of.isoformat(),
                 "consequence": "control returns to the schedule from the next period",
@@ -215,13 +228,13 @@ def _expire_exceptions(repo, as_of: date, result: CycleResult) -> None:
         )
         notification = Notification(
             kind="exception_expired",
-            to_team=area.owner_team,
-            to_owner=area.owner_name,
+            to_team=area.name,
+            to_owner=people.owner_name(area),
             entity_type="ComplianceException",
             entity_id=exception.id,
             subject=(
                 f"Exception {exception.id} for {exception.control_id} in"
-                f" {exception.process_area_id} lapsed on {exception.expires_at}"
+                f" {exception.auditable_unit_id} lapsed on {exception.expires_at}"
                 f" — the control is due again"
             ),
             as_of=as_of,
@@ -241,11 +254,12 @@ def _open_periods(control: ControlDefinition, policy: SchedulePolicy, as_of: dat
 
 def _generate(
     repo,
+    people: Directory,
     as_of: date,
     policy: SchedulePolicy,
     result: CycleResult,
     controls: dict[str, ControlDefinition],
-    areas: dict[str, ProcessArea],
+    areas: dict[str, AuditableUnit],
     exceptions: list[ComplianceException],
     existing: dict[str, CheckInstance],
 ) -> None:
@@ -272,12 +286,12 @@ def _generate(
                 instance = CheckInstance(
                     id=identifier,
                     control_id=control_id,
-                    process_area_id=area_id,
+                    auditable_unit_id=area_id,
                     period=period.label,
                     due_date=due_date(period, control.grace_days),
                     status="pending",
-                    assigned_team=area.owner_team,
-                    owner_name=area.owner_name,
+                    assigned_team=area.name,
+                    owner_name=people.owner_name(area),
                 )
                 repo["instances"].add(instance)
                 existing[identifier] = instance
@@ -285,25 +299,25 @@ def _generate(
 
                 repo["audit"].append(
                     actor="system",
-                    owner=area.owner_name,
+                    owner=people.owner_name(area),
                     action="check_instance_created",
                     entity_type="CheckInstance",
                     entity_id=identifier,
                     detail={
                         "control_id": control_id,
                         "control_title": control.title,
-                        "process_area_id": area_id,
+                        "auditable_unit_id": area_id,
                         "area_name": area.name,
                         "period": period.label,
                         "due_date": instance.due_date.isoformat(),
                         "frequency": control.frequency,
-                        "assigned_team": area.owner_team,
+                        "assigned_team": area.name,
                     },
                 )
                 notification = Notification(
                     kind="assigned",
-                    to_team=area.owner_team,
-                    to_owner=area.owner_name,
+                    to_team=area.name,
+                    to_owner=people.owner_name(area),
                     entity_type="CheckInstance",
                     entity_id=identifier,
                     subject=(
@@ -349,10 +363,11 @@ def _escalated_levels(repo) -> dict[str, int]:
 
 def _advance_states(
     repo,
+    people: Directory,
     as_of: date,
     policy: SchedulePolicy,
     result: CycleResult,
-    areas: dict[str, ProcessArea],
+    areas: dict[str, AuditableUnit],
     exceptions: list[ComplianceException],
     instances: dict[str, CheckInstance],
     period_ends: dict[tuple[str, str], date],
@@ -362,7 +377,7 @@ def _advance_states(
     for submission in submissions:
         if submission.submitted_at.date() > as_of:
             continue  # not filed yet, as far as this cycle is concerned
-        key = (submission.control_id, submission.process_area_id, submission.period)
+        key = (submission.control_id, submission.auditable_unit_id, submission.period)
         prior = arrived.get(key)
         if prior is None or submission.submitted_at < prior.submitted_at:
             arrived[key] = submission
@@ -374,7 +389,7 @@ def _advance_states(
     # formally excused. Without this an approved deviation granted for an
     # outstanding item excuses nothing, because S2 has already settled it.
     current_findings = {}
-    for finding in repo["findings"].list():
+    for finding in repo["assessments"].list():
         held = current_findings.get(finding.check_instance_id)
         if held is None or finding.id > held.id:
             current_findings[finding.check_instance_id] = finding
@@ -392,7 +407,7 @@ def _advance_states(
                     e
                     for e in exceptions
                     if waives(
-                        e, instance.control_id, instance.process_area_id,
+                        e, instance.control_id, instance.auditable_unit_id,
                         period_end, as_of,
                     )
                 ),
@@ -400,15 +415,15 @@ def _advance_states(
             )
             if excuse is None:
                 continue
-            area = areas[instance.process_area_id]
+            area = areas[instance.auditable_unit_id]
             _transition(
-                repo, instance, "waived", "system", area.owner_name,
+                repo, instance, "waived", "system", people.owner_name(area),
                 {
                     "exception_id": excuse.id,
                     "approved_by": excuse.approved_by,
                     "granted_at": excuse.granted_at.isoformat(),
                     "expires_at": excuse.expires_at.isoformat(),
-                    "excused_finding_id": finding.id,
+                    "excused_assessment_id": finding.id,
                     "excused_verdict": finding.verdict,
                     "as_of": as_of.isoformat(),
                     "note": (
@@ -425,7 +440,7 @@ def _advance_states(
                 entity_type="CheckInstance",
                 entity_id=instance.id,
                 subject=(
-                    f"{instance.control_id} for {instance.process_area_id}"
+                    f"{instance.control_id} for {instance.auditable_unit_id}"
                     f" ({instance.period}) — {finding.verdict} excused under"
                     f" {excuse.id}, approved by {excuse.approved_by}"
                 ),
@@ -435,8 +450,8 @@ def _advance_states(
             _log(repo, notification)
             continue
 
-        area = areas[instance.process_area_id]
-        key = (instance.control_id, instance.process_area_id, instance.period)
+        area = areas[instance.auditable_unit_id]
+        key = (instance.control_id, instance.auditable_unit_id, instance.period)
         period_end = period_ends[(instance.control_id, instance.period)]
 
         if instance.status in ("pending", "overdue"):
@@ -445,7 +460,7 @@ def _advance_states(
                     e
                     for e in exceptions
                     if waives(
-                        e, instance.control_id, instance.process_area_id,
+                        e, instance.control_id, instance.auditable_unit_id,
                         period_end, as_of,
                     )
                 ),
@@ -453,7 +468,7 @@ def _advance_states(
             )
             if excuse is not None:
                 _transition(
-                    repo, instance, "waived", "system", area.owner_name,
+                    repo, instance, "waived", "system", people.owner_name(area),
                     {
                         "exception_id": excuse.id,
                         "approved_by": excuse.approved_by,
@@ -473,7 +488,7 @@ def _advance_states(
                     entity_type="CheckInstance",
                     entity_id=instance.id,
                     subject=(
-                        f"{instance.control_id} for {instance.process_area_id}"
+                        f"{instance.control_id} for {instance.auditable_unit_id}"
                         f" ({instance.period}) is waived under {excuse.id},"
                         f" approved by {excuse.approved_by}"
                     ),
@@ -495,7 +510,7 @@ def _advance_states(
         if submission is None and as_of > instance.due_date:
             if instance.status != "overdue":
                 days = (as_of - instance.due_date).days
-                _transition(repo, instance, "overdue", "system", area.owner_name,
+                _transition(repo, instance, "overdue", "system", people.owner_name(area),
                             {"due_date": instance.due_date.isoformat(),
                              "days_overdue": days, "as_of": as_of.isoformat()})
                 result.transitions.append((instance.id, "overdue", f"{days}d"))
@@ -506,14 +521,14 @@ def _advance_states(
                     entity_type="CheckInstance",
                     entity_id=instance.id,
                     subject=(
-                        f"{instance.control_id} for {instance.process_area_id}"
+                        f"{instance.control_id} for {instance.auditable_unit_id}"
                         f" ({instance.period}) is {days} day(s) overdue"
                     ),
                     as_of=as_of,
                 )
                 result.notifications.append(notification)
                 _log(repo, notification)
-            _escalate(repo, instance, as_of, policy, result, area, already)
+            _escalate(repo, people, instance, as_of, policy, result, area, already)
             continue
 
         if instance.status == "pending":
@@ -526,7 +541,7 @@ def _advance_states(
                     entity_type="CheckInstance",
                     entity_id=instance.id,
                     subject=(
-                        f"{instance.control_id} for {instance.process_area_id}"
+                        f"{instance.control_id} for {instance.auditable_unit_id}"
                         f" ({instance.period}) is due in {until_due} day(s)"
                     ),
                     as_of=as_of,
@@ -537,11 +552,12 @@ def _advance_states(
 
 def _escalate(
     repo,
+    people: Directory,
     instance: CheckInstance,
     as_of: date,
     policy: SchedulePolicy,
     result: CycleResult,
-    area: ProcessArea,
+    area: AuditableUnit,
     already: dict[str, int],
 ) -> None:
     """Walk an overdue instance up the owner chain, one level per interval."""
@@ -549,7 +565,7 @@ def _escalate(
     earned = min(
         days_overdue // policy.escalate_after_days, policy.max_escalation_level
     )
-    chain = owner_chain(area)
+    chain = owner_chain(area, people)
     for level in range(already.get(instance.id, 0) + 1, earned + 1):
         name, team = chain[min(level, len(chain) - 1)]
         repo["audit"].append(
@@ -574,7 +590,7 @@ def _escalate(
             entity_id=instance.id,
             subject=(
                 f"Escalation level {level}: {instance.control_id} for"
-                f" {instance.process_area_id} ({instance.period}) is"
+                f" {instance.auditable_unit_id} ({instance.period}) is"
                 f" {days_overdue} day(s) overdue"
             ),
             as_of=as_of,
@@ -621,8 +637,9 @@ def _run_cycle(
     from ..repositories import repositories
 
     repo = repositories(conn)
+    people = directory.load(conn)
     controls = {c.id: c for c in repo["controls"].list()}
-    areas = {a.id: a for a in repo["areas"].list()}
+    areas = {a.id: a for a in repo["units"].list()}
 
     problems = validate_expressions(list(controls.values()))
     if problems:
@@ -639,11 +656,12 @@ def _run_cycle(
                 "human_triggered": actor != "system"},
     )
 
-    _expire_exceptions(repo, as_of, result)
+    _expire_exceptions(repo, as_of, result, people)
     exceptions = repo["exceptions"].list()
     existing = {i.id: i for i in repo["instances"].list()}
 
-    _generate(repo, as_of, policy, result, controls, areas, exceptions, existing)
+    _generate(repo, people, as_of, policy, result, controls, areas, exceptions,
+              existing)
 
     period_ends = {
         (control.id, period.label): period.end
@@ -651,8 +669,8 @@ def _run_cycle(
         for period in periods_for(control.frequency, policy.year)
     }
     instances = {i.id: i for i in repo["instances"].list()}
-    _advance_states(repo, as_of, policy, result, areas, exceptions, instances,
-                    period_ends)
+    _advance_states(repo, people, as_of, policy, result, areas, exceptions,
+                    instances, period_ends)
 
     repo["audit"].append(
         actor=actor,

@@ -239,7 +239,7 @@ def test_scoring_ignores_instances_the_truth_file_does_not_cover():
 def test_superseded_findings_are_excluded_from_every_metric(evaluation):
     """A remediated failure must not be counted twice."""
     assert evaluation.pipeline["gap_detection"].total > 200
-    assert evaluation.pipeline["zero_model"]["findings"] == (
+    assert evaluation.pipeline["zero_model"]["assessments"] == (
         evaluation.pipeline["zero_model"]["decided_by_rules"]
         + evaluation.pipeline["zero_model"]["decided_by_model"]
     )

@@ -11,7 +11,7 @@ from sentinelops.entities import EvidenceSubmission
 from sentinelops.synth import (
     COMPLIANCE_EXCEPTIONS,
     CONTROL_SPECS,
-    PROCESS_AREAS,
+    AUDITABLE_UNITS,
     STRUCTURED_CONTROL_IDS,
     generate_corpus,
     periods_for,
@@ -61,7 +61,7 @@ def test_area_count_and_varied_attributes(corpus):
         assert values == {True, False}, f"{attribute} does not vary"
     assert len({a.attributes["region"] for a in corpus.areas}) >= 3
     assert len({a.attributes["criticality"] for a in corpus.areas}) >= 3
-    assert all(a.owner_name and a.owner_team for a in corpus.areas)
+    assert all(a.owner_identity and a.kind for a in corpus.areas)
 
 
 def test_control_count_and_frequency_spread(corpus):
@@ -112,12 +112,12 @@ def test_areas_receive_genuinely_different_control_sets(corpus):
 
 def test_applicability_matches_every_generated_pair(corpus):
     """Slice 3's S0 engine must reproduce exactly these pairings."""
-    areas = {a.id: a for a in PROCESS_AREAS}
+    areas = {a.id: a for a in AUDITABLE_UNITS}
     for control_id, area_id in corpus.applicable_pairs:
         spec = SPECS_BY_ID[control_id]
         assert applies(spec.applies_when, areas[area_id].attributes)
     for submission in corpus.submissions:
-        assert (submission.control_id, submission.process_area_id) in set(
+        assert (submission.control_id, submission.auditable_unit_id) in set(
             corpus.applicable_pairs
         )
 
@@ -258,12 +258,12 @@ def test_stale_evidence_predates_its_freshness_window(corpus):
 
 def test_missing_evidence_has_no_submission(corpus):
     submitted = {
-        (s.control_id, s.process_area_id, s.period) for s in corpus.submissions
+        (s.control_id, s.auditable_unit_id, s.period) for s in corpus.submissions
     }
     for row in corpus.truth_rows:
         if row["defect_kind"] == "missing":
             assert row["submission_id"] is None
-            assert (row["control_id"], row["process_area_id"], row["period"]) not in submitted
+            assert (row["control_id"], row["auditable_unit_id"], row["period"]) not in submitted
 
 
 # --- the consistency pair --------------------------------------------------
@@ -274,10 +274,10 @@ def test_the_same_evidence_is_filed_in_two_areas(corpus):
         for s in corpus.submissions
         if s.control_id == CONSISTENCY_PAIR["control_id"]
         and s.period == CONSISTENCY_PAIR["period"]
-        and s.process_area_id in CONSISTENCY_PAIR["area_ids"]
+        and s.auditable_unit_id in CONSISTENCY_PAIR["area_ids"]
     ]
     assert len(paired) == 2
-    assert paired[0].process_area_id != paired[1].process_area_id
+    assert paired[0].auditable_unit_id != paired[1].auditable_unit_id
     assert paired[0].content == paired[1].content
     assert paired[0].content_hash == paired[1].content_hash
 
@@ -314,7 +314,7 @@ def test_the_fourth_exception_arrives_after_its_obligation_is_overdue(corpus):
     """EXC-004 waives rather than suppresses, so it must miss every period end."""
     exception = next(e for e in corpus.exceptions if e.id == "EXC-004")
     assert exception.control_id == "CTRL-CRYPTO-KEY"
-    assert exception.process_area_id == "AREA-HR"
+    assert exception.auditable_unit_id == "AREA-HR"
     assert exception.granted_at.isoformat() == "2026-05-11"
     assert exception.expires_at.isoformat() == "2026-06-19"
 
@@ -340,13 +340,13 @@ def test_the_fourth_exception_leaves_the_corpus_untouched(corpus):
     assert len(corpus.truth_rows) == 352
 
     # the obligation it waives is genuinely unevidenced
-    filed = {(s.control_id, s.process_area_id, s.period) for s in corpus.submissions}
+    filed = {(s.control_id, s.auditable_unit_id, s.period) for s in corpus.submissions}
     assert ("CTRL-CRYPTO-KEY", "AREA-HR", "2026-Q1") not in filed
 
 
 def test_an_active_exception_suppresses_its_periods_and_the_lapse_restores_them(corpus):
     suppressed = {
-        (r["control_id"], r["process_area_id"], r["period"])
+        (r["control_id"], r["auditable_unit_id"], r["period"])
         for r in corpus.truth_rows
         if r["defect_kind"] == "exception_suppressed"
     }
@@ -355,7 +355,7 @@ def test_an_active_exception_suppresses_its_periods_and_the_lapse_restores_them(
     assert ("CTRL-THIRD-PARTY-ACCESS", "AREA-MKTG", "2026-Q3") not in suppressed
 
     filed = {
-        (s.control_id, s.process_area_id, s.period) for s in corpus.submissions
+        (s.control_id, s.auditable_unit_id, s.period) for s in corpus.submissions
     }
     assert ("CTRL-THIRD-PARTY-ACCESS", "AREA-MKTG", "2026-Q1") not in filed
     assert ("CTRL-THIRD-PARTY-ACCESS", "AREA-MKTG", "2026-Q3") in filed
@@ -363,8 +363,8 @@ def test_an_active_exception_suppresses_its_periods_and_the_lapse_restores_them(
 
 def test_a_revoked_exception_suppresses_nothing(corpus):
     revoked = next(e for e in corpus.exceptions if e.status == "revoked")
-    filed = {(s.control_id, s.process_area_id) for s in corpus.submissions}
-    assert (revoked.control_id, revoked.process_area_id) in filed
+    filed = {(s.control_id, s.auditable_unit_id) for s in corpus.submissions}
+    assert (revoked.control_id, revoked.auditable_unit_id) in filed
 
 
 # --- remediation -----------------------------------------------------------
@@ -379,9 +379,9 @@ def test_remediation_evidence_answers_a_real_gap(corpus):
         assert remediation.is_remediation is True
         assert original.is_remediation is False
         assert remediation.submitted_at > original.submitted_at
-        assert (remediation.control_id, remediation.process_area_id, remediation.period) == (
+        assert (remediation.control_id, remediation.auditable_unit_id, remediation.period) == (
             original.control_id,
-            original.process_area_id,
+            original.auditable_unit_id,
             original.period,
         )
         assert row["expected_verdict"] == "compliant"
@@ -394,13 +394,13 @@ def test_the_corpus_loads_into_sqlite(conn, corpus):
     counts = {
         table: conn.execute(f"SELECT COUNT(*) c FROM {table}").fetchone()["c"]
         for table in (
-            "process_areas",
+            "auditable_units",
             "control_definitions",
             "compliance_exceptions",
             "evidence_submissions",
         )
     }
-    assert counts["process_areas"] == len(corpus.areas)
+    assert counts["auditable_units"] == len(corpus.areas)
     assert counts["control_definitions"] == len(corpus.controls)
     assert counts["compliance_exceptions"] == len(corpus.exceptions)
     assert counts["evidence_submissions"] == len(corpus.submissions)
@@ -409,7 +409,7 @@ def test_the_corpus_loads_into_sqlite(conn, corpus):
 def test_seeding_creates_no_findings_actions_or_instances(conn, corpus):
     """The generator supplies inputs; the pipeline produces judgements."""
     seed_database(conn, corpus)
-    for table in ("check_instances", "evidence", "findings", "actions"):
+    for table in ("check_instances", "evidence", "assessments", "actions"):
         assert conn.execute(f"SELECT COUNT(*) c FROM {table}").fetchone()["c"] == 0
 
 

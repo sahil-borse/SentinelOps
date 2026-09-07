@@ -9,7 +9,7 @@ def test_one_path_writes_every_record(tmp_path):
 
     assert finding.verdict in {"compliant", "partial", "gap", "insufficient_evidence"}
     assert finding.cited_spans, "an uncited compliance verdict is a bug"
-    assert action.finding_id == finding.id
+    assert action.assessment_id == finding.id
     assert action.status == "raised"
     assert action.owner_team == "Customer Operations"
 
@@ -17,10 +17,10 @@ def test_one_path_writes_every_record(tmp_path):
     assert actions == [
         "check_instance_created",
         "evidence_submitted",
-        "finding_recorded",
+        "assessment_recorded",
         "action_raised",
     ]
-    assert {e.actor for e in result["audit_events"]} == {"system", "user", "ai"}
+    assert {e.actor_kind for e in result["audit_events"]} == {"system", "user", "ai"}
 
     usage = result["token_usage"]
     assert len(usage) == 1

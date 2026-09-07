@@ -35,7 +35,7 @@ def truth_by_instance(truth: dict[str, Any]) -> dict[str, dict[str, Any]]:
             continue
         key = (
             f"CHK-{row['control_id'].removeprefix('CTRL-')}-"
-            f"{row['process_area_id'].removeprefix('AREA-')}-{row['period']}"
+            f"{row['auditable_unit_id'].removeprefix('AREA-')}-{row['period']}"
         )
         rows[key] = row
     return rows
@@ -113,7 +113,7 @@ def missed_checks(conn, truth_rows: dict[str, dict[str, Any]]) -> dict[str, Any]
     """
     repo = repositories(conn)
     instances = repo["instances"].list()
-    findings = {f.check_instance_id for f in repo["findings"].list()}
+    findings = {f.check_instance_id for f in repo["assessments"].list()}
     due = [i for i in instances if i.status != "waived"]
     unexamined = [i for i in due if i.id not in findings]
     return {
@@ -129,12 +129,12 @@ def time_to_detection(conn) -> dict[str, Any]:
     repo = repositories(conn)
     instances = {i.id: i for i in repo["instances"].list()}
     superseded = {
-        f.supersedes_finding_id
-        for f in repo["findings"].list()
-        if f.supersedes_finding_id
+        f.supersedes_assessment_id
+        for f in repo["assessments"].list()
+        if f.supersedes_assessment_id
     }
     gaps = []
-    for finding in repo["findings"].list():
+    for finding in repo["assessments"].list():
         if finding.verdict == "compliant" or finding.id in superseded:
             continue
         instance = instances.get(finding.check_instance_id)
@@ -162,11 +162,11 @@ def verdict_consistency(conn) -> dict[str, Any]:
     repo = repositories(conn)
     findings = {}
     superseded = {
-        f.supersedes_finding_id
-        for f in repo["findings"].list()
-        if f.supersedes_finding_id
+        f.supersedes_assessment_id
+        for f in repo["assessments"].list()
+        if f.supersedes_assessment_id
     }
-    for finding in repo["findings"].list():
+    for finding in repo["assessments"].list():
         if finding.id not in superseded:
             findings[finding.check_instance_id] = finding
 
@@ -202,17 +202,17 @@ def zero_model_share(conn) -> dict[str, Any]:
     """How much of the cycle reached a verdict without a model being asked."""
     repo = repositories(conn)
     superseded = {
-        f.supersedes_finding_id
-        for f in repo["findings"].list()
-        if f.supersedes_finding_id
+        f.supersedes_assessment_id
+        for f in repo["assessments"].list()
+        if f.supersedes_assessment_id
     }
-    current = [f for f in repo["findings"].list() if f.id not in superseded]
+    current = [f for f in repo["assessments"].list() if f.id not in superseded]
     by_tier: dict[str, int] = {}
     for finding in current:
         by_tier[finding.decided_by] = by_tier.get(finding.decided_by, 0) + 1
     rules = sum(v for k, v in by_tier.items() if not k.startswith("s3_"))
     return {
-        "findings": len(current),
+        "assessments": len(current),
         "decided_by_rules": rules,
         "decided_by_model": len(current) - rules,
         "share": rules / len(current) if current else 0.0,
@@ -267,8 +267,8 @@ def action_closure(conn) -> dict[str, Any]:
 def current_verdicts(conn) -> dict[str, str]:
     """The pipeline's final answer per instance, superseded findings excluded."""
     repo = repositories(conn)
-    findings = repo["findings"].list()
-    superseded = {f.supersedes_finding_id for f in findings if f.supersedes_finding_id}
+    findings = repo["assessments"].list()
+    superseded = {f.supersedes_assessment_id for f in findings if f.supersedes_assessment_id}
     return {
         f.check_instance_id: f.verdict for f in findings if f.id not in superseded
     }
