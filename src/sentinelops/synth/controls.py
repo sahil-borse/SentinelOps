@@ -1,4 +1,19 @@
-"""Fourteen controls, each with three numbered clauses.
+"""Fourteen controls: the compliance activities section 3 names, and no others.
+
+    periodic risk register review            controlled document review
+    internal audit readiness                 closure of prior audit findings
+    external audit readiness                 review of changed processes
+    process manual and guideline review      security awareness training
+    access review                            vendor and supplier due diligence
+    incident post-mortem completion          backup and restore verification
+    data retention review                    business continuity test
+
+This list is not ours. The stakeholder named these when asked what the auditable
+units actually do on a cycle, and an earlier version of this file carried a
+plausible-sounding set we had invented instead — access-export completeness,
+encryption key rotation, complaint-handling SLAs. They were reasonable controls
+and they were not this organisation's, which makes every applicability count
+computed over them a statement about a company that does not exist.
 
 Clause structure is what makes a *near-miss* precise: a near-miss document
 renders two clauses as met and exactly one as unmet, and the truth file records
@@ -9,9 +24,9 @@ Every clause carries three renderings — met, hedged and unmet — so the same
 control can produce a compliant document, a partial one and a gap from one
 definition rather than three hand-written files.
 
-Three controls have `evidence_kind = "structured"` (CTRL-ACCESS-EXPORT,
-CTRL-TRAINING, CTRL-BACKUP-VERIFY): their evidence is a metrics table and their
-thresholds are evaluated in code at S2, never by a model.
+Three controls have `evidence_kind = "structured"` (CTRL-TRAINING,
+CTRL-BACKUP-VERIFY, CTRL-FINDING-CLOSURE): their evidence is a metrics table and
+their thresholds are evaluated in code at S2, never by a model.
 """
 
 from __future__ import annotations
@@ -79,241 +94,250 @@ class ControlSpec:
 
 CONTROL_SPECS: list[ControlSpec] = [
     ControlSpec(
-        id="CTRL-ACCESS-REVIEW",
-        title="Quarterly privileged access review",
+        id="CTRL-RISK-REGISTER",
+        title="Periodic risk register review",
         frequency="quarterly",
         evidence_kind="document",
-        applies_when={"handles_pii": True},
-        doc_type="access_review_report",
-        wrong_doc_type="training_certificate",
+        applies_when={},
+        doc_type="risk_register_review",
+        wrong_doc_type="risk_heatmap_slide",
         freshness_days=100,
-        severity_weight=3.0,
+        severity_weight=2.5,
         clauses=[
             Clause(
-                "The owner of each system holding customer PII reviews every"
-                " privileged account within the period.",
-                "All {n} privileged accounts across the in-scope systems were listed"
-                " from the IAM export and reviewed line by line.",
-                "A sample of {j} of the {n} privileged accounts was reviewed; the"
-                " remainder are queued for a later pass.",
-                "No review of privileged accounts was performed in this period and"
-                " the IAM export was never pulled.",
+                "The unit's risk register is reviewed each quarter by the risk"
+                " owner.",
+                "The register was reviewed on {date} by {owner}.",
+                "The register was reviewed late in the quarter by {owner}.",
+                "No review of the register took place this quarter.",
                 narrow=False,
             ),
             Clause(
-                "The name of the reviewer and the date of review are recorded.",
-                "Reviewer: {owner}. Review completed on {date} and countersigned by"
-                " the {team} lead.",
-                "The review date of {date} is recorded but the reviewer field was"
-                " left blank.",
-                "The report records neither a reviewer name nor a review date.",
+                "Every risk rated high or above carries a current mitigation and"
+                " a named owner.",
+                "All {n} high-rated risks carry a current mitigation and a named"
+                " owner.",
+                "{j} of {n} high-rated risks carry a current mitigation; the"
+                " remainder are being drafted.",
+                "{j} of {n} high-rated risks have neither a mitigation nor an"
+                " owner recorded.",
             ),
             Clause(
-                "Every account no longer required is revoked, or a written"
-                " justification for retaining it is recorded.",
-                "{k} accounts were found to be no longer required and all {k} were"
-                " revoked on {date}, with change tickets attached.",
-                "{k} dormant accounts were identified; {j} were revoked and the"
-                " remainder are awaiting platform team action.",
-                "{k} dormant accounts were identified but revocation is still"
-                " pending and no justification has been recorded for them.",
+                "Risks closed during the quarter record the evidence for their"
+                " closure.",
+                "All {k} risks closed this quarter cite closure evidence.",
+                "{k} risks were closed; evidence is attached for most of them.",
+                "{k} risks were closed with no closure evidence recorded.",
             ),
         ],
     ),
     ControlSpec(
-        id="CTRL-ACCESS-EXPORT",
-        title="Access review export completeness",
-        frequency="quarterly",
-        evidence_kind="structured",
-        applies_when={"handles_pii": True},
-        doc_type="access_review_export",
-        wrong_doc_type="access_review_report",
-        freshness_days=100,
-        severity_weight=2.5,
-        thresholds={"reviewed_pct": {"min": 100.0}, "dormant_unresolved": {"max": 0}},
-        clauses=[
-            Clause(
-                "The access review export covers 100% of in-scope accounts.",
-                "reviewed_pct at or above 100.",
-                "reviewed_pct short of 100.",
-                "reviewed_pct materially short of 100.",
-            ),
-            Clause(
-                "No dormant account is left unresolved at period close.",
-                "dormant_unresolved at zero.",
-                "dormant_unresolved above zero.",
-                "dormant_unresolved well above zero.",
-            ),
-            Clause(
-                "The export is produced from the authoritative IAM system.",
-                "source recorded as the IAM system of record.",
-                "source recorded but not reconciled.",
-                "source not recorded.",
-            ),
-        ],
-    ),
-    ControlSpec(
-        id="CTRL-VENDOR-DD",
-        title="Annual vendor due diligence",
+        id="CTRL-INTERNAL-AUDIT-READY",
+        title="Internal audit readiness",
         frequency="annual",
         evidence_kind="document",
-        applies_when={"has_suppliers": True},
-        doc_type="vendor_due_diligence_pack",
-        wrong_doc_type="access_review_report",
-        freshness_days=400,
-        severity_weight=2.5,
-        grace_days=30,
-        clauses=[
-            Clause(
-                "Every vendor engaged during the year is assessed for financial,"
-                " legal and information security risk.",
-                "All {n} vendors engaged in {year} were assessed against the"
-                " three-pillar risk model and scored.",
-                "{j} of the {n} vendors engaged in {year} were assessed; the"
-                " remainder are scheduled for next cycle.",
-                "No vendor risk assessments were carried out in {year}.",
-                narrow=False,
-            ),
-            Clause(
-                "Vendors scored high risk have a documented mitigation plan.",
-                "{k} vendors scored high risk and each has a mitigation plan signed"
-                " off by {owner} on {date}.",
-                "{k} vendors scored high risk; mitigation plans are drafted but"
-                " unsigned.",
-                "{k} vendors scored high risk and no mitigation plans exist.",
-            ),
-            Clause(
-                "The assessment is refreshed within twelve months of the previous"
-                " one.",
-                "The previous assessment closed in {year} and this refresh was"
-                " completed on {date}, inside the twelve-month window.",
-                "The refresh was completed on {date}, slightly outside the"
-                " twelve-month window.",
-                "The last assessment predates the twelve-month window and no"
-                " refresh has been scheduled.",
-            ),
-        ],
-    ),
-    ControlSpec(
-        id="CTRL-SUPPLIER-ATTEST",
-        title="Supplier security attestation",
-        frequency="annual",
-        evidence_kind="document",
-        applies_when={"has_suppliers": True},
-        doc_type="supplier_attestation",
-        wrong_doc_type="vendor_due_diligence_pack",
-        freshness_days=400,
+        applies_when={},
+        doc_type="audit_readiness_pack",
+        wrong_doc_type="meeting_minutes",
+        freshness_days=180,
         severity_weight=2.0,
-        grace_days=30,
         clauses=[
             Clause(
-                "Each supplier with access to company systems provides a current"
-                " security attestation.",
-                "All {n} suppliers with system access returned a current attestation"
-                " for {year}.",
-                "{j} of {n} suppliers returned an attestation; {k} are outstanding.",
-                "No supplier attestations were collected for {year}.",
+                "The unit maintains a current index of the evidence an internal"
+                " audit would request.",
+                "The evidence index was refreshed on {date} and covers {n}"
+                " artefacts.",
+                "The evidence index exists but was last refreshed some time ago.",
+                "No evidence index is maintained for this unit.",
                 narrow=False,
             ),
             Clause(
-                "Attestations are reviewed and accepted by the owning team.",
-                "Each attestation was reviewed and accepted by {owner} on {date}.",
-                "Attestations were received but the review by {team} is incomplete.",
-                "Attestations on file were never reviewed by {team}.",
+                "Owners are nominated for each area the audit will cover.",
+                "Owners are nominated for all {n} areas in scope.",
+                "Owners are nominated for most areas; {j} are still to confirm.",
+                "{j} of {n} areas in scope have no nominated owner.",
             ),
             Clause(
-                "Suppliers failing attestation are placed on a remediation plan.",
-                "{k} suppliers failed and all {k} are on a tracked remediation plan.",
-                "{k} suppliers failed; remediation plans exist for {j} of them.",
-                "{k} suppliers failed attestation and none were placed on a plan.",
+                "Findings from the previous internal audit are reflected in the"
+                " readiness pack.",
+                "All {k} prior findings are reflected with their current status.",
+                "Prior findings are listed; {j} lack a current status.",
+                "The pack does not reference the previous audit's findings.",
             ),
         ],
     ),
     ControlSpec(
-        id="CTRL-DATA-RETENTION",
-        title="Data retention schedule adherence",
-        frequency="quarterly",
-        evidence_kind="document",
-        applies_when={"handles_pii": True},
-        doc_type="retention_review",
-        wrong_doc_type="incident_postmortem",
-        freshness_days=100,
-        severity_weight=3.0,
-        clauses=[
-            Clause(
-                "Personal data held beyond its retention period is identified each"
-                " quarter.",
-                "A retention sweep on {date} identified {k} record sets held beyond"
-                " their schedule.",
-                "A retention sweep was run on {date} but covered only the primary"
-                " store.",
-                "No retention sweep was run in this period.",
-                narrow=False,
-            ),
-            Clause(
-                "Over-retained data is deleted or its retention is re-justified.",
-                "All {k} over-retained record sets were deleted on {date} and the"
-                " deletion log is attached.",
-                "{j} of the {k} over-retained record sets were deleted; the rest"
-                " await legal review.",
-                "The {k} over-retained record sets remain in place with no deletion"
-                " or re-justification recorded.",
-            ),
-            Clause(
-                "The retention schedule itself is confirmed as current.",
-                "The retention schedule was confirmed current by {owner} on {date}.",
-                "The retention schedule was reviewed but the confirmation is"
-                " unsigned.",
-                "The retention schedule has not been confirmed as current.",
-            ),
-        ],
-    ),
-    ControlSpec(
-        id="CTRL-INCIDENT-PM",
-        title="Incident post-mortem completion",
-        frequency="monthly",
+        id="CTRL-EXTERNAL-AUDIT-READY",
+        title="External audit readiness",
+        frequency="annual",
         evidence_kind="document",
         applies_when={"criticality": ["high", "critical"]},
-        doc_type="incident_postmortem",
-        wrong_doc_type="retention_review",
+        doc_type="external_audit_pack",
+        wrong_doc_type="audit_readiness_pack",
+        freshness_days=180,
+        severity_weight=3.0,
+        clauses=[
+            Clause(
+                "Evidence required by the external auditor is assembled before"
+                " the fieldwork date.",
+                "The pack was assembled on {date}, ahead of fieldwork.",
+                "The pack was assembled close to the fieldwork date.",
+                "No pack was assembled ahead of fieldwork.",
+                narrow=False,
+            ),
+            Clause(
+                "Prior-year external findings are shown as closed or explained.",
+                "All {n} prior-year findings are shown as closed with evidence.",
+                "{j} of {n} prior-year findings are shown as closed; the rest are"
+                " in progress.",
+                "{j} of {n} prior-year findings carry no status at all.",
+            ),
+            Clause(
+                "A single point of contact is named for the auditor's requests.",
+                "{owner} is named as the point of contact.",
+                "A point of contact is named but is not confirmed as available.",
+                "No point of contact is named.",
+            ),
+        ],
+    ),
+    ControlSpec(
+        id="CTRL-PROCESS-MANUAL",
+        title="Process manual and guideline review",
+        frequency="annual",
+        evidence_kind="document",
+        applies_when={},
+        doc_type="process_manual_review",
+        wrong_doc_type="training_certificate",
+        freshness_days=180,
+        severity_weight=2.0,
+        clauses=[
+            Clause(
+                "The unit's process manual is reviewed at least annually and the"
+                " review is recorded.",
+                "The manual was reviewed on {date} by {owner}.",
+                "The manual was reviewed, though the record is incomplete.",
+                "No annual review of the manual was carried out.",
+                narrow=False,
+            ),
+            Clause(
+                "The manual matches the process actually followed.",
+                "All {n} documented steps match current practice.",
+                "{j} of {n} documented steps are ahead of the manual and being"
+                " updated.",
+                "{j} of {n} documented steps no longer match how the work is"
+                " done.",
+            ),
+            Clause(
+                "Superseded versions are withdrawn from circulation.",
+                "All {k} superseded versions were withdrawn.",
+                "Superseded versions were withdrawn from the main repository"
+                " only.",
+                "{k} superseded versions remain in circulation.",
+            ),
+        ],
+    ),
+    ControlSpec(
+        id="CTRL-CONTROLLED-DOCS",
+        title="Controlled document review",
+        frequency="quarterly",
+        evidence_kind="document",
+        applies_when={},
+        doc_type="controlled_document_register",
+        wrong_doc_type="process_manual_review",
+        freshness_days=100,
+        severity_weight=2.0,
+        clauses=[
+            Clause(
+                "Every controlled document is reviewed before its review date"
+                " passes.",
+                "All {n} controlled documents are within their review date.",
+                "{j} of {n} controlled documents are within days of their review"
+                " date.",
+                "{j} of {n} controlled documents are past their review date.",
+            ),
+            Clause(
+                "Each document names an owner and an approver.",
+                "All {n} documents name an owner and an approver.",
+                "{j} documents name an owner but no approver.",
+                "{j} of {n} documents name neither an owner nor an approver.",
+            ),
+            Clause(
+                "The register reconciles to the documents actually in use.",
+                "The register reconciles to the {n} documents in use.",
+                "The register reconciles with {j} unexplained differences.",
+                "The register was not reconciled to the documents in use.",
+            ),
+        ],
+    ),
+    ControlSpec(
+        id="CTRL-FINDING-CLOSURE",
+        title="Closure and validation of prior audit findings",
+        frequency="quarterly",
+        evidence_kind="structured",
+        applies_when={},
+        doc_type="finding_closure_table",
+        wrong_doc_type="audit_readiness_pack",
+        freshness_days=100,
+        severity_weight=3.0,
+        thresholds={"closed_on_time_pct": {"min": 90.0},
+                    "overdue_findings": {"max": 2}},
+        clauses=[
+            Clause(
+                "At least 90% of findings due for closure this quarter were"
+                " closed on time.",
+                "closed_on_time_pct at or above 90.",
+                "closed_on_time_pct just below 90.",
+                "closed_on_time_pct well below 90.",
+            ),
+            Clause(
+                "No more than two findings remain overdue at quarter close.",
+                "overdue_findings at two or fewer.",
+                "overdue_findings slightly above two.",
+                "overdue_findings well above two.",
+            ),
+            Clause(
+                "Every closure carries the auditor's validation.",
+                "all closures validated by the auditor.",
+                "closures validated with some remarks outstanding.",
+                "closures recorded without auditor validation.",
+            ),
+        ],
+    ),
+    ControlSpec(
+        id="CTRL-CHANGED-PROCESS",
+        title="Review of newly introduced or changed processes",
+        frequency="monthly",
+        evidence_kind="document",
+        applies_when={},
+        doc_type="process_change_review",
+        wrong_doc_type="controlled_document_register",
         freshness_days=45,
         severity_weight=2.5,
         clauses=[
             Clause(
-                "Every severity 1 and 2 incident receives a written post-mortem"
-                " within ten working days.",
-                "All {n} severity 1 and 2 incidents this month have post-mortems"
-                " filed within ten working days.",
-                "{j} of {n} severity 1 and 2 incidents have post-mortems filed; {k}"
-                " are past the ten-day window.",
-                "No post-mortems were filed for the {n} severity 1 and 2 incidents"
-                " this month.",
-                narrow=False,
+                "Every new or materially changed process is reviewed before it"
+                " goes live.",
+                "All {n} changes this month were reviewed before go-live.",
+                "{j} of {n} changes were reviewed on the day of go-live.",
+                "{j} of {n} changes went live before any review took place.",
             ),
             Clause(
-                "Each post-mortem records contributing factors and a corrective"
-                " action with a named owner.",
-                "Each post-mortem records contributing factors and a corrective"
-                " action owned by a named engineer.",
-                "Contributing factors are recorded but {k} corrective actions have"
-                " no named owner.",
-                "Post-mortems record a timeline only, with no contributing factors"
-                " and no corrective actions.",
+                "The compliance impact of each change is recorded.",
+                "Compliance impact is recorded for all {n} changes.",
+                "Compliance impact is recorded for most changes.",
+                "Compliance impact was not assessed for {j} changes.",
             ),
             Clause(
-                "Corrective actions from prior months are tracked to closure.",
-                "All {k} corrective actions carried in from prior months were closed"
-                " by {date}.",
-                "{j} of {k} carried-in corrective actions were closed; the rest"
-                " remain open past their due date.",
-                "Carried-in corrective actions are not tracked and their status is"
-                " unknown.",
+                "Changes affecting personal data are referred for assessment.",
+                "All {k} changes touching personal data were referred.",
+                "{k} changes touched personal data; referral is in progress.",
+                "{k} changes touching personal data were not referred.",
             ),
         ],
     ),
     ControlSpec(
         id="CTRL-TRAINING",
-        title="Mandatory compliance training completion",
+        title="Security awareness training completion",
         frequency="quarterly",
         evidence_kind="structured",
         applies_when={},
@@ -324,7 +348,7 @@ CONTROL_SPECS: list[ControlSpec] = [
         thresholds={"completion_pct": {"min": 95.0}, "overdue_staff": {"max": 5}},
         clauses=[
             Clause(
-                "At least 95% of in-scope staff complete mandatory training each"
+                "At least 95% of in-scope staff complete awareness training each"
                 " quarter.",
                 "completion_pct at or above 95.",
                 "completion_pct just below 95.",
@@ -345,258 +369,214 @@ CONTROL_SPECS: list[ControlSpec] = [
         ],
     ),
     ControlSpec(
+        id="CTRL-ACCESS-REVIEW",
+        title="Access review",
+        frequency="quarterly",
+        evidence_kind="document",
+        applies_when={"handles_pii": True},
+        doc_type="access_review_report",
+        wrong_doc_type="joiner_leaver_log",
+        freshness_days=100,
+        severity_weight=3.0,
+        clauses=[
+            Clause(
+                "Every account with access to systems holding personal data is"
+                " reviewed each quarter.",
+                "All {n} accounts were reviewed on {date} by {owner}.",
+                "{j} of {n} accounts were reviewed; the remainder are scheduled.",
+                "No access review was carried out this quarter.",
+                narrow=False,
+            ),
+            Clause(
+                "Accounts belonging to leavers are removed within five working"
+                " days.",
+                "All {k} leaver accounts were removed inside the window.",
+                "{k} leaver accounts were identified; {j} were removed inside the"
+                " window.",
+                "{k} leaver accounts remained active past the window.",
+            ),
+            Clause(
+                "Access that is no longer required is revoked or justified in"
+                " writing.",
+                "All {k} unnecessary grants were revoked and recorded.",
+                "{k} unnecessary grants were identified; revocation is pending.",
+                "{k} unnecessary grants remain in place with no justification.",
+            ),
+        ],
+    ),
+    ControlSpec(
+        id="CTRL-VENDOR-DD",
+        title="Vendor and supplier due diligence",
+        frequency="annual",
+        evidence_kind="document",
+        applies_when={"has_suppliers": True},
+        doc_type="vendor_due_diligence_file",
+        wrong_doc_type="purchase_order_summary",
+        freshness_days=180,
+        severity_weight=2.5,
+        clauses=[
+            Clause(
+                "Every supplier onboarded this year has a completed due diligence"
+                " file.",
+                "All {n} suppliers onboarded this year have complete files.",
+                "{j} of {n} supplier files are complete; the rest are in"
+                " progress.",
+                "{j} of {n} suppliers were onboarded with no due diligence file.",
+            ),
+            Clause(
+                "Suppliers with access to internal systems hold a signed"
+                " information security schedule.",
+                "All {k} suppliers with system access hold a signed schedule.",
+                "{k} suppliers have access; {j} schedules are awaiting"
+                " signature.",
+                "{k} suppliers hold system access with no signed schedule.",
+            ),
+            Clause(
+                "Financial standing is checked before a supplier is activated.",
+                "Financial standing was checked for all {n} suppliers.",
+                "Financial standing was checked for most suppliers.",
+                "{j} suppliers were activated with no financial standing check.",
+            ),
+        ],
+    ),
+    ControlSpec(
+        id="CTRL-INCIDENT-PM",
+        title="Incident post-mortem completion",
+        frequency="monthly",
+        evidence_kind="document",
+        applies_when={"criticality": ["high", "critical"]},
+        doc_type="incident_postmortem",
+        wrong_doc_type="incident_ticket_export",
+        freshness_days=45,
+        severity_weight=2.5,
+        clauses=[
+            Clause(
+                "Every incident of severity two or above receives a written"
+                " post-mortem within ten working days.",
+                "All {n} qualifying incidents have post-mortems inside the"
+                " window.",
+                "{j} of {n} post-mortems were completed slightly outside the"
+                " window.",
+                "{j} of {n} qualifying incidents have no post-mortem.",
+            ),
+            Clause(
+                "Each post-mortem records a root cause rather than a symptom.",
+                "All {n} post-mortems record a root cause.",
+                "{j} post-mortems record a contributing factor rather than a root"
+                " cause.",
+                "{j} of {n} post-mortems record no root cause.",
+            ),
+            Clause(
+                "Actions arising are tracked somewhere that survives the incident"
+                " ticket being closed.",
+                "All {k} actions are tracked in the findings register.",
+                "Actions are tracked in the incident tickets, with a migration"
+                " planned.",
+                "Actions arising are tracked only inside the closed tickets.",
+            ),
+        ],
+    ),
+    ControlSpec(
         id="CTRL-BACKUP-VERIFY",
-        title="Backup restore verification",
+        title="Backup and restore verification",
         frequency="monthly",
         evidence_kind="structured",
         applies_when={"criticality": ["high", "critical"]},
-        doc_type="backup_verification_log",
-        wrong_doc_type="incident_postmortem",
+        doc_type="restore_test_metrics",
+        wrong_doc_type="backup_job_log",
         freshness_days=45,
         severity_weight=3.0,
         thresholds={"success_pct": {"min": 95.0}, "max_rto_minutes": {"max": 60}},
         clauses=[
             Clause(
-                "At least 95% of scheduled restore tests succeed each month.",
+                "At least 95% of restore tests succeed.",
                 "success_pct at or above 95.",
                 "success_pct just below 95.",
                 "success_pct well below 95.",
             ),
             Clause(
-                "The longest observed restore stays within the 60 minute recovery"
-                " time objective.",
-                "max_rto_minutes at or under 60.",
-                "max_rto_minutes slightly over 60.",
-                "max_rto_minutes well over 60.",
+                "No restore exceeds the sixty-minute recovery time objective.",
+                "max_rto_minutes at sixty or below.",
+                "max_rto_minutes slightly above sixty.",
+                "max_rto_minutes well above sixty.",
             ),
             Clause(
-                "Every production data store is covered by at least one test.",
-                "all stores covered.",
-                "most stores covered.",
-                "coverage not established.",
+                "Restore logs are retained as evidence of the test.",
+                "restore logs retained for every test.",
+                "restore logs retained for most tests.",
+                "restore logs not retained.",
             ),
         ],
     ),
     ControlSpec(
-        id="CTRL-CHANGE-MGMT",
-        title="Change management approval",
-        frequency="monthly",
-        evidence_kind="document",
-        applies_when={},
-        doc_type="change_approval_register",
-        wrong_doc_type="backup_verification_log",
-        freshness_days=45,
-        severity_weight=2.0,
-        clauses=[
-            Clause(
-                "Every production change is approved before deployment.",
-                "All {n} production changes this month carry a recorded approval"
-                " timestamped before deployment.",
-                "{j} of {n} production changes carry a pre-deployment approval; {k}"
-                " were approved retrospectively.",
-                "Production changes were deployed with no approval records at all.",
-                narrow=False,
-            ),
-            Clause(
-                "Emergency changes are reviewed within five working days.",
-                "All {k} emergency changes were reviewed within five working days by"
-                " {team}.",
-                "{k} emergency changes occurred; review is complete for {j} of them.",
-                "{k} emergency changes were never reviewed.",
-            ),
-            Clause(
-                "The change register is reconciled against the deployment log.",
-                "The register was reconciled against the deployment log on {date}"
-                " with no discrepancies.",
-                "Reconciliation on {date} left {k} discrepancies open.",
-                "No reconciliation against the deployment log was performed.",
-            ),
-        ],
-    ),
-    ControlSpec(
-        id="CTRL-DPIA",
-        title="Data protection impact assessment currency",
-        frequency="annual",
+        id="CTRL-DATA-RETENTION",
+        title="Data retention review",
+        frequency="quarterly",
         evidence_kind="document",
         applies_when={"handles_pii": True},
-        doc_type="dpia_record",
-        wrong_doc_type="retention_review",
-        freshness_days=400,
+        doc_type="retention_review_report",
+        wrong_doc_type="data_inventory_export",
+        freshness_days=100,
         severity_weight=2.5,
-        grace_days=30,
         clauses=[
             Clause(
-                "Each processing activity involving personal data has a current"
-                " impact assessment.",
-                "All {n} processing activities have an assessment dated within the"
-                " last twelve months.",
-                "{j} of {n} processing activities have a current assessment.",
-                "No impact assessments are on file for the {n} processing"
-                " activities.",
-                narrow=False,
+                "Every data set holding personal data carries a retention"
+                " period.",
+                "All {n} data sets carry a documented retention period.",
+                "{j} of {n} data sets carry a retention period; the rest are"
+                " being classified.",
+                "{j} of {n} data sets hold personal data with no retention period"
+                " recorded.",
             ),
             Clause(
-                "Residual high risks are escalated to the data protection officer.",
-                "The {k} residual high risks were escalated to the data protection"
-                " officer on {date}.",
-                "{k} residual high risks are recorded; escalation is pending.",
-                "Residual high risks were identified but never escalated.",
+                "Data past its retention period is deleted and the deletion"
+                " recorded.",
+                "All {k} data sets past retention were deleted and recorded.",
+                "{k} data sets are past retention; deletion is scheduled.",
+                "{k} data sets remain in place past their retention period.",
             ),
             Clause(
-                "Assessments are re-run when the processing activity materially"
-                " changes.",
-                "{k} activities changed materially in {year} and each assessment was"
-                " re-run.",
-                "{k} activities changed materially; {j} assessments were re-run.",
-                "Activities changed materially in {year} with no assessments re-run.",
-            ),
-        ],
-    ),
-    ControlSpec(
-        id="CTRL-CUST-COMPLAINTS",
-        title="Customer complaint handling SLA",
-        frequency="monthly",
-        evidence_kind="document",
-        applies_when={"customer_facing": True},
-        doc_type="complaint_sla_report",
-        wrong_doc_type="change_approval_register",
-        freshness_days=45,
-        severity_weight=1.5,
-        clauses=[
-            Clause(
-                "Complaints are acknowledged within two working days.",
-                "All {n} complaints received this month were acknowledged within two"
-                " working days.",
-                "{j} of {n} complaints were acknowledged within two working days.",
-                "Acknowledgement times were not tracked this month.",
-                narrow=False,
-            ),
-            Clause(
-                "Complaints are resolved or escalated within twenty working days.",
-                "All {n} complaints were resolved or escalated within twenty working"
-                " days.",
-                "{k} complaints passed twenty working days without resolution or"
-                " escalation.",
-                "No resolution tracking exists for complaints this month.",
-            ),
-            Clause(
-                "Recurring complaint themes are reported to the area owner monthly.",
-                "Themes were reported to {owner} on {date}.",
-                "A theme report was produced but not sent to {owner}.",
-                "No theme reporting was produced this month.",
+                "Legal holds are recorded where deletion is suspended.",
+                "All {j} legal holds are recorded with an expiry.",
+                "Legal holds are recorded without expiry dates.",
+                "Deletion was suspended with no legal hold recorded.",
             ),
         ],
     ),
     ControlSpec(
         id="CTRL-BCP-TEST",
-        title="Business continuity plan test",
+        title="Business continuity test",
         frequency="annual",
         evidence_kind="document",
         applies_when={"criticality": ["high", "critical"]},
-        doc_type="bcp_test_report",
-        wrong_doc_type="backup_verification_log",
-        freshness_days=400,
-        severity_weight=3.0,
-        grace_days=30,
-        clauses=[
-            Clause(
-                "The continuity plan is exercised at least once per year.",
-                "The plan was exercised on {date} with {n} participants from {team}.",
-                "A tabletop walkthrough was held on {date} but no full exercise was"
-                " run.",
-                "The continuity plan was not exercised in {year}.",
-                narrow=False,
-            ),
-            Clause(
-                "The exercise covers the recovery of every critical dependency.",
-                "All {n} critical dependencies were recovered within target during"
-                " the exercise.",
-                "{j} of {n} critical dependencies were covered by the exercise.",
-                "Critical dependencies were not enumerated for the exercise.",
-            ),
-            Clause(
-                "Findings from the exercise are assigned owners and due dates.",
-                "All {k} findings were assigned owners and due dates on {date}.",
-                "{k} findings were raised; {j} have owners and the rest do not.",
-                "Findings were noted informally with no owners or due dates.",
-            ),
-        ],
-    ),
-    ControlSpec(
-        id="CTRL-CRYPTO-KEY",
-        title="Encryption key rotation",
-        frequency="quarterly",
-        evidence_kind="document",
-        applies_when={"handles_pii": True},
-        doc_type="key_rotation_record",
-        wrong_doc_type="access_review_export",
-        freshness_days=100,
+        doc_type="continuity_test_report",
+        wrong_doc_type="continuity_plan",
+        freshness_days=180,
         severity_weight=3.0,
         clauses=[
             Clause(
-                "Data encryption keys are rotated on the defined quarterly"
-                " schedule.",
-                "All {n} data encryption keys were rotated on {date}, on schedule.",
-                "{j} of {n} data encryption keys were rotated; {k} slipped the"
-                " schedule.",
-                "No key rotation was carried out in this period.",
+                "The continuity plan is exercised at least once a year.",
+                "The plan was exercised on {date} with {n} participants.",
+                "The plan was exercised late in the year.",
+                "The plan was not exercised this year.",
                 narrow=False,
             ),
             Clause(
-                "Superseded key material is destroyed and the destruction is"
-                " witnessed.",
-                "Superseded key material was destroyed on {date} and witnessed by"
-                " {owner}.",
-                "Superseded key material was destroyed but the destruction was not"
-                " witnessed.",
-                "Superseded key material remains in the key store.",
+                "The test covers the unit's critical processes.",
+                "All {n} critical processes were in scope of the test.",
+                "{j} of {n} critical processes were in scope.",
+                "{j} of {n} critical processes were out of scope of the test.",
             ),
             Clause(
-                "Rotation failures are alerted on and investigated.",
-                "{k} rotation alerts fired and each was investigated and closed.",
-                "{k} rotation alerts fired; {j} were investigated.",
-                "Rotation alerting is not configured.",
-            ),
-        ],
-    ),
-    ControlSpec(
-        id="CTRL-THIRD-PARTY-ACCESS",
-        title="Third-party access recertification",
-        frequency="quarterly",
-        evidence_kind="document",
-        applies_when={"has_suppliers": True},
-        doc_type="third_party_access_review",
-        wrong_doc_type="supplier_attestation",
-        freshness_days=100,
-        severity_weight=2.5,
-        clauses=[
-            Clause(
-                "Every third-party account is recertified by the sponsoring"
-                " manager each quarter.",
-                "All {n} third-party accounts were recertified by their sponsoring"
-                " managers by {date}.",
-                "{j} of {n} third-party accounts were recertified this quarter.",
-                "No third-party accounts were recertified this quarter.",
-                narrow=False,
-            ),
-            Clause(
-                "Accounts belonging to ended engagements are disabled within five"
-                " working days.",
-                "{k} accounts from ended engagements were disabled within five"
-                " working days.",
-                "{k} accounts from ended engagements were identified; {j} were"
-                " disabled inside the window.",
-                "Accounts from ended engagements remain enabled.",
-            ),
-            Clause(
-                "The sponsoring manager for each account is recorded and current.",
-                "A current sponsoring manager is recorded for all {n} accounts.",
-                "{k} accounts have a sponsoring manager who has since left.",
-                "Sponsoring managers are not recorded.",
+                "Issues arising from the test are recorded with owners.",
+                "All {k} issues arising were recorded with owners.",
+                "Issues were recorded; {j} have no owner yet.",
+                "{k} issues arose from the test and none were recorded.",
             ),
         ],
     ),
 ]
+
 
 SPECS_BY_ID = {c.id: c for c in CONTROL_SPECS}
 CONTROL_DEFINITIONS = [spec.definition() for spec in CONTROL_SPECS]

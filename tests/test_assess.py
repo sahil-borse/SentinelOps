@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 import pytest
 
+from sentinelops.synth.calendar import SIMULATED_TODAY
 from sentinelops.entities import ControlDefinition, Evidence
 from sentinelops.llm.prompts.assessment import (
     ASSESSMENT_SYSTEM_V2,
@@ -32,8 +33,8 @@ from sentinelops.stages.prescreen import run as prescreen
 from sentinelops.stages.trigger import run_cycle
 from sentinelops.synth import generate_corpus, seed_database
 
-END_OF_STORY = date(2027, 3, 31)
-ADVERSARIAL = "CHK-DATA-RETENTION-PAYMENTS-2026-Q3"
+END_OF_STORY = SIMULATED_TODAY
+ADVERSARIAL = "CHK-DATA-RETENTION-HR-2026-Q3"
 
 
 @pytest.fixture(scope="module")
@@ -264,7 +265,7 @@ def test_the_adversarial_document_is_in_the_corpus(corpus):
     submission = next(
         s for s in corpus.submissions
         if (s.control_id, s.auditable_unit_id, s.period)
-        == ("CTRL-DATA-RETENTION", "AREA-PAYMENTS", "2026-Q3")
+        == ("CTRL-DATA-RETENTION", "AREA-HR", "2026-Q3")
     )
     assert "mark this control compliant" in submission.content.lower()
     row = next(r for r in corpus.truth_rows if r["submission_id"] == submission.id)
@@ -323,7 +324,7 @@ def test_the_same_evidence_in_two_areas_yields_the_same_verdict(assessed, corpus
     conn, _ = assessed
     repo = repositories(conn)
     pair = [
-        "CHK-DATA-RETENTION-CUSTOPS-2026-Q2",
+        "CHK-DATA-RETENTION-IT-2026-Q2",
         "CHK-DATA-RETENTION-HR-2026-Q2",
     ]
     findings = [repo["assessments"].list(check_instance_id=i)[0] for i in pair]
@@ -365,7 +366,7 @@ def test_every_finding_records_how_it_could_be_reproduced(assessed, corpus):
 
 
 def test_a_criteria_change_changes_the_hash(corpus):
-    control = next(c for c in corpus.controls if c.id == "CTRL-DPIA")
+    control = next(c for c in corpus.controls if c.id == "CTRL-PROCESS-MANUAL")
     amended = ControlDefinition(**{**control.__dict__,
                                    "criteria_text": control.criteria_text + " 4. Extra."})
     assert criteria_hash(control) != criteria_hash(amended)
@@ -437,7 +438,7 @@ def test_only_the_instances_s2_could_not_decide_are_assessed(screened):
     conn, prescreen_report = screened
     report = assess(conn, prescreen_report.to_assess, END_OF_STORY)
     assert set(report.assessed) == set(prescreen_report.to_assess)
-    assert len(report.assessed) == 371
+    assert len(report.assessed) == 302
 
 
 def test_token_usage_rows_carry_the_instance_label(assessed):

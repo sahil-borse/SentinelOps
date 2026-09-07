@@ -14,12 +14,12 @@ from __future__ import annotations
 from ..entities import AuditableUnit, ControlDefinition, Identity
 
 DEMO_OWNER = Identity(
-    id="ID-MEHTA", name="R. Mehta", role="unit_owner", auditable_unit="AREA-CUSTOPS",
+    id="ID-MEHTA", name="R. Mehta", role="unit_owner", auditable_unit="AREA-IT",
 )
 
 DEMO_AREA = AuditableUnit(
-    id="AREA-CUSTOPS",
-    name="Customer Operations",
+    id="AREA-IT",
+    name="IT",
     kind="support_function",
     owner_identity=DEMO_OWNER.id,
     attributes={

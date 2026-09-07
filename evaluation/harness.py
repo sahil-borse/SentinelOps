@@ -23,6 +23,7 @@ from sentinelops.stages.prescreen import run as prescreen
 from sentinelops.stages.remediation import reassess_all
 from sentinelops.stages.trigger import run_cycle
 from sentinelops.synth import generate_corpus
+from sentinelops.synth.calendar import SIMULATED_TODAY
 
 from . import baseline as baseline_module
 from . import manual as manual_module
@@ -37,11 +38,18 @@ RESULTS_PATH = Path(__file__).resolve().parents[1] / "results.md"
 #: One cycle a month across the corpus's eighteen-month window, then the
 #: vantage point itself. Month by month rather than all at the end, because
 #: time-to-detection measured over a single catch-up run measures the harness.
-CYCLE_DATES = (
-    [date(2026, month, 28) for month in range(1, 13)]
-    + [date(2027, month, 28) for month in range(1, 9)]
-    + [date(2027, 9, 30)]
-)
+#: One cycle a month across the corpus's history, ending at the vantage point.
+#: Month by month rather than all at the end, because time-to-detection measured
+#: over a single catch-up run measures the harness. Stops at SIMULATED_TODAY —
+#: running cycles past "today" would detect things before they were due and turn
+#: the detection latency negative.
+CYCLE_DATES = [
+    d for d in (
+        [date(2026, month, 28) for month in range(1, 13)]
+        + [date(2027, month, 28) for month in range(1, 13)]
+    )
+    if d <= SIMULATED_TODAY
+] + [SIMULATED_TODAY]
 
 
 @dataclass
@@ -155,6 +163,7 @@ def evaluate(
         "actions": metrics_module.action_closure(conn),
         "gap_detection": metrics_module.score_gap_detection(verdicts, truth_rows),
         "analytics": _section_eight(conn),
+        "recurrence": metrics_module.score_recurrence(conn, truth),
         "chain": repositories(conn)["audit"].verify_chain(),
         "audit_events": len(repositories(conn)["audit"].read_all()),
     }

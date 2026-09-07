@@ -141,7 +141,14 @@ def time_to_detection(conn) -> dict[str, Any]:
         if instance is None or finding.assessed_at is None:
             continue
         gaps.append((finding.assessed_at.date() - instance.due_date).days)
-    return _spread(gaps)
+    spread = _spread(gaps)
+    # Negative is not an error. With "today" inside the window and cycles run
+    # monthly, evidence filed ahead of the deadline is judged on the next cycle
+    # — so the gap is written down *before* the check was due. That is the
+    # system working, and it is worth reporting rather than clamping away.
+    spread["detected_before_due"] = len([g for g in gaps if g < 0])
+    spread["detected_after_due"] = len([g for g in gaps if g >= 0])
+    return spread
 
 
 def _spread(values: list[int]) -> dict[str, Any]:
@@ -299,6 +306,95 @@ def first_verdicts(conn) -> dict[str, str]:
             continue  # a re-assessment of a fix, not the original judgement
         first.setdefault(assessment.check_instance_id, assessment.verdict)
     return first
+
+
+def score_recurrence(conn, truth: dict[str, Any]) -> dict[str, Any]:
+    """Mark recurrence detection against the groups the corpus planted.
+
+    Until the truth file carried `recurrence_groups`, this could not be done at
+    all: the detector's output could be read and called plausible, which is not
+    the same as being right. Two questions, and they pull in opposite
+    directions —
+
+      **recall**    of the pairs we planted, how many did it group together? A
+                    detector that links nothing scores zero here.
+      **precision** of the pairs it grouped, how many were planted? A detector
+                    that links everything scores zero here.
+
+    Scored on **connected components**, not on the individual links. The
+    detector points each finding at the prior one it resembles, so a set of
+    three arrives as a chain A→B→C — two links, not three. Counting links would
+    mark the pair (A, C) as missed when the detector has in fact put all three
+    in one group, which is what a reader would say it achieved. Direction is
+    ignored for the same reason: the corpus says these three are the same gap,
+    and which way the arrow points is bookkeeping.
+
+    Scored on pairs within a group rather than whole groups, because a detector
+    that finds two of a three-finding set has done most of the job and
+    all-or-nothing would call that a total miss.
+
+    **Scored on the audit track only, and that is not a convenience.** Section 2
+    justifies a model here on semantic similarity across free text — the
+    auditor's own words, with no shared vocabulary. That is exactly what
+    audit-raised findings are. Activity-track findings carry a description the
+    *system* generated from the control title and the failing clause, so "the
+    same gap in a different unit" is derivable there by a rule: same control,
+    different unit. Marking the detector wrong for linking those would score it
+    against a definition the stakeholder did not give, and scoring it right
+    would be crediting a model for arithmetic. Neither is a measurement, so the
+    activity track is excluded and the exclusion is stated rather than hidden.
+    """
+    from itertools import combinations
+
+    repo = repositories(conn)
+    findings = {
+        f.id: f for f in repo["findings"].list() if f.source == "audit"
+    }
+
+    expected: set[frozenset[str]] = set()
+    for group in truth.get("recurrence_groups", []):
+        members = [i for i in group["finding_ids"] if i in findings]
+        expected |= {frozenset(pair) for pair in combinations(members, 2)}
+
+    # union-find over the detected links, then every pair inside a component
+    parent: dict[str, str] = {}
+
+    def root(node: str) -> str:
+        parent.setdefault(node, node)
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
+
+    links = 0
+    for finding in findings.values():
+        for prior in finding.recurrence_of:
+            if prior not in findings:
+                continue
+            links += 1
+            a, b = root(finding.id), root(prior)
+            if a != b:
+                parent[a] = b
+
+    components: dict[str, list[str]] = {}
+    for node in list(parent):
+        components.setdefault(root(node), []).append(node)
+
+    detected: set[frozenset[str]] = set()
+    for members in components.values():
+        detected |= {frozenset(pair) for pair in combinations(sorted(members), 2)}
+
+    hit = expected & detected
+    return {
+        "planted_groups": len(truth.get("recurrence_groups", [])),
+        "planted_pairs": len(expected),
+        "links_asserted": links,
+        "grouped_pairs": len(detected),
+        "found": len(hit),
+        "recall": len(hit) / len(expected) if expected else None,
+        "precision": len(hit) / len(detected) if detected else None,
+        "missed": sorted(tuple(sorted(pair)) for pair in expected - detected),
+    }
 
 
 def current_verdicts(conn) -> dict[str, str]:

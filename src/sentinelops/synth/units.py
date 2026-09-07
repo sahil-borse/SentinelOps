@@ -1,38 +1,40 @@
 """The auditable units of a fictional organisation, and the people in it.
 
-v3 is explicit that findings are not raised only against support functions: a
-project team, a department and IT all qualify, and the subject should be
-modelled generically. So a unit now carries a `kind` — and nothing downstream
-branches on it, which is the point. It is descriptive, not a switch.
+The roster the stakeholder described: **six support functions** — IT, Admin,
+Purchase, HR, Finance and Facilities — plus **four project teams**, two
+PA/InfoSec auditors and two managers with real reporting lines.
 
-Section 10 asks for six support functions plus three or four project teams, and
-the roster now matches. The project teams are the point of `kind` being
-descriptive rather than a switch: nothing downstream branches on it, so a
-finding against a project team is chased, escalated and closed by exactly the
-same code as one against Payments. If it were not, the stakeholder's "model the
-subject generically" would be a comment rather than a fact.
+Project teams matter more than they look. Section 1 says the auditable subject
+is not only a support function and should be modelled generically, and `kind` is
+how that is recorded. Nothing downstream branches on it: a finding against
+Project Atlas is classified, chased, escalated and closed by exactly the same
+code as one against Finance. If any of that forked on `kind`, "model the subject
+generically" would be a comment rather than a fact.
 
     unit          kind             pii  cust  supp  region  criticality
-    CUSTOPS       support_function  Y    Y     -     APAC    high
-    PAYMENTS      support_function  Y    Y     Y     EMEA    critical
-    HR            support_function  Y    -     Y     NA      medium
-    PROCUREMENT   support_function  -    -     Y     EMEA    medium
-    MARKETING     support_function  Y    Y     Y     NA      low
-    ITSVC         support_function  Y    -     Y     APAC    high
-    PLATFORM      department        -    -     Y     APAC    critical
-    FINREP        department        -    -     -     EMEA    high
+    IT            support_function  Y    -     Y     APAC    critical
+    ADMIN         support_function  Y    -     Y     EMEA    medium
+    PURCHASE      support_function  -    -     Y     EMEA    medium
+    HR            support_function  Y    -     Y     NA      high
+    FINANCE       support_function  -    -     -     EMEA    high
+    FACILITIES    support_function  -    -     Y     NA      low
     PRJ-ATLAS     project_team      Y    Y     -     EMEA    critical
-    PRJ-BEACON    project_team      -    -     Y     NA      medium
+    PRJ-BEACON    project_team      -    Y     Y     NA      medium
     PRJ-CORAL     project_team      Y    -     -     APAC    low
+    PRJ-DELTA     project_team      -    -     -     APAC    medium
 
-Project teams are short-lived and their owners are engineers rather than
-functional heads, which is why they report into Platform Engineering's owner
-rather than to the operations director — escalation should follow the line that
-exists, not a tidier one.
+Purchase and Facilities draw the same control set, and that is the rules engine
+being right rather than lazy: neither handles personal data, neither faces
+customers, both use suppliers, and neither is business-critical. Two units with
+the same risk profile owe the same obligations, and an engine that invented a
+difference between them would be wrong.
 
-The reporting lines matter: escalation walks `reports_to` rather than inventing
-a manager by gluing "Head of " onto a team name, so everybody it escalates to
-is somebody who exists.
+**Reporting lines are two-deep and not uniform.** Finance and Purchase report to
+the director directly, as a financial control line usually does; everyone else
+goes through the operations director. Escalation walks `reports_to`, so an
+escalation from Finance reaches a different person at level one than an
+escalation from IT — which is the point of walking the line rather than gluing
+"Head of" onto a team name.
 """
 
 from __future__ import annotations
@@ -41,14 +43,19 @@ from ..entities import AuditableUnit, Identity
 
 # --- people -----------------------------------------------------------------
 
-#: Management, at the top of every escalation chain.
+#: The two managers. Top of every escalation chain.
 DIRECTOR = Identity(id="ID-DIRECTOR", name="H. Lindqvist", role="management")
 OPERATIONS_DIRECTOR = Identity(
-    id="ID-OPSDIR", name="M. Castellanos", role="management", reports_to="ID-DIRECTOR"
+    id="ID-OPSDIR", name="M. Castellanos", role="management",
+    reports_to="ID-DIRECTOR",
 )
+MANAGERS = [DIRECTOR, OPERATIONS_DIRECTOR]
 
-#: PA/InfoSec — the people who conduct audits and decide closure. Section 7 is
-#: unambiguous that only they may close a finding.
+#: The two PA/InfoSec auditors — the people who conduct audits and decide
+#: closure. Section 7 is unambiguous that only they may close a finding, and
+#: there are two of them so that the separation-of-duty rule has somewhere to
+#: go: whoever filed the evidence cannot accept it, and with one auditor that
+#: rule would simply deadlock.
 AUDITORS = [
     Identity(id="ID-PA-KAUR", name="P. Kaur", role="pa_infosec",
              reports_to="ID-DIRECTOR"),
@@ -58,18 +65,17 @@ AUDITORS = [
 
 #: (identity, display name, the unit they own, who they report to)
 _OWNERS = [
-    ("ID-MEHTA", "R. Mehta", "AREA-CUSTOPS", "ID-OPSDIR"),
-    ("ID-OKAFOR", "L. Okafor", "AREA-PAYMENTS", "ID-OPSDIR"),
+    ("ID-NAKAMURA", "Y. Nakamura", "AREA-IT", "ID-OPSDIR"),
+    ("ID-BAKER", "R. Baker", "AREA-ADMIN", "ID-OPSDIR"),
+    # Purchase and Finance report to the director, not through operations.
+    ("ID-HAUGEN", "S. Haugen", "AREA-PURCHASE", "ID-DIRECTOR"),
     ("ID-FERREIRA", "D. Ferreira", "AREA-HR", "ID-OPSDIR"),
-    ("ID-HAUGEN", "S. Haugen", "AREA-PROC", "ID-OPSDIR"),
-    ("ID-ALVAREZ", "J. Alvarez", "AREA-MKTG", "ID-OPSDIR"),
-    ("ID-IYER", "N. Iyer", "AREA-PLATFORM", "ID-DIRECTOR"),
-    ("ID-NOVAK", "A. Novak", "AREA-FINREP", "ID-DIRECTOR"),
-    ("ID-BRENNAN", "C. Brennan", "AREA-ITSVC", "ID-OPSDIR"),
-    # Project leads report through Platform Engineering, not to operations.
-    ("ID-VASQUEZ", "E. Vasquez", "AREA-PRJ-ATLAS", "ID-IYER"),
-    ("ID-TANAKA", "K. Tanaka", "AREA-PRJ-BEACON", "ID-IYER"),
-    ("ID-DUBOIS", "M. Dubois", "AREA-PRJ-CORAL", "ID-IYER"),
+    ("ID-NOVAK", "A. Novak", "AREA-FINANCE", "ID-DIRECTOR"),
+    ("ID-OKONKWO", "C. Okonkwo", "AREA-FACILITIES", "ID-OPSDIR"),
+    ("ID-VASQUEZ", "E. Vasquez", "AREA-PRJ-ATLAS", "ID-OPSDIR"),
+    ("ID-TANAKA", "K. Tanaka", "AREA-PRJ-BEACON", "ID-OPSDIR"),
+    ("ID-DUBOIS", "M. Dubois", "AREA-PRJ-CORAL", "ID-OPSDIR"),
+    ("ID-MBEKI", "L. Mbeki", "AREA-PRJ-DELTA", "ID-OPSDIR"),
 ]
 
 UNIT_OWNERS = [
@@ -78,7 +84,7 @@ UNIT_OWNERS = [
     for ident, name, unit, manager in _OWNERS
 ]
 
-IDENTITIES: list[Identity] = [DIRECTOR, OPERATIONS_DIRECTOR, *AUDITORS, *UNIT_OWNERS]
+IDENTITIES: list[Identity] = [*MANAGERS, *AUDITORS, *UNIT_OWNERS]
 IDENTITIES_BY_ID = {i.id: i for i in IDENTITIES}
 
 #: Who owns each unit, for building the roster below.
@@ -113,32 +119,29 @@ def _unit(
 
 
 AUDITABLE_UNITS: list[AuditableUnit] = [
-    _unit("AREA-CUSTOPS", "Customer Operations", "support_function",
-          True, True, False, "APAC", "high"),
-    _unit("AREA-PAYMENTS", "Payments Processing", "support_function",
-          True, True, True, "EMEA", "critical"),
-    _unit("AREA-HR", "People Operations", "support_function",
-          True, False, True, "NA", "medium"),
-    _unit("AREA-PROC", "Procurement", "support_function",
+    _unit("AREA-IT", "IT", "support_function",
+          True, False, True, "APAC", "critical"),
+    _unit("AREA-ADMIN", "Admin", "support_function",
+          True, False, True, "EMEA", "medium"),
+    _unit("AREA-PURCHASE", "Purchase", "support_function",
           False, False, True, "EMEA", "medium"),
-    _unit("AREA-MKTG", "Marketing", "support_function",
-          True, True, True, "NA", "low"),
-    _unit("AREA-PLATFORM", "Platform Engineering", "department",
-          False, False, True, "APAC", "critical"),
-    _unit("AREA-FINREP", "Financial Reporting", "department",
+    _unit("AREA-HR", "HR", "support_function",
+          True, False, True, "NA", "high"),
+    _unit("AREA-FINANCE", "Finance", "support_function",
           False, False, False, "EMEA", "high"),
-    _unit("AREA-ITSVC", "IT Services", "support_function",
-          True, False, True, "APAC", "high"),
-    # No suppliers of its own — Atlas buys through Procurement. Without that
-    # it would carry byte-identical attributes to Payments and therefore an
-    # identical control set, which makes the applicability engine look like it
-    # is doing less work than it is.
+    _unit("AREA-FACILITIES", "Facilities", "support_function",
+          False, False, True, "NA", "low"),
     _unit("AREA-PRJ-ATLAS", "Project Atlas", "project_team",
           True, True, False, "EMEA", "critical"),
     _unit("AREA-PRJ-BEACON", "Project Beacon", "project_team",
-          False, False, True, "NA", "medium"),
+          False, True, True, "NA", "medium"),
     _unit("AREA-PRJ-CORAL", "Project Coral", "project_team",
           True, False, False, "APAC", "low"),
+    _unit("AREA-PRJ-DELTA", "Project Delta", "project_team",
+          False, False, False, "APAC", "medium"),
 ]
 
 UNITS_BY_ID = {u.id: u for u in AUDITABLE_UNITS}
+
+SUPPORT_FUNCTIONS = [u for u in AUDITABLE_UNITS if u.kind == "support_function"]
+PROJECT_TEAMS = [u for u in AUDITABLE_UNITS if u.kind == "project_team"]

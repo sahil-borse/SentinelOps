@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from sentinelops.synth.calendar import SIMULATED_TODAY
 from sentinelops.entities import ControlDefinition
 from sentinelops.repositories import repositories
 from sentinelops.stages.assess import run as assess
@@ -24,7 +25,7 @@ from sentinelops.stages import followup
 from sentinelops.stages.trigger import run_cycle
 from sentinelops.synth import generate_corpus, seed_database
 
-END_OF_STORY = date(2027, 9, 30)
+END_OF_STORY = SIMULATED_TODAY
 LATER = date(2027, 12, 31)
 
 
@@ -392,7 +393,7 @@ def test_a_waiver_after_the_fact_excuses_an_already_assessed_failure(conn, corpu
     """
     seed_database(conn, corpus)
     repo = repositories(conn)
-    target = "CHK-CRYPTO-KEY-HR-2026-Q1"
+    target = "CHK-ACCESS-REVIEW-ADMIN-2026-Q1"
 
     for month in (1, 2, 3, 4):
         as_of = date(2026, month, 28)
@@ -404,7 +405,7 @@ def test_a_waiver_after_the_fact_excuses_an_already_assessed_failure(conn, corpu
     assert repo["instances"].get(target).status == "assessed"
     finding = repo["assessments"].list(check_instance_id=target)[0]
     assert finding.verdict == "insufficient_evidence"
-    assert repo["findings"].get("FND-CRYPTO-KEY-HR-2026-Q1").status == "open"
+    assert repo["findings"].get("FND-ACCESS-REVIEW-ADMIN-2026-Q1").status == "open"
 
     # EXC-004 is in force from 11 May
     run_cycle(conn, date(2026, 5, 28))
@@ -423,7 +424,7 @@ def test_the_waiver_leaves_the_finding_standing(conn, corpus):
         prescreen(conn, as_of)
         flag_run(conn, as_of)
 
-    findings = repo["assessments"].list(check_instance_id="CHK-CRYPTO-KEY-HR-2026-Q1")
+    findings = repo["assessments"].list(check_instance_id="CHK-ACCESS-REVIEW-ADMIN-2026-Q1")
     assert len(findings) == 1, "no new finding is invented by a waiver"
     assert findings[0].verdict == "insufficient_evidence"
     assert findings[0].supersedes_assessment_id is None
@@ -438,12 +439,12 @@ def test_the_waiver_closes_the_flag_and_closes_the_finding(conn, corpus):
         prescreen(conn, as_of)
         report = flag_run(conn, as_of)
 
-    target = "CHK-CRYPTO-KEY-HR-2026-Q1"
+    target = "CHK-ACCESS-REVIEW-ADMIN-2026-Q1"
     flags = {f.category: f for f in repo["flags"].list(check_instance_id=target)}
     assert flags["overdue"].status == "closed"
     assert flags["exception"].status == "open"
 
-    finding = repo["findings"].get("FND-CRYPTO-KEY-HR-2026-Q1")
+    finding = repo["findings"].get("FND-ACCESS-REVIEW-ADMIN-2026-Q1")
     assert finding.status == "closed"
     assert finding.closed_by, "somebody closed it, and the trail says who"
     assert "waived" in finding.closure_remarks
@@ -461,7 +462,7 @@ def test_the_waiver_records_who_approved_it_on_the_transition(conn, corpus):
         flag_run(conn, as_of)
 
     event = [
-        e for e in repo["audit"].read_for("CheckInstance", "CHK-CRYPTO-KEY-HR-2026-Q1")
+        e for e in repo["audit"].read_for("CheckInstance", "CHK-ACCESS-REVIEW-ADMIN-2026-Q1")
         if e.action == "check_instance_waived"
     ][0]
     assert event.detail["exception_id"] == "EXC-004"
@@ -497,7 +498,7 @@ def test_waiving_is_idempotent_across_cycles(conn, corpus):
         flag_run(conn, as_of)
 
     events = [
-        e for e in repo["audit"].read_for("CheckInstance", "CHK-CRYPTO-KEY-HR-2026-Q1")
+        e for e in repo["audit"].read_for("CheckInstance", "CHK-ACCESS-REVIEW-ADMIN-2026-Q1")
         if e.action == "check_instance_waived"
     ]
     assert len(events) == 1

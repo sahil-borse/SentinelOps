@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
+from sentinelops.synth.calendar import SIMULATED_TODAY
 from sentinelops.directory import load as load_directory
 from sentinelops.entities import Finding
 from sentinelops.repositories import repositories, simulated_clock
@@ -233,7 +234,7 @@ def test_the_remediation_loop_writes_real_rounds(conn, corpus):
     from sentinelops.stages.trigger import run_cycle
 
     seed_database(conn, corpus)
-    cycles = [date(2026, m, 28) for m in range(1, 13)] + [date(2027, 3, 31)]
+    cycles = [date(2026, m, 28) for m in range(1, 13)] + [SIMULATED_TODAY]
     results = []
     for as_of in cycles:
         run_cycle(conn, as_of)

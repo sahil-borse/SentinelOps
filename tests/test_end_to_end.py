@@ -13,7 +13,7 @@ def test_one_path_writes_every_record(tmp_path):
     assert assessment.cited_spans, "an uncited compliance verdict is a bug"
     assert finding.check_instance_id == "CHK-0001"
     assert finding.status == "open", "a finding starts open and only an auditor closes it"
-    assert finding.auditable_unit_id == "AREA-CUSTOPS"
+    assert finding.auditable_unit_id == "AREA-IT"
     assert finding.severity and finding.severity_assigned_by
 
     actions = [e.action for e in result["audit_events"]]

@@ -38,7 +38,7 @@ COMPLIANCE_EXCEPTIONS: list[ComplianceException] = [
     ComplianceException(
         id="EXC-001",
         control_id="CTRL-BCP-TEST",
-        auditable_unit_id="AREA-PLATFORM",
+        auditable_unit_id="AREA-IT",
         rationale=(
             "Continuity exercise deferred while the disaster recovery estate is "
             "migrated to the new region. Migration completes Q1 2027."
@@ -50,12 +50,12 @@ COMPLIANCE_EXCEPTIONS: list[ComplianceException] = [
     ),
     ComplianceException(
         id="EXC-002",
-        control_id="CTRL-THIRD-PARTY-ACCESS",
-        auditable_unit_id="AREA-MKTG",
+        control_id="CTRL-CONTROLLED-DOCS",
+        auditable_unit_id="AREA-FACILITIES",
         rationale=(
-            "Third-party access recertification waived for the agency roster "
-            "pending consolidation of marketing suppliers under a single master "
-            "agreement. Consolidation was due to complete by 30 June."
+            "Controlled document review waived for the facilities handbook set "
+            "while the site consolidation programme rewrites them wholesale. "
+            "Rewrite was due to complete by 30 June."
         ),
         approved_by="Chief Procurement Officer",
         granted_at=date(2026, 1, 1),
@@ -65,9 +65,9 @@ COMPLIANCE_EXCEPTIONS: list[ComplianceException] = [
     ComplianceException(
         id="EXC-003",
         control_id="CTRL-INCIDENT-PM",
-        auditable_unit_id="AREA-FINREP",
+        auditable_unit_id="AREA-HR",
         rationale=(
-            "Post-mortem requirement waived during the reporting platform "
+            "Post-mortem requirement waived during the payroll platform "
             "freeze. Withdrawn after the audit committee objected."
         ),
         approved_by="Finance Control Board",
@@ -77,14 +77,14 @@ COMPLIANCE_EXCEPTIONS: list[ComplianceException] = [
     ),
     ComplianceException(
         id="EXC-004",
-        control_id="CTRL-CRYPTO-KEY",
-        auditable_unit_id="AREA-HR",
+        control_id="CTRL-ACCESS-REVIEW",
+        auditable_unit_id="AREA-ADMIN",
         rationale=(
-            "Q1 key rotation for the HR data store was not carried out before "
-            "the payroll platform migration froze the key management service. "
-            "Rotation is deferred and the outstanding Q1 obligation waived, on "
-            "the compensating control of a manual key inventory signed off by "
-            "the platform team. Expires at migration cutover."
+            "The Q1 access review for the shared services estate was not "
+            "carried out before the identity platform migration froze the "
+            "review tooling. The review is deferred and the outstanding Q1 "
+            "obligation waived, on the compensating control of a manual account "
+            "inventory signed off by IT. Expires at migration cutover."
         ),
         approved_by="Chief Information Security Officer",
         granted_at=date(2026, 5, 11),

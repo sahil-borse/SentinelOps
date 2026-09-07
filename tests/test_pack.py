@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from sentinelops.synth.calendar import SIMULATED_TODAY
 from sentinelops.db import connect
 from sentinelops.pack import (
     KNOWN_ACTIONS,
@@ -42,7 +43,7 @@ LIVE_STATE_TABLES = (
     "token_usage",
 )
 
-CYCLES = [date(2026, m, 28) for m in range(1, 13)] + [date(2027, 3, 31)]
+CYCLES = [date(2026, m, 28) for m in range(1, 13)] + [SIMULATED_TODAY]
 
 
 @pytest.fixture(scope="module")
@@ -157,9 +158,9 @@ def test_a_pack_builds_from_a_database_holding_only_the_log(pack, log_only):
         assert count == 0, f"{table} is not empty; the test proves nothing"
 
     assert pack.totals["events"] > 2000
-    assert pack.totals["units"] == 11
+    assert pack.totals["units"] == 10
     assert pack.totals["controls"] == 14
-    assert pack.totals["due"] == 532
+    assert pack.totals["due"] == 447
     assert pack.coverage and pack.exceptions and pack.findings and pack.actions
 
 
@@ -241,7 +242,7 @@ def test_findings_carry_verdict_confidence_and_review_flag(pack):
 
 def test_superseded_findings_are_shown_as_superseded(pack):
     superseded = [f for f in pack.findings if f["superseded_by"]]
-    assert len(superseded) == pack.totals["superseded_findings"] == 93
+    assert len(superseded) == pack.totals["superseded_findings"] == 91
     for finding in superseded:
         assert finding["is_current"] is False
     # A superseded assessment is not necessarily a failed one any more: a
@@ -293,17 +294,35 @@ def test_the_finding_register_tells_the_whole_story(pack):
 
 
 def test_finding_history_is_a_full_state_sequence(pack):
-    closed = next(a for a in pack.actions if a["status"] == "closed")
-    states = [state for _, state, _ in closed["history"]]
-    assert states[0] == "raised"
-    assert states[-1] == "closed"
-    assert any(s.startswith("severity ") for s in states), (
-        "the severity decision is on the record, not implied"
-    )
-    assert any(s.startswith("owner: ") for s in states), (
-        "what the owner reported is on the record too"
-    )
-    assert all(owner for _, _, owner in closed["history"])
+    """The two tracks leave different trails, and both are complete.
+
+    An activity-track finding is raised by the pipeline, sized by the auditor in
+    its own event, reported on by the owner and then closed — four steps. An
+    audit-track one is sized by the auditor at the moment it is raised, because a
+    person wrote it down, so there is no separate severity event and no model
+    suggestion to have overridden. Asserting one shape for both would force the
+    audit track to fake a step it never took.
+    """
+    closed = [a for a in pack.actions if a["status"] == "closed"]
+    assert closed
+
+    for finding in closed:
+        states = [state for _, state, _ in finding["history"]]
+        assert states[0] == "raised"
+        assert states[-1] == "closed"
+        assert all(owner for _, _, owner in finding["history"])
+
+    # the activity track, which goes round the whole loop
+    looped = [
+        f for f in closed
+        if any(s.startswith("owner: ") for _, s, _ in f["history"])
+    ]
+    assert looped, "no finding shows the owner's self-reported progress"
+    for finding in looped:
+        states = [state for _, state, _ in finding["history"]]
+        assert any(s.startswith("severity ") for s in states), (
+            "the severity decision is on the record, not implied"
+        )
 
 
 def test_the_register_reports_how_hard_each_finding_was_to_close(pack):

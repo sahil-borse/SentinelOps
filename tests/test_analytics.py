@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from sentinelops import analytics
+from sentinelops.synth.calendar import SIMULATED_TODAY
 from sentinelops.repositories import repositories
 from sentinelops.stages import intelligence
 from sentinelops.stages.assess import run as assess
@@ -17,8 +18,8 @@ from sentinelops.stages.remediation import reassess_all
 from sentinelops.stages.trigger import run_cycle
 from sentinelops.synth import generate_corpus, seed_database
 
-AS_OF = date(2027, 9, 30)
-WINDOW = (date(2026, 1, 1), date(2027, 9, 30))
+AS_OF = SIMULATED_TODAY
+WINDOW = (date(2026, 1, 1), SIMULATED_TODAY)
 SRC = Path(__file__).resolve().parents[1] / "src" / "sentinelops"
 
 
@@ -32,7 +33,8 @@ def run(conn, corpus):
     """A full replay, so the analytics have both tracks to count."""
     seed_database(conn, corpus)
     cycles = [date(2026, m, 28) for m in range(1, 13)]
-    cycles += [date(2027, m, 28) for m in range(1, 10)]
+    cycles += [d for d in (date(2027, m, 28) for m in range(1, 13))
+               if d <= SIMULATED_TODAY]
     for as_of in cycles:
         run_cycle(conn, as_of)
         screen = prescreen(conn, as_of)
@@ -212,9 +214,10 @@ def test_the_trend_is_a_real_replay_not_todays_state_projected_back(portfolio):
     """Computed from raise and close dates, so it says what was true then."""
     _, result = portfolio
     trend = result["trend"]
-    assert len(trend) == 21, "January 2026 to September 2027 inclusive"
+    months = (SIMULATED_TODAY.year - 2026) * 12 + SIMULATED_TODAY.month
+    assert len(trend) == months, "January 2026 to the vantage point inclusive"
     assert trend[0]["month"] == "2026-01"
-    assert trend[-1]["month"] == "2027-09"
+    assert trend[-1]["month"] == f"{SIMULATED_TODAY:%Y-%m}"
 
     for point in trend:
         assert point["open"] == point["raised_to_date"] - point["closed_to_date"]

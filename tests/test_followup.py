@@ -10,6 +10,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from sentinelops.synth.calendar import SIMULATED_TODAY
 from sentinelops.directory import load as load_directory
 from sentinelops.repositories import repositories
 from sentinelops.stages import followup
@@ -18,7 +19,7 @@ from sentinelops.stages.prescreen import run as prescreen
 from sentinelops.stages.trigger import run_cycle
 from sentinelops.synth import generate_corpus, seed_database
 
-END_OF_STORY = date(2027, 9, 30)
+END_OF_STORY = SIMULATED_TODAY
 
 
 @pytest.fixture(scope="module")

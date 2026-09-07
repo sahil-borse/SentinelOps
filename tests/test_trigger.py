@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
+from sentinelops.synth.calendar import SIMULATED_TODAY
 from sentinelops.entities import ComplianceException, InboundSubmission
 from sentinelops.repositories import repositories
 from sentinelops.stages.trigger import (
@@ -19,7 +20,7 @@ from sentinelops.stages.trigger import (
 )
 from sentinelops.synth import generate_corpus, seed_database
 
-END_OF_STORY = date(2027, 3, 31)
+END_OF_STORY = SIMULATED_TODAY
 
 
 @pytest.fixture(scope="module")
@@ -41,8 +42,8 @@ def test_a_full_year_generates_an_instance_per_open_period(seeded, corpus):
 
     # 64 applicable pairs across their frequencies, less the 3 periods that
     # approved exceptions excuse.
-    assert len(instances) == 532
-    assert len(result.created) == 532
+    assert len(instances) == 447
+    assert len(result.created) == 447
     assert len(result.suppressed) == 3
 
 
@@ -67,15 +68,15 @@ def test_advancing_the_calendar_reveals_more_checks(seeded):
 
 def test_instance_ids_are_derived_and_readable(seeded):
     run_cycle(seeded, date(2026, 4, 30))
-    assert instance_id("CTRL-ACCESS-REVIEW", "AREA-CUSTOPS", "2026-Q1") == (
-        "CHK-ACCESS-REVIEW-CUSTOPS-2026-Q1"
+    assert instance_id("CTRL-ACCESS-REVIEW", "AREA-IT", "2026-Q1") == (
+        "CHK-ACCESS-REVIEW-IT-2026-Q1"
     )
-    assert repositories(seeded)["instances"].get("CHK-ACCESS-REVIEW-CUSTOPS-2026-Q1")
+    assert repositories(seeded)["instances"].get("CHK-ACCESS-REVIEW-IT-2026-Q1")
 
 
 def test_due_dates_come_from_period_close_plus_grace(seeded, corpus):
     run_cycle(seeded, END_OF_STORY)
-    instance = repositories(seeded)["instances"].get("CHK-ACCESS-REVIEW-CUSTOPS-2026-Q1")
+    instance = repositories(seeded)["instances"].get("CHK-ACCESS-REVIEW-IT-2026-Q1")
     control = next(c for c in corpus.controls if c.id == "CTRL-ACCESS-REVIEW")
     assert instance.due_date == date(2026, 3, 31) + timedelta(days=control.grace_days)
 
@@ -96,7 +97,7 @@ def test_running_the_same_cycle_twice_creates_nothing_new(seeded):
     second = run_cycle(seeded, END_OF_STORY)
     assert second.created == []
     assert len(repositories(seeded)["instances"].list()) == count
-    assert len(first.created) == 532
+    assert len(first.created) == 447
 
 
 def test_five_cycles_over_the_year_produce_the_same_instances_as_one(conn, corpus):
@@ -133,7 +134,7 @@ def test_no_duplicate_control_area_period_survives(seeded):
 
 def test_a_new_instance_starts_pending(seeded):
     run_cycle(seeded, date(2026, 2, 10))
-    instance = repositories(seeded)["instances"].get("CHK-CHANGE-MGMT-FINREP-2026-02")
+    instance = repositories(seeded)["instances"].get("CHK-CHANGED-PROCESS-FINANCE-2026-02")
     assert instance.status == "pending"
 
 
@@ -152,10 +153,10 @@ def test_evidence_moves_an_instance_to_submitted(seeded):
 
 
 def test_a_missing_submission_goes_overdue(seeded):
-    """CTRL-CUST-COMPLAINTS / AREA-CUSTOPS / 2026-07 is a corpus 'missing'."""
+    """CTRL-CHANGED-PROCESS / AREA-IT / 2026-07 is a corpus 'missing'."""
     run_cycle(seeded, END_OF_STORY)
     instance = repositories(seeded)["instances"].get(
-        "CHK-CUST-COMPLAINTS-CUSTOPS-2026-07"
+        "CHK-CHANGED-PROCESS-FACILITIES-2026-07"
     )
     assert instance.status == "overdue"
     assert instance.due_date == date(2026, 8, 15)
@@ -164,7 +165,7 @@ def test_a_missing_submission_goes_overdue(seeded):
 def test_nothing_goes_overdue_before_its_due_date(seeded):
     run_cycle(seeded, date(2026, 8, 1))
     instance = repositories(seeded)["instances"].get(
-        "CHK-CUST-COMPLAINTS-CUSTOPS-2026-07"
+        "CHK-CHANGED-PROCESS-FACILITIES-2026-07"
     )
     assert instance.status == "pending"
 
@@ -180,14 +181,14 @@ def test_an_exception_granted_later_waives_an_open_instance(conn, corpus):
     seed_database(conn, corpus)
     run_cycle(conn, date(2026, 2, 10))
     repo = repositories(conn)
-    instance = repo["instances"].get("CHK-CHANGE-MGMT-FINREP-2026-02")
+    instance = repo["instances"].get("CHK-CHANGED-PROCESS-FINANCE-2026-02")
     assert instance.status == "pending"
 
     repo["exceptions"].add(
         ComplianceException(
             id="EXC-LATE",
-            control_id="CTRL-CHANGE-MGMT",
-            auditable_unit_id="AREA-FINREP",
+            control_id="CTRL-CHANGED-PROCESS",
+            auditable_unit_id="AREA-FINANCE",
             rationale="Change freeze agreed after the period opened.",
             approved_by="Finance Control Board",
             granted_at=date(2026, 2, 1),
@@ -196,7 +197,7 @@ def test_an_exception_granted_later_waives_an_open_instance(conn, corpus):
         )
     )
     run_cycle(conn, date(2026, 3, 10))
-    assert repo["instances"].get("CHK-CHANGE-MGMT-FINREP-2026-02").status == "waived"
+    assert repo["instances"].get("CHK-CHANGED-PROCESS-FINANCE-2026-02").status == "waived"
     assert "waived" in SETTLED
 
 
@@ -204,18 +205,18 @@ def test_a_settled_instance_is_left_alone(conn, corpus):
     seed_database(conn, corpus)
     run_cycle(conn, date(2026, 2, 10))
     repo = repositories(conn)
-    instance = repo["instances"].get("CHK-CHANGE-MGMT-FINREP-2026-02")
+    instance = repo["instances"].get("CHK-CHANGED-PROCESS-FINANCE-2026-02")
     instance.status = "assessed"
     repo["instances"].update(instance)
 
     run_cycle(conn, END_OF_STORY)
-    assert repo["instances"].get("CHK-CHANGE-MGMT-FINREP-2026-02").status == "assessed"
+    assert repo["instances"].get("CHK-CHANGED-PROCESS-FINANCE-2026-02").status == "assessed"
 
 
 # --- escalation ------------------------------------------------------------
 
 def test_overdue_escalates_one_level_per_interval(seeded):
-    target = "CHK-CUST-COMPLAINTS-CUSTOPS-2026-07"  # due 2026-08-15, never filed
+    target = "CHK-CHANGED-PROCESS-FACILITIES-2026-07"  # due 2026-08-15, never filed
     run_cycle(seeded, date(2026, 8, 20))            # 5 days over: no escalation
     assert _levels(seeded, target) == []
 
@@ -227,7 +228,7 @@ def test_overdue_escalates_one_level_per_interval(seeded):
 
 
 def test_escalation_does_not_repeat_on_later_cycles(seeded):
-    target = "CHK-CUST-COMPLAINTS-CUSTOPS-2026-07"
+    target = "CHK-CHANGED-PROCESS-FACILITIES-2026-07"
     for as_of in (date(2026, 9, 14), date(2026, 10, 14), date(2026, 11, 14)):
         run_cycle(seeded, as_of)
     assert _levels(seeded, target) == [1, 2]
@@ -235,7 +236,7 @@ def test_escalation_does_not_repeat_on_later_cycles(seeded):
 
 def test_escalation_stops_at_the_top_of_the_chain(seeded):
     run_cycle(seeded, END_OF_STORY)
-    target = "CHK-CUST-COMPLAINTS-CUSTOPS-2026-07"
+    target = "CHK-CHANGED-PROCESS-FACILITIES-2026-07"
     assert _levels(seeded, target) == [1, 2]
     assert max(_levels(seeded, target)) == DEFAULT_POLICY.max_escalation_level
 
@@ -244,12 +245,12 @@ def test_escalation_walks_up_the_owner_chain(seeded, corpus):
     run_cycle(seeded, END_OF_STORY)
     from sentinelops import directory
 
-    area = next(a for a in corpus.areas if a.id == "AREA-CUSTOPS")
+    area = next(a for a in corpus.areas if a.id == "AREA-IT")
     chain = owner_chain(area, directory.load(seeded))
     events = [
         e
         for e in repositories(seeded)["audit"].read_for(
-            "CheckInstance", "CHK-CUST-COMPLAINTS-CUSTOPS-2026-07"
+            "CheckInstance", "CHK-CHANGED-PROCESS-FACILITIES-2026-07"
         )
         if e.action == "check_instance_escalated"
     ]
@@ -260,7 +261,7 @@ def test_escalation_walks_up_the_owner_chain(seeded, corpus):
 def test_the_escalation_interval_is_configurable(seeded):
     policy = SchedulePolicy(escalate_after_days=3)
     run_cycle(seeded, date(2026, 8, 22), policy=policy)  # 7 days over -> level 2
-    assert _levels(seeded, "CHK-CUST-COMPLAINTS-CUSTOPS-2026-07") == [1, 2]
+    assert _levels(seeded, "CHK-CHANGED-PROCESS-FACILITIES-2026-07") == [1, 2]
 
 
 def _levels(conn, instance_key):
@@ -276,17 +277,17 @@ def _levels(conn, instance_key):
 def test_an_active_exception_suppresses_generation(seeded):
     run_cycle(seeded, END_OF_STORY)
     ids = {i.id for i in repositories(seeded)["instances"].list()}
-    assert "CHK-THIRD-PARTY-ACCESS-MKTG-2026-Q1" not in ids
-    assert "CHK-THIRD-PARTY-ACCESS-MKTG-2026-Q2" not in ids
-    assert "CHK-BCP-TEST-PLATFORM-2026" not in ids
+    assert "CHK-CONTROLLED-DOCS-FACILITIES-2026-Q1" not in ids
+    assert "CHK-CONTROLLED-DOCS-FACILITIES-2026-Q2" not in ids
+    assert "CHK-BCP-TEST-IT-2026" not in ids
 
 
 def test_the_lapse_returns_the_control_to_the_schedule(seeded):
     """EXC-002 expires 2026-06-30: Q1 and Q2 suppressed, Q3 and Q4 return."""
     run_cycle(seeded, END_OF_STORY)
     ids = {i.id for i in repositories(seeded)["instances"].list()}
-    assert "CHK-THIRD-PARTY-ACCESS-MKTG-2026-Q3" in ids
-    assert "CHK-THIRD-PARTY-ACCESS-MKTG-2026-Q4" in ids
+    assert "CHK-CONTROLLED-DOCS-FACILITIES-2026-Q3" in ids
+    assert "CHK-CONTROLLED-DOCS-FACILITIES-2026-Q4" in ids
 
 
 def test_a_lapsed_exception_raises_its_own_alert(seeded):
@@ -309,8 +310,8 @@ def test_the_lapse_alert_is_routed_to_the_owning_team(seeded):
     }
     # both EXC-002 and EXC-004 have lapsed by this date, each to its own team
     assert set(alerts) == {"EXC-002", "EXC-004"}
-    assert alerts["EXC-002"].to_team == "Marketing"
-    assert alerts["EXC-004"].to_team == "People Operations"
+    assert alerts["EXC-002"].to_team == "Facilities"
+    assert alerts["EXC-004"].to_team == "Admin"
 
 
 def test_the_lapse_alert_fires_once_not_every_cycle(seeded):
@@ -329,14 +330,14 @@ def test_expiring_does_not_retroactively_unsuppress_earlier_periods(seeded):
     run_cycle(seeded, date(2026, 7, 5))   # flips EXC-002 to expired
     run_cycle(seeded, END_OF_STORY)       # would backfill if `covers` looked at status
     ids = {i.id for i in repositories(seeded)["instances"].list()}
-    assert "CHK-THIRD-PARTY-ACCESS-MKTG-2026-Q1" not in ids
-    assert "CHK-THIRD-PARTY-ACCESS-MKTG-2026-Q2" not in ids
+    assert "CHK-CONTROLLED-DOCS-FACILITIES-2026-Q1" not in ids
+    assert "CHK-CONTROLLED-DOCS-FACILITIES-2026-Q2" not in ids
 
 
 def test_a_revoked_exception_suppresses_nothing(seeded):
     run_cycle(seeded, END_OF_STORY)
     ids = {i.id for i in repositories(seeded)["instances"].list()}
-    assert "CHK-INCIDENT-PM-FINREP-2026-03" in ids
+    assert "CHK-INCIDENT-PM-HR-2026-03" in ids
 
 
 def test_covers_ignores_status_flips_but_not_revocation():
@@ -357,7 +358,7 @@ def test_every_new_instance_is_routed_to_its_owning_team(seeded, corpus):
     result = run_cycle(seeded, END_OF_STORY)
     assigned = [n for n in result.notifications if n.kind == "assigned"]
     teams = {a.id: a.name for a in corpus.areas}
-    assert len(assigned) == 532
+    assert len(assigned) == 447
     for notification in assigned:
         instance = repositories(seeded)["instances"].get(notification.entity_id)
         assert notification.to_team == teams[instance.auditable_unit_id]
@@ -396,7 +397,7 @@ def test_due_soon_warns_before_the_deadline(seeded):
     result = run_cycle(seeded, date(2026, 8, 10))  # 5 days before 08-15
     due_soon = [
         n for n in result.notifications
-        if n.kind == "due_soon" and n.entity_id == "CHK-CUST-COMPLAINTS-CUSTOPS-2026-07"
+        if n.kind == "due_soon" and n.entity_id == "CHK-CHANGED-PROCESS-FACILITIES-2026-07"
     ]
     assert len(due_soon) == 1
     assert "due in 5 day(s)" in due_soon[0].subject
@@ -472,7 +473,7 @@ def test_one_instance_has_a_reconstructable_timeline(seeded):
                   date(2026, 9, 14)):
         run_cycle(seeded, as_of)
     events = repositories(seeded)["audit"].read_for(
-        "CheckInstance", "CHK-CUST-COMPLAINTS-CUSTOPS-2026-07"
+        "CheckInstance", "CHK-CHANGED-PROCESS-FACILITIES-2026-07"
     )
     actions = [e.action for e in events]
     assert actions[0] == "check_instance_created"
@@ -529,7 +530,7 @@ def exploding_llm(monkeypatch):
 
 def test_a_full_cycle_runs_with_every_provider_rigged_to_explode(seeded, exploding_llm):
     result = run_cycle(seeded, END_OF_STORY)
-    assert len(result.created) == 532
+    assert len(result.created) == 447
 
 
 def test_a_full_cycle_records_no_token_usage(seeded, exploding_llm):
@@ -567,15 +568,15 @@ def test_waived_is_reachable_from_the_corpus_alone(seeded):
     waived = [
         i for i in repositories(seeded)["instances"].list() if i.status == "waived"
     ]
-    assert [i.id for i in waived] == ["CHK-CRYPTO-KEY-HR-2026-Q1"]
+    assert [i.id for i in waived] == ["CHK-ACCESS-REVIEW-ADMIN-2026-Q1"]
 
 
 def test_the_waiver_reaches_only_the_obligation_it_names(seeded):
     _run_the_year(seeded)
     repo = repositories(seeded)
-    assert repo["instances"].get("CHK-CRYPTO-KEY-HR-2026-Q1").status == "waived"
+    assert repo["instances"].get("CHK-ACCESS-REVIEW-ADMIN-2026-Q1").status == "waived"
     for quarter in ("Q2", "Q3", "Q4"):
-        instance = repo["instances"].get(f"CHK-CRYPTO-KEY-HR-2026-{quarter}")
+        instance = repo["instances"].get(f"CHK-ACCESS-REVIEW-ADMIN-2026-{quarter}")
         assert instance is not None, "later quarters must still be raised"
         assert instance.status != "waived"
 
@@ -584,13 +585,13 @@ def test_the_waived_instance_was_open_and_overdue_first(seeded):
     """It is a waiver, not a suppression: the check existed and had lapsed."""
     repo = repositories(seeded)
     run_cycle(seeded, date(2026, 4, 15))
-    assert repo["instances"].get("CHK-CRYPTO-KEY-HR-2026-Q1").status == "pending"
+    assert repo["instances"].get("CHK-ACCESS-REVIEW-ADMIN-2026-Q1").status == "pending"
 
     run_cycle(seeded, date(2026, 4, 30))
-    assert repo["instances"].get("CHK-CRYPTO-KEY-HR-2026-Q1").status == "overdue"
+    assert repo["instances"].get("CHK-ACCESS-REVIEW-ADMIN-2026-Q1").status == "overdue"
 
     run_cycle(seeded, date(2026, 5, 15))  # inside EXC-004's window
-    assert repo["instances"].get("CHK-CRYPTO-KEY-HR-2026-Q1").status == "waived"
+    assert repo["instances"].get("CHK-ACCESS-REVIEW-ADMIN-2026-Q1").status == "waived"
 
 
 def test_the_waiver_records_who_approved_it(seeded):
@@ -598,7 +599,7 @@ def test_the_waiver_records_who_approved_it(seeded):
     events = [
         e
         for e in repositories(seeded)["audit"].read_for(
-            "CheckInstance", "CHK-CRYPTO-KEY-HR-2026-Q1"
+            "CheckInstance", "CHK-ACCESS-REVIEW-ADMIN-2026-Q1"
         )
         if e.action == "check_instance_waived"
     ]
@@ -616,7 +617,7 @@ def test_the_waiver_is_routed_like_any_other_alert(seeded):
         result = run_cycle(seeded, as_of)
     waivers = [n for n in result.notifications if n.kind == "waived"]
     assert len(waivers) == 1
-    assert waivers[0].to_team == "People Operations"
+    assert waivers[0].to_team == "Admin"
     assert "EXC-004" in waivers[0].subject
 
 
@@ -626,13 +627,13 @@ def test_a_waived_instance_stays_waived_after_the_exception_lapses(seeded):
     run_cycle(seeded, date(2026, 8, 1))  # EXC-004 expired 2026-06-19
     repo = repositories(seeded)
     assert repo["exceptions"].get("EXC-004").status == "expired"
-    assert repo["instances"].get("CHK-CRYPTO-KEY-HR-2026-Q1").status == "waived"
+    assert repo["instances"].get("CHK-ACCESS-REVIEW-ADMIN-2026-Q1").status == "waived"
 
 
 def test_an_expired_waiver_excuses_nothing_new(seeded):
     """A single cycle after the window leaves the check overdue, not waived."""
     run_cycle(seeded, END_OF_STORY)
-    instance = repositories(seeded)["instances"].get("CHK-CRYPTO-KEY-HR-2026-Q1")
+    instance = repositories(seeded)["instances"].get("CHK-ACCESS-REVIEW-ADMIN-2026-Q1")
     assert instance.status == "overdue"
 
 
@@ -640,8 +641,8 @@ def test_the_fourth_exception_suppresses_no_generation(seeded):
     _run_the_year(seeded)
     ids = {i.id for i in repositories(seeded)["instances"].list()}
     for quarter in ("Q1", "Q2", "Q3", "Q4"):
-        assert f"CHK-CRYPTO-KEY-HR-2026-{quarter}" in ids
-    assert len(ids) == 532
+        assert f"CHK-ACCESS-REVIEW-ADMIN-2026-{quarter}" in ids
+    assert len(ids) == 447
 
 
 def test_waives_and_covers_are_complementary():

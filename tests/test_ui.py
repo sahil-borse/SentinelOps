@@ -129,7 +129,7 @@ def test_a_superseded_citation_still_resolves_in_its_own_source(live):
 
 def test_status_by_area_accounts_for_every_check(live):
     rows = view.status_by_area(live)
-    assert len(rows) == 11
+    assert len(rows) == 10
     total = sum(r.due for r in rows)
     assert total == len(repositories(live)["instances"].list())
     for row in rows:
@@ -186,7 +186,7 @@ def test_finding_detail_is_none_for_an_unassessed_check(live):
 
 def test_the_timeline_covers_the_whole_check(live):
     instance_id = next(
-        i for i in view.assessable_instances(live) if "CUST-COMPLAINTS" in i
+        i for i in view.assessable_instances(live) if "CHANGED-PROCESS" in i
     )
     rows = view.timeline(live, instance_id)
     events = [r["event"] for r in rows]
@@ -758,11 +758,22 @@ def test_an_absurd_upload_is_capped_before_the_browser_suffers():
 
 def test_a_very_large_upload_stays_readable(live):
     """An uploaded chat export should not produce a page metres long."""
-    target = view.instances_awaiting_evidence(live)[0]
+    # One that has already fallen due, so re-assessing it actually judges
+    # something. Taking the first instance awaiting evidence would now take a
+    # period that has not closed yet, and the re-assessment would find nothing
+    # to do — which is a fair thing for it to do and a useless thing to test.
+    from sentinelops.repositories import repositories
+
+    instances = repositories(live)["instances"]
+    target = next(
+        i for i in view.instances_awaiting_evidence(live)
+        if instances.get(i).due_date <= date(2026, 6, 28)
+    )
     huge = "Chat export.\n" + ("Some line of conversation. " * 4000)
     service.submit_evidence(
         live, instance_id=target, filename="export.md", content=huge,
-        author="R. Mehta", doc_type=service.doc_types_for(live, target)[0],
+        author=instances.get(target).owner_name,
+        doc_type=service.doc_types_for(live, target)[0],
         as_of=date(2026, 6, 28),
     )
     service.reassess(live, target, date(2026, 6, 28))

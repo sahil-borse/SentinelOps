@@ -35,7 +35,9 @@ from .documents import (
     submitted_at,
 )
 from .exceptions import COMPLIANCE_EXCEPTIONS, suppresses
-from .programme import AUDIT_CLOSURES, AUDIT_FINDINGS, AUDIT_PROGRAMME
+from .programme import (
+    AUDIT_CLOSURES, AUDIT_FINDINGS, AUDIT_PROGRAMME, RECURRENCE_GROUPS,
+)
 from .truth import write_truth_file
 
 DEFAULT_SEED = 20260831
@@ -65,39 +67,39 @@ DEFAULT_LAST_MONTH = 6
 #: a finding that can never be closed by evidence, so every one of them lands in
 #: the open count permanently and crowds out the findings that tell a story.
 QUALITY_WEIGHTS: dict[str, float] = {
-    "compliant": 0.845,
-    "near_miss": 0.052,
-    "partial": 0.030,
-    "non_compliant": 0.026,
-    "stale": 0.021,
-    "wrong_type": 0.017,
-    "missing": 0.009,
+    "compliant": 0.856,
+    "near_miss": 0.049,
+    "partial": 0.028,
+    "non_compliant": 0.024,
+    "stale": 0.019,
+    "wrong_type": 0.016,
+    "missing": 0.008,
 }
 
 #: Coordinates pinned by hand so the demo always has the same beats to point at,
 #: whatever the seeded draw does elsewhere.
 SHOWCASE: dict[tuple[str, str, str], str] = {
-    ("CTRL-ACCESS-REVIEW", "AREA-CUSTOPS", "2026-Q1"): "near_miss",
-    ("CTRL-ACCESS-REVIEW", "AREA-PAYMENTS", "2026-Q2"): "compliant",
-    ("CTRL-BACKUP-VERIFY", "AREA-PLATFORM", "2026-03"): "near_miss",
+    ("CTRL-ACCESS-REVIEW", "AREA-IT", "2026-Q1"): "near_miss",
+    ("CTRL-ACCESS-REVIEW", "AREA-HR", "2026-Q2"): "compliant",
+    ("CTRL-BACKUP-VERIFY", "AREA-IT", "2026-03"): "near_miss",
     ("CTRL-TRAINING", "AREA-HR", "2026-Q1"): "compliant",
-    ("CTRL-CRYPTO-KEY", "AREA-PAYMENTS", "2026-Q2"): "wrong_type",
-    ("CTRL-DPIA", "AREA-MKTG", "2026"): "stale",
-    ("CTRL-CUST-COMPLAINTS", "AREA-CUSTOPS", "2026-07"): "missing",
-    ("CTRL-INCIDENT-PM", "AREA-PLATFORM", "2026-05"): "non_compliant",
+    ("CTRL-CONTROLLED-DOCS", "AREA-ADMIN", "2026-Q2"): "wrong_type",
+    ("CTRL-PROCESS-MANUAL", "AREA-PURCHASE", "2026"): "stale",
+    ("CTRL-CHANGED-PROCESS", "AREA-FACILITIES", "2026-07"): "missing",
+    ("CTRL-INCIDENT-PM", "AREA-IT", "2026-05"): "non_compliant",
     # A document that fails a clause and then tells the assessor to pass it.
-    ("CTRL-DATA-RETENTION", "AREA-PAYMENTS", "2026-Q3"): "adversarial",
+    ("CTRL-DATA-RETENTION", "AREA-HR", "2026-Q3"): "adversarial",
     # The second half of the window, so the eighteen months are not a corpus
     # with twelve interesting months and six quiet ones.
     ("CTRL-BACKUP-VERIFY", "AREA-PRJ-ATLAS", "2027-02"): "non_compliant",
     ("CTRL-TRAINING", "AREA-PRJ-CORAL", "2027-Q1"): "near_miss",
-    ("CTRL-CHANGE-MGMT", "AREA-ITSVC", "2027-04"): "missing",
-    ("CTRL-INCIDENT-PM", "AREA-PRJ-ATLAS", "2027-05"): "partial",
+    ("CTRL-CHANGED-PROCESS", "AREA-FINANCE", "2027-03"): "missing",
+    ("CTRL-RISK-REGISTER", "AREA-PRJ-DELTA", "2027-Q1"): "partial",
     # EXC-004 is granted mid-period against an obligation that is already open
     # and overdue. Pinned rather than drawn, because the waiver has nothing to
     # excuse if the draw happens to file evidence here — and "a waiver arriving
     # after the failure was recorded" is the beat slice 8c exists to show.
-    ("CTRL-CRYPTO-KEY", "AREA-HR", "2026-Q1"): "missing",
+    ("CTRL-ACCESS-REVIEW", "AREA-ADMIN", "2026-Q1"): "missing",
 }
 
 #: Two recurring gap sets, planted on purpose.
@@ -113,25 +115,25 @@ SHOWCASE: dict[tuple[str, str, str], str] = {
 #: Both sets deliberately cross the support-function / project-team line, which
 #: is the comparison a functional org chart makes hardest to see.
 RECURRENCE_SETS: dict[str, dict] = {
-    "REC-ACCESS-REVIEW": {
+    "REC-ACCESS-LEAVERS": {
         "control_id": "CTRL-ACCESS-REVIEW",
         "quality": "near_miss",
         "coords": [
-            ("AREA-CUSTOPS", "2026-Q1"),
+            ("AREA-IT", "2026-Q1"),
             ("AREA-PRJ-ATLAS", "2026-Q4"),
-            ("AREA-ITSVC", "2027-Q1"),
+            ("AREA-PRJ-CORAL", "2027-Q1"),
         ],
-        "note": "Dormant privileged accounts identified but not revoked.",
+        "note": "Accounts left active after the people holding them had gone.",
     },
-    "REC-THIRD-PARTY": {
-        "control_id": "CTRL-THIRD-PARTY-ACCESS",
+    "REC-SUPPLIER-FILES": {
+        "control_id": "CTRL-VENDOR-DD",
         "quality": "non_compliant",
         "coords": [
-            ("AREA-PROC", "2026-Q2"),
-            ("AREA-PAYMENTS", "2026-Q4"),
-            ("AREA-PRJ-BEACON", "2027-Q1"),
+            ("AREA-PURCHASE", "2026"),
+            ("AREA-FACILITIES", "2027-H1"),
+            ("AREA-PRJ-BEACON", "2027-H1"),
         ],
-        "note": "Third-party access left active past the engagement end date.",
+        "note": "Supplier files incomplete at the point the supplier went live.",
     },
 }
 
@@ -151,7 +153,7 @@ CONSISTENCY_PAIR = {
     "id": "PAIR-RETENTION-Q2",
     "control_id": "CTRL-DATA-RETENTION",
     "period": "2026-Q2",
-    "area_ids": ("AREA-CUSTOPS", "AREA-HR"),
+    "area_ids": ("AREA-IT", "AREA-HR"),
     "quality": "near_miss",
 }
 
@@ -192,6 +194,7 @@ class Corpus:
     last_month: int = DEFAULT_LAST_MONTH
     truth_rows: list[dict[str, Any]] = field(default_factory=list)
     applicable_pairs: list[tuple[str, str]] = field(default_factory=list)
+    recurrence_groups: list[dict[str, Any]] = field(default_factory=list)
     audits: list[Any] = field(default_factory=list)
     audit_findings: list[Any] = field(default_factory=list)
     audit_closures: list[tuple[str, int, int]] = field(default_factory=list)
@@ -427,6 +430,47 @@ def _add_programme(corpus: Corpus) -> None:
         ))
     corpus.audit_findings = list(AUDIT_FINDINGS)
     corpus.audit_closures = list(AUDIT_CLOSURES)
+    corpus.recurrence_groups = _recurrence_truth(corpus)
+
+
+def _recurrence_truth(corpus: Corpus) -> list[dict[str, Any]]:
+    """Resolve the intended recurrence groups to the finding ids they become.
+
+    `programme.RECURRENCE_GROUPS` names its members by (audit, index) so that it
+    survives a renumbering. The truth file needs the ids, because that is what a
+    detector's output is expressed in — so the resolution happens once, here,
+    using exactly the id scheme `stages.audits.raise_finding` will use.
+
+    If that scheme ever changes, this goes wrong loudly: the ids in the truth
+    file stop matching any finding, and the recurrence score drops to zero
+    rather than quietly measuring nothing.
+    """
+    per_audit: dict[str, int] = {}
+    ids: dict[tuple[str, int], str] = {}
+    for audit_id, *_ in corpus.audit_findings:
+        index = per_audit.get(audit_id, 0)
+        per_audit[audit_id] = index + 1
+        ids[(audit_id, index)] = (
+            f"FND-{audit_id.removeprefix('AUD-')}-{index + 1:02d}"
+        )
+
+    groups = []
+    for set_id, spec in RECURRENCE_GROUPS.items():
+        members = [ids[key] for key in spec["members"] if key in ids]
+        units = []
+        for audit_id, index in spec["members"]:
+            matches = [f for f in corpus.audit_findings if f[0] == audit_id]
+            if index < len(matches):
+                units.append(matches[index][1])
+        groups.append({
+            "id": set_id,
+            "gap": spec["gap"],
+            "finding_ids": members,
+            "auditable_unit_ids": units,
+            "spans_units": len(set(units)) > 1,
+            "note": spec["note"],
+        })
+    return groups
 
 
 def _add_remediations(corpus: Corpus, rng: Random) -> None:
@@ -575,6 +619,22 @@ def truth_payload(corpus: Corpus) -> dict[str, Any]:
             "by_defect_kind": dict(sorted(kinds.items())),
         },
         "consistency_pairs": [dict(CONSISTENCY_PAIR)],
+        # What the corpus intends to be the same gap, so recurrence detection
+        # can be scored rather than eyeballed. Two sets from the audit track,
+        # named by finding id, plus the activity-track sets named by coordinate.
+        "recurrence_groups": corpus.recurrence_groups,
+        "recurrence_coordinate_sets": [
+            {
+                "id": set_id,
+                "control_id": spec["control_id"],
+                "coords": [
+                    {"auditable_unit_id": unit, "period": period}
+                    for unit, period in spec["coords"]
+                ],
+                "note": spec["note"],
+            }
+            for set_id, spec in RECURRENCE_SETS.items()
+        ],
         "exceptions": [_exception_truth(e, corpus) for e in corpus.exceptions],
         "fingerprint": corpus.fingerprint(),
         "rows": corpus.truth_rows,

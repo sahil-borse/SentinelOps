@@ -57,21 +57,25 @@ def test_the_generator_never_reads_the_clock():
 def test_unit_roster_matches_section_ten(corpus):
     """Six support functions plus three project teams, and two departments.
 
-    Section 10 names the first two; the departments were already there and stay,
-    because `kind` being descriptive rather than a switch is only demonstrated
-    if more than two values of it exist and nothing branches on any of them.
+    The roster the stakeholder described, exactly: IT, Admin, Purchase, HR,
+    Finance and Facilities, plus four project teams. The two `department` units
+    an earlier version carried are gone — they were ours, not theirs, and a
+    corpus that quietly adds units the stakeholder did not name is describing a
+    different organisation.
     """
     from collections import Counter
 
     kinds = Counter(u.kind for u in corpus.areas)
     assert kinds["support_function"] == 6
-    assert kinds["project_team"] == 3
-    assert kinds["department"] == 2
-    assert len(corpus.areas) == 11
+    assert kinds["project_team"] == 4
+    assert len(corpus.areas) == 10
+    assert {u.name for u in corpus.areas if u.kind == "support_function"} == {
+        "IT", "Admin", "Purchase", "HR", "Finance", "Facilities"
+    }
 
 
 def test_area_count_and_varied_attributes(corpus):
-    assert 10 <= len(corpus.areas) <= 12
+    assert 9 <= len(corpus.areas) <= 11
     for attribute in ("handles_pii", "customer_facing", "has_suppliers"):
         values = {a.attributes[attribute] for a in corpus.areas}
         assert values == {True, False}, f"{attribute} does not vary"
@@ -108,26 +112,34 @@ def test_areas_receive_genuinely_different_control_sets(corpus):
         by_area[area_id].add(control_id)
 
     # Every unit is in scope for something and the sets differ in size as well
-    # as membership. AREA-PAYMENTS legitimately draws all fourteen — it handles
+    # as membership. AREA-IT legitimately draws all fourteen — it handles
     # PII, faces customers, uses suppliers and is business-critical — so "nobody
     # gets everything" is not the property to assert.
     #
-    # Nor is "everybody gets something different": with eleven units a couple of
-    # them share a risk profile and therefore share their obligations, which is
-    # the rules engine being right rather than lazy. See
+    # Nor is "everybody gets something different": Purchase and Facilities share
+    # a risk profile and therefore share their obligations, which is the rules
+    # engine being right rather than lazy. See
     # `test_units_that_share_a_profile_share_a_set`.
+    # Seven distinct sets across ten units, ranging from seven controls to all
+    # fourteen. IT and HR owe the same set, and so do Purchase, Facilities and
+    # Beacon — in each case because they genuinely share a risk profile, and an
+    # engine that invented a difference would be wrong. What has to hold is that
+    # applicability is doing real work, not that every unit is a snowflake.
     assert all(len(s) > 0 for s in by_area.values())
     sets = [frozenset(s) for s in by_area.values()]
-    assert len(set(sets)) >= len(sets) - 2, "the sets have collapsed"
+    assert len(set(sets)) >= 6, "the sets have collapsed"
     assert len({len(s) for s in sets}) >= 4
-    assert by_area["AREA-FINREP"] != by_area["AREA-PROC"]
-    assert by_area["AREA-PAYMENTS"] > by_area["AREA-FINREP"]
+    assert max(len(s) for s in sets) - min(len(s) for s in sets) >= 5
+    assert by_area["AREA-FINANCE"] != by_area["AREA-PURCHASE"]
+    assert by_area["AREA-IT"] > by_area["AREA-FACILITIES"]
 
-    # a PII area gets the PII controls; a non-PII area does not
-    assert "CTRL-ACCESS-REVIEW" in by_area["AREA-CUSTOPS"]
-    assert "CTRL-ACCESS-REVIEW" not in by_area["AREA-PROC"]
-    assert "CTRL-VENDOR-DD" in by_area["AREA-PROC"]
-    assert "CTRL-VENDOR-DD" not in by_area["AREA-CUSTOPS"]
+    # a unit that handles personal data owes the PII controls; one that does
+    # not, does not — and the same for suppliers, on a different pair of units,
+    # because IT happens to have both.
+    assert "CTRL-ACCESS-REVIEW" in by_area["AREA-IT"]
+    assert "CTRL-ACCESS-REVIEW" not in by_area["AREA-PURCHASE"]
+    assert "CTRL-VENDOR-DD" in by_area["AREA-PURCHASE"]
+    assert "CTRL-VENDOR-DD" not in by_area["AREA-FINANCE"]
 
 
 def test_applicability_matches_every_generated_pair(corpus):
@@ -341,8 +353,8 @@ def test_every_exception_is_fully_documented(corpus):
 def test_the_fourth_exception_arrives_after_its_obligation_is_overdue(corpus):
     """EXC-004 waives rather than suppresses, so it must miss every period end."""
     exception = next(e for e in corpus.exceptions if e.id == "EXC-004")
-    assert exception.control_id == "CTRL-CRYPTO-KEY"
-    assert exception.auditable_unit_id == "AREA-HR"
+    assert exception.control_id == "CTRL-ACCESS-REVIEW"
+    assert exception.auditable_unit_id == "AREA-ADMIN"
     assert exception.granted_at.isoformat() == "2026-05-11"
     assert exception.expires_at.isoformat() == "2026-06-19"
 
@@ -362,17 +374,17 @@ def test_the_fourth_exception_leaves_the_corpus_untouched(corpus):
     ]
     assert len(suppressed) == 3
     assert {r["control_id"] for r in suppressed} == {
-        "CTRL-BCP-TEST", "CTRL-THIRD-PARTY-ACCESS"
+        "CTRL-BCP-TEST", "CTRL-CONTROLLED-DOCS"
     }
     # Section 10's eighteen-month window over eleven units. Pinned rather than
     # bounded because this test's whole job is "adding EXC-004 changed nothing
     # else" — a range would let a drift of a dozen submissions through.
-    assert len(corpus.submissions) == 959
-    assert len(corpus.truth_rows) == 972
+    assert len(corpus.submissions) == 795
+    assert len(corpus.truth_rows) == 803
 
     # the obligation it waives is genuinely unevidenced
     filed = {(s.control_id, s.auditable_unit_id, s.period) for s in corpus.submissions}
-    assert ("CTRL-CRYPTO-KEY", "AREA-HR", "2026-Q1") not in filed
+    assert ("CTRL-ACCESS-REVIEW", "AREA-ADMIN", "2026-Q1") not in filed
 
 
 def test_an_active_exception_suppresses_its_periods_and_the_lapse_restores_them(corpus):
@@ -381,15 +393,15 @@ def test_an_active_exception_suppresses_its_periods_and_the_lapse_restores_them(
         for r in corpus.truth_rows
         if r["defect_kind"] == "exception_suppressed"
     }
-    assert ("CTRL-THIRD-PARTY-ACCESS", "AREA-MKTG", "2026-Q1") in suppressed
-    assert ("CTRL-THIRD-PARTY-ACCESS", "AREA-MKTG", "2026-Q2") in suppressed
-    assert ("CTRL-THIRD-PARTY-ACCESS", "AREA-MKTG", "2026-Q3") not in suppressed
+    assert ("CTRL-CONTROLLED-DOCS", "AREA-FACILITIES", "2026-Q1") in suppressed
+    assert ("CTRL-CONTROLLED-DOCS", "AREA-FACILITIES", "2026-Q2") in suppressed
+    assert ("CTRL-CONTROLLED-DOCS", "AREA-FACILITIES", "2026-Q3") not in suppressed
 
     filed = {
         (s.control_id, s.auditable_unit_id, s.period) for s in corpus.submissions
     }
-    assert ("CTRL-THIRD-PARTY-ACCESS", "AREA-MKTG", "2026-Q1") not in filed
-    assert ("CTRL-THIRD-PARTY-ACCESS", "AREA-MKTG", "2026-Q3") in filed
+    assert ("CTRL-CONTROLLED-DOCS", "AREA-FACILITIES", "2026-Q1") not in filed
+    assert ("CTRL-CONTROLLED-DOCS", "AREA-FACILITIES", "2026-Q3") in filed
 
 
 def test_a_revoked_exception_suppresses_nothing(corpus):

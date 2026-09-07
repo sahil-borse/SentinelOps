@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 import pytest
 
+from sentinelops.synth.calendar import SIMULATED_TODAY
 from sentinelops.entities import InboundSubmission
 from sentinelops.llm.protocol import LlmResponse
 from sentinelops.repositories import repositories
@@ -15,7 +16,7 @@ from sentinelops.stages.remediation import PASSING, reassess, reassess_all
 from sentinelops.stages.trigger import run_cycle
 from sentinelops.synth import generate_corpus, seed_database
 
-END_OF_STORY = date(2027, 9, 30)
+END_OF_STORY = SIMULATED_TODAY
 
 
 @pytest.fixture(scope="module")
@@ -242,7 +243,7 @@ def test_reassess_with_nothing_to_reassess_is_a_clean_no_op(flagged):
     conn = flagged
     repo = repositories(conn)
     before = len(repo["assessments"].list())
-    result = reassess(conn, "CHK-CUST-COMPLAINTS-CUSTOPS-2026-07", END_OF_STORY)
+    result = reassess(conn, "CHK-CHANGED-PROCESS-FACILITIES-2026-07", END_OF_STORY)
 
     assert result.new_assessment_id is None
     assert "no unbound remediation evidence" in result.reason

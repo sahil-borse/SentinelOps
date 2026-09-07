@@ -57,7 +57,27 @@ _HEDGED = re.compile(
     re.IGNORECASE,
 )
 
+#: "3 of 5 accounts were disabled" — a shortfall stated as arithmetic, with no
+#: word anywhere in it that reads as failure.
+#:
+#: Added after the section 3 control library landed: its clauses state shortfalls
+#: this way far more often than the set they replaced, and the stub was missing
+#: six near-misses instead of one. Comparing two numbers is something a keyword
+#: rule can legitimately do, so teaching it here is making the stub less bad at
+#: a mechanical job — not softening the corpus so the stub looks better. What is
+#: left after this is genuine language work, which is the part the model tier is
+#: for and the part `tests/test_fake_accuracy.py` still measures it failing.
+_SHORTFALL = re.compile(r"\b(\d+) of (\d+)\b")
+
 _NUMBERED = re.compile(r"^\s*\d+\.\s", re.MULTILINE)
+
+
+def _falls_short(clause: str) -> bool:
+    """True when the clause reports fewer than the whole of something."""
+    for fewer, total in _SHORTFALL.findall(clause):
+        if int(fewer) < int(total):
+            return True
+    return False
 
 
 def _digest(request: LlmRequest) -> str:
@@ -366,7 +386,11 @@ def _canned(evidence: str) -> dict:
 
     injected = _INJECTION.search(evidence)
     failing = next(
-        (c for c in clauses if _NEGATED.search(_BENIGN_NEGATION.sub("", c))), None
+        (
+            c for c in clauses
+            if _NEGATED.search(_BENIGN_NEGATION.sub("", c)) or _falls_short(c)
+        ),
+        None,
     )
     hedging = next((c for c in clauses if _HEDGED.search(c)), None)
 

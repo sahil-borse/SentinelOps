@@ -189,15 +189,15 @@ def render_document(
 
 def _baseline_metrics(spec: ControlSpec, period: Period, rng: Random) -> dict[str, Any]:
     """A metrics table that comfortably satisfies every threshold."""
-    if spec.id == "CTRL-ACCESS-EXPORT":
-        total = rng.randrange(120, 420)
+    if spec.id == "CTRL-FINDING-CLOSURE":
+        due = rng.randrange(3, 14)
         return {
             "period": period.label,
-            "accounts_total": total,
-            "accounts_reviewed": total,
-            "reviewed_pct": 100.0,
-            "dormant_unresolved": 0,
-            "source": "IAM system of record",
+            "findings_due_for_closure": due,
+            "closed_on_time": due,
+            "closed_on_time_pct": 100.0,
+            "overdue_findings": 0,
+            "source": "findings register",
         }
     if spec.id == "CTRL-TRAINING":
         population = rng.randrange(120, 430)

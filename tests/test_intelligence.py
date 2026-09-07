@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
+from sentinelops.synth.calendar import SIMULATED_TODAY
 from sentinelops.authority import AuthorityError
 from sentinelops.directory import load as load_directory
 from sentinelops.entities import Finding
@@ -18,7 +19,7 @@ from sentinelops.repositories import repositories, simulated_clock
 from sentinelops.stages import intelligence
 from sentinelops.synth import generate_corpus, seed_database
 
-AS_OF = date(2027, 9, 30)
+AS_OF = SIMULATED_TODAY
 
 
 @pytest.fixture(scope="module")

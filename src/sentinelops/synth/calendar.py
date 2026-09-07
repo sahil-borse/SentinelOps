@@ -1,4 +1,4 @@
-"""The eighteen-month simulated calendar, and where "now" sits in it.
+"""The eighteen-month simulated calendar, and where "now" sits inside it.
 
 Period arithmetic itself moved to `sentinelops.periods` in slice 4 — S1 needs it
 at runtime and must not import the test-data package to get it. This module
@@ -14,14 +14,21 @@ from ..periods import (
     Period, all_periods, due_date, period_from_label, periods_for,
 )
 
-#: The simulated "today" the corpus is generated against — the vantage point of
-#: an auditor looking back over eighteen months, from January 2026 to the end of
-#: June 2027. It sits after the last period closes *and* after its grace window,
-#: so every check in the window has had its chance: anything still unmet by now
-#: is genuinely overdue rather than merely not-yet-due. Evidence for 2027-Q2 is
-#: filed in July and its remediation later still, which is why "today" is well
-#: clear of the window's end rather than on it.
-SIMULATED_TODAY = date(2027, 9, 30)
+#: The simulated "today", and it sits **inside** the eighteen-month window
+#: rather than after it.
+#:
+#: This matters more than it looks. With "today" past the end of the window,
+#: every obligation had already fallen due, every open finding was months
+#: overdue, and the ageing buckets collapsed into a single 90+ column — which is
+#: not what a compliance portfolio looks like on any real Tuesday. Worse, the
+#: "due in the next thirty days" panel had nothing to show, because nothing was
+#: ever upcoming.
+#:
+#: Placed here, the corpus has all three states at once: periods that closed and
+#: were evidenced, findings raised recently and not yet overdue, and obligations
+#: that have not fallen due yet. Fifteen months of history behind it, three
+#: months of window still ahead.
+SIMULATED_TODAY = date(2027, 4, 15)
 
 __all__ = ["Period", "SIMULATED_TODAY", "all_periods", "due_date",
            "period_from_label", "periods_for"]

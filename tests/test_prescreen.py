@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
+from sentinelops.synth.calendar import SIMULATED_TODAY
 from sentinelops.entities import CheckInstance, ControlDefinition, Evidence, InboundSubmission
 from sentinelops.repositories import Repository, WriteOnceRepository, repositories
 from sentinelops.stages.prescreen import (
@@ -19,7 +20,7 @@ from sentinelops.stages.prescreen import run as prescreen
 from sentinelops.stages.trigger import run_cycle
 from sentinelops.synth import generate_corpus, seed_database
 
-END_OF_STORY = date(2027, 3, 31)
+END_OF_STORY = SIMULATED_TODAY
 
 
 @pytest.fixture(scope="module")
@@ -48,7 +49,7 @@ def test_no_evidence_resolves_to_insufficient_evidence(screened):
     conn, report = screened
     repo = repositories(conn)
     finding = repo["assessments"].list(
-        check_instance_id="CHK-CUST-COMPLAINTS-CUSTOPS-2026-07"
+        check_instance_id="CHK-CHANGED-PROCESS-FACILITIES-2026-07"
     )[0]
     assert finding.verdict == "insufficient_evidence"
     assert finding.decided_by == "no_evidence"
@@ -419,8 +420,8 @@ def test_binding_the_same_submission_twice_is_idempotent(conn):
 def test_the_report_accounts_for_every_considered_instance(screened):
     conn, report = screened
     assert report.resolved + len(report.to_assess) == report.considered
-    # 532 instances over the eighteen months, one waived before judgement.
-    assert report.considered == 531
+    # 447 instances over the eighteen months, one waived before judgement.
+    assert report.considered == 446
 
 
 def test_the_zero_model_share_is_real(screened):
