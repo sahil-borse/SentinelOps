@@ -1,6 +1,6 @@
 # SentinelOps — evaluation results
 
-Generated 2026-09-02 01:45 · corpus seed `20260831` ·
+Generated 2026-09-02 03:49 · corpus seed `20260831` ·
 fingerprint `7e7ee16b4e1eebd9` · 15 scheduled cycles
 
 > **These runs used `FakeModelClient`, not a language model.** The stub is a

@@ -68,6 +68,135 @@ def highlight(content: str, spans: list[str]) -> str:
     return f"<pre class='doc'>{''.join(out)}</pre>"
 
 
+_BOLD = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
+_CODE = re.compile(r"`([^`]+)`")
+
+
+def rich(text: str) -> str:
+    """Markdown emphasis, rendered as HTML.
+
+    Streamlit does not process markdown inside a block it is told contains raw
+    HTML, so `**this**` in a styled panel arrives on screen with its asterisks
+    showing. The narrative is written in markdown and displayed in styled
+    panels, so the conversion has to happen here. Escaped first: some of these
+    strings carry data-derived names.
+    """
+    escaped = html.escape(text)
+    escaped = _BOLD.sub(lambda m: f'<strong>{m.group(1)}</strong>', escaped)
+    return _CODE.sub(lambda m: f'<code>{m.group(1)}</code>', escaped)
+
+
+#: Roughly how much text fits in the collapsed frame before it needs scrolling.
+#: Used only to decide whether offering "show more" is worth the reader's time.
+COLLAPSED_VISIBLE_LINES = 12
+ASSUMED_LINE_WIDTH = 110
+
+#: How tall the document panel is, collapsed and expanded, in pixels. Both are
+#: fixed: the box scrolls inside itself, so the page never grows with the
+#: document. A fifty-page upload and a five-line one occupy the same space.
+COLLAPSED_HEIGHT = 260
+EXPANDED_HEIGHT = 760
+
+#: A safety valve. Past this the browser, not the layout, is the problem.
+MAX_RENDERED_CHARS = 200_000
+
+_FRAME_CSS = """
+  html,body { margin:0; padding:0; }
+  pre { margin:0; padding:.9rem 1.1rem; white-space:pre-wrap; word-wrap:break-word;
+        background:#fbfbf9; font-size:13px; line-height:1.55; color:#1a1a1a;
+        font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  mark { background:#ffe680; box-shadow:0 0 0 2px #ffe680; border-radius:2px;
+         scroll-margin-block:6rem; }
+  .capped { display:block; margin-top:1rem; color:#999; font-style:italic; }
+"""
+
+#: Scrolls the first highlight into view once the frame paints, so opening a
+#: long document lands on the sentence the verdict rests on instead of on its
+#: first page. Without it the citation view is only useful for short documents.
+_FRAME_JS = """
+  const first = document.querySelector('mark');
+  if (first) { first.scrollIntoView({block: 'center'}); }
+"""
+
+
+@dataclass
+class DocumentFrame:
+    html: str
+    height: int
+    total_chars: int
+    passages: int
+    expanded: bool
+    capped: bool
+    #: Whether the document already fits, in which case offering to enlarge the
+    #: panel is just another button to ignore.
+    fits: bool = False
+
+    def caption(self) -> str:
+        parts = [f"{self.total_chars:,} characters"]
+        if self.passages:
+            parts.append(
+                f"{self.passages} cited passage"
+                f"{'s' if self.passages != 1 else ''} highlighted"
+            )
+        if self.capped:
+            parts.append(f"first {MAX_RENDERED_CHARS:,} shown")
+        parts.append("scroll inside the panel")
+        return " · ".join(parts)
+
+
+def document_frame(
+    content: str, spans: list[str], *, expanded: bool = False
+) -> DocumentFrame:
+    """The whole document, in a box that scrolls on its own.
+
+    Evidence is whatever somebody uploaded, and that can be a fifty-page export.
+    Letting it flow into the page turns the one view this demo is built around
+    into a scroll measured in metres, with the interesting sentence lost in the
+    middle of it.
+
+    So the document goes in a fixed-height frame with its own scrollbar. The
+    page length no longer depends on the document length at all; "show more"
+    makes the frame taller, not the page longer. On open, the first highlight is
+    scrolled to the centre, so a long document arrives at its citation.
+    """
+    total = len(content)
+    capped = total > MAX_RENDERED_CHARS
+    body = content[:MAX_RENDERED_CHARS] if capped else content
+    ranges = citation_ranges(body, spans)
+
+    out: list[str] = []
+    cursor = 0
+    for start, end in ranges:
+        out.append(html.escape(body[cursor:start]))
+        out.append(f"<mark>{html.escape(body[start:end])}</mark>")
+        cursor = end
+    out.append(html.escape(body[cursor:]))
+    if capped:
+        out.append(
+            f"<span class='capped'>… {total - len(body):,} further characters "
+            "not rendered.</span>"
+        )
+
+    page = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        f"<style>{_FRAME_CSS}</style></head><body>"
+        f"<pre>{''.join(out)}</pre>"
+        f"<script>{_FRAME_JS}</script></body></html>"
+    )
+    wrapped_lines = sum(
+        max(1, -(-len(line) // ASSUMED_LINE_WIDTH)) for line in body.splitlines() or [""]
+    )
+    return DocumentFrame(
+        html=page,
+        height=EXPANDED_HEIGHT if expanded else COLLAPSED_HEIGHT,
+        total_chars=total,
+        passages=len(ranges),
+        expanded=expanded,
+        capped=capped,
+        fits=wrapped_lines <= COLLAPSED_VISIBLE_LINES,
+    )
+
+
 def unmatched_spans(content: str, spans: list[str]) -> list[str]:
     """Cited text that could not be located. Should always be empty.
 

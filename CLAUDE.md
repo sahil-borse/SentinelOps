@@ -1,295 +1,272 @@
-# SentinelOps — Build Spec v2
+# SentinelOps — Build Spec v3
 
-Embi AI Nexus 2026 · Corporate Functions / Compliance · solo · video due 31 Aug 2026
-SPoCs: Dipanwita Jakkula, Nancy Nithya
+Team Transformers · Embi AI Nexus 2026 · solo · video due 9 Sep 2026
+Corporate Functions – Compliance – Intelligent Compliance Monitoring and Trigger System
 
-Claude Code implements *this*; it does not invent architecture. Save as `CLAUDE.md`.
-
-**v2 changes:** closed-loop actions and resolutions added; exceptions promoted to
-first-class; structured process data added alongside documents; owners added to
-the audit trail; consistency added as a measured outcome; narrative reframed from
-cost to missed checks and inconsistency.
+**Save as `CLAUDE.md`.** This supersedes v2. Written after two rounds of
+clarification with the compliance stakeholder; where it differs from earlier
+documents, this wins.
 
 ---
 
-## 1. The statement, and what it is actually asking for
+## 1. What the system is
 
-> Compliance checks across different process areas are often manual, inconsistent,
-> and dependent on teams remembering when and what needs to be reviewed. This can
-> result in missed checks, delayed identification of non-compliance, and increased
-> operational risk.
+A **findings-management and closure-tracking system** for compliance gaps, plus a
+**scheduling engine** for periodic compliance obligations.
 
-Six required capabilities: identify applicable checks per process area; trigger
-the right check with the right team at the defined frequency; use AI to assess
-available **process data or documents** against criteria; flag **gaps,
-exceptions, or overdue actions**; route alerts and actions to the appropriate
-team; maintain an audit trail of **checks, findings, actions, and resolutions**.
+Two scheduled things, easily confused, kept separate:
 
-**Read the pain words: manual, inconsistent, forgotten, missed, delayed.** Cost is
-never mentioned. The system's cost architecture is excellent engineering and wins
-one of six criteria, but it is **not** the headline. Lead with missed checks and
-inconsistency; put cost in the middle of the video.
-
-**The three claims to make, in priority order:**
-
-1. **Nothing is forgotten.** Applicability and scheduling are deterministic, so a
-   check cannot be missed because someone didn't remember it.
-2. **Every area is judged the same way.** The same control against the same
-   criteria produces the same verdict regardless of who owns the area — and this
-   is measured, not asserted.
-3. **It closes the loop.** Finding → action → remediation → re-assessment →
-   resolution, with the audit trail written as it happens.
-
-Cost is claim four: most of a compliance engine shouldn't call a model at all.
-
----
-
-## 2. Capability coverage — check this before you build
-
-| Statement requires | Delivered by | Measured by |
+| | **Audits** | **Compliance activities** |
 |---|---|---|
-| Identify applicable checks per process area | S0 Applicability | Distinct control sets per area, on camera |
-| Trigger the right check, right team, right frequency | S1 Scheduling & Trigger | Missed-check rate vs simulated manual baseline |
-| Assess **process data or documents** vs criteria | S3 Assessment + structured evaluator | Precision / recall / FPR vs truth file |
-| Flag gaps, **exceptions**, overdue actions | S4 Flagging | All three categories present and distinct |
-| Route alerts **and actions** to the right team | S4 Routing + Action lifecycle | Assignment and escalation records |
-| Audit trail of checks, findings, **actions, resolutions**, **owners** | Audit log across all stages | Full timeline reconstructable per instance |
-| *Expected value:* consistency across areas | Deterministic tiers + stable prompt | **Verdict variance across areas — measured** |
-| *Expected outcome:* status dashboard | S5 Dashboard | Live in demo |
+| Who acts | PA/InfoSec auditor | The auditable unit's owner |
+| What it is | Internal Audit, QAREV, Release Audit, document review | Risk register review, manual/guideline update, audit readiness, controlled document review |
+| Output | **Findings** | Evidence of completion |
+| Cadence | Scheduled programme | Defined frequency (monthly, quarterly, annual) |
+
+**Findings are children of audits.** They may also arise from a compliance
+activity whose evidence fails assessment, or be raised standalone.
+
+### Ground truth from the stakeholder
+
+- Gaps are identified by the **PA/InfoSec team** during scheduled Internal Audits,
+  QAREVs, Release Audits and document reviews.
+- Evidence is submitted by support functions (IT, Admin, Purchase, HR and others)
+  and may be policy or procedure updates, updated reports or trackers, or records
+  showing an action was completed.
+- **Severity is assigned by the auditor**, finalised after the audit completes, and
+  communicated to the auditee in the audit report, typically by email.
+- If evidence is insufficient, PA/InfoSec **communicate the gaps and request
+  revised evidence. The finding remains Open until the auditor is fully
+  satisfied.** Only then is it formally closed.
+- **Recurring** means the same *type* of gap occurring again in a different area,
+  project, or period.
+- Escalation timing depends on severity and priority: 3–4 days for urgent cases,
+  1–2 weeks otherwise, **maximum one week to escalation preferred**.
+- Scale: **roughly 6 support functions, 15–18 findings open at any time.**
+- Auditable units are not only support functions — a project team, IT, HR, Finance
+  all qualify. Model the subject generically.
+- **No standard gap taxonomy exists.** The auditor describes each gap in their own
+  words.
+- **An automatically generated audit report is wanted.**
+
+### What this means for the pitch
+
+At 15–18 open findings this is **not a throughput problem.** Never claim scale.
+The value is **consistency, institutional memory, and relentless follow-up** — a
+system that never forgets to chase, and that notices this month's gap in Finance
+resembles one raised against a project team eight months ago. No human holds that
+comparison across 18 months, six functions and several project teams.
+
+---
+
+## 2. Where AI is used, and where it is not
+
+Five uses, each justified. Everything else is deterministic.
+
+| # | AI use | Why a model | Human authority |
+|---|---|---|---|
+| 1 | **Classify gap type** from the auditor's free-text description | No taxonomy exists; this is genuine language work | Auditor may override the category |
+| 2 | **Detect recurrence** — same gap type, different area, project or period | Requires semantic similarity across 18 months of free text | Surfaced as a suggestion with prior finding ids |
+| 3 | **Evaluate submitted evidence** against the finding and its required action, with resolvable citations | Reading a document against a requirement | **Auditor decides closure. Always.** |
+| 4 | **Suggest severity** at audit completion | Pattern from description and context | **Auditor assigns. The suggestion is advisory only.** |
+| 5 | **Prioritisation brief** — one call per cycle over ranked findings and metrics | Synthesis across the portfolio | Advisory; changes no state |
+
+Plus **audit report drafting** (§6), which is generation over structured data.
+
+**Never AI:** scheduling, applicability, due dates, reminder and escalation timing,
+status transitions, closure decisions, permission checks, analytics.
 
 ---
 
 ## 3. Domain model
 
-- **ProcessArea** — `id, name, owner_team, owner_name, attributes{handles_pii,
-  customer_facing, has_suppliers, region, criticality}`.
-- **ControlDefinition** — `id, title, criteria_text, frequency, applies_when{},
-  evidence_kind (document|structured), required_evidence_types[],
-  freshness_days, severity_weight`.
-- **CheckInstance** — control × area × period. `due_date, status, assigned_team,
-  owner_name`.
-- **Evidence** — `id, check_instance_id, kind (document|structured), doc_type,
-  content, content_hash, submitted_at, author, is_remediation`.
-- **Finding** — `id, check_instance_id, verdict, confidence, rationale,
-  cited_spans[], gaps[], recommended_action, needs_human_review, assessed_at,
-  supersedes_finding_id`.
-- **Action** — **new in v2.** `id, finding_id, title, owner_team, owner_name,
-  due_date, status (raised|assigned|in_progress|remediation_submitted|
-  reassessed|resolved|escalated), resolution_note, resolved_at`.
-- **ComplianceException** — **new in v2.** `id, control_id, process_area_id,
-  rationale, approved_by, granted_at, expires_at, status (active|expired|revoked)`.
-- **AuditEvent** — append-only. `ts, actor (system|ai|user), owner, action,
+- **AuditableUnit** — `id, name, kind (support_function | project_team |
+  department), owner_identity, attributes{handles_pii, customer_facing,
+  has_suppliers, region, criticality}`. Six support functions plus several project
+  teams.
+- **Identity** — `id, name, role (pa_infosec | unit_owner | management),
+  auditable_unit (nullable), reports_to (nullable)`.
+- **AuditProgramme / ScheduledAudit** — `id, kind (internal_audit | qarev |
+  release_audit | document_review), scope (units), auditor_identity,
+  planned_date, conducted_date, status (planned | in_progress | completed),
+  report_generated_at`.
+- **ControlDefinition** — a periodic compliance obligation: `id, title,
+  criteria_text, frequency, applies_when{}, evidence_kind (document | structured),
+  required_evidence_types[], freshness_days`. Titles are the activities the
+  stakeholder named: periodic risk register review · internal audit readiness ·
+  external audit readiness · process manual and guideline review · controlled
+  document review · closure and validation of prior audit findings · review of
+  newly introduced or changed processes · security awareness training completion ·
+  access review · vendor and supplier due diligence · incident post-mortem
+  completion · backup and restore verification · data retention review · business
+  continuity test.
+- **CheckInstance** — one control × unit × period. The compliance-activity track.
+- **Finding** — the central tracked object.
+  `id, source (audit | activity_assessment | self_identified), audit_id (nullable),
+  check_instance_id (nullable), auditable_unit_id, description (auditor's own
+  words), gap_category (AI-classified, auditor-overridable),
+  severity (Major | Minor | Observation, auditor-assigned),
+  suggested_severity (AI, advisory), raised_by, raised_at, owner_identity,
+  agreed_action_plan, target_date, status, follow_up_count, recurrence_of[],
+  closed_by, closed_at, closure_remarks`.
+- **EvidenceSubmission** — one round. `id, finding_id, round_number, submitted_by,
+  submitted_at, evidence_ref, owner_note, auditor_response (pending | accepted |
+  insufficient), auditor_remarks, responded_by, responded_at`.
+- **Evidence** — write-once. `id, kind, doc_type, content, content_hash,
+  submitted_at, author`.
+- **Assessment** — an AI verdict on an evidence submission. Immutable.
+  `id, submission_id, verdict, confidence, rationale, cited_spans[], gaps[],
+  needs_human_review, criteria_version, prompt_version, evidence_hash,
+  supersedes_assessment_id`.
+- **ComplianceException** — approved deviation with rationale, approver, expiry.
+- **Notification** — `id, recipient_identity, kind, subject, body, sent_at,
+  related_entity, escalation_level, read_at`.
+- **AuditEvent** — append-only, hash-chained. `seq, prev_hash, entry_hash, ts
+  (simulated), actor_identity, actor_kind (system | ai | user), owner, action,
   entity_type, entity_id, detail`.
 
-Two entities carry most of the v2 value: `Action` closes the loop the statement
-explicitly asks for, and `ComplianceException` makes the second of its three
-flag categories real rather than a boolean.
-
 ---
 
-## 4. Architecture — five stages, closed loop
+## 4. Finding lifecycle — as the stakeholder described it
+
+**Authoritative status is binary: Open or Closed.** A finding remains Open until
+the auditor is satisfied. Owner progress is self-reported and advisory — it never
+moves the authoritative state.
 
 ```
- calendar tick
-      |
- [S0 Applicability]  zero tokens  - which controls apply where
-      |
- [S1 Trigger]        zero tokens  - due, overdue, escalate, route to team
-      |
- [S2 Pre-screen]     zero tokens  - missing, wrong-type, stale, unchanged, thresholds
-      |                              most instances resolve here
- [S3 Assess]         model call   - verdict + citations, or structured evaluation
-      |
- [S4 Flag & Route]   zero tokens  - gap / exception / overdue, severity, assignment
-      |
-   Action raised -> owner -> remediation evidence submitted
-      |                                         |
-      +------------- re-assessment -------------+
-      |
-   Resolved  ->  audit trail closed
+ Audit conducted
+      ↓
+ Finding raised (auditor: description, severity, owner, action plan, target date)
+      ↓
+ OPEN ──────────────────────────────────────────────────────┐
+      │                                                     │
+      │  owner sets progress: acknowledged →                │
+      │  action_in_progress → implemented   (advisory)      │
+      │                                                     │
+      │  owner submits evidence  ── round N ──┐             │
+      │                                       ↓             │
+      │                          auditor reviews (AI assists)
+      │                                       │             │
+      │              insufficient ────────────┘             │
+      │              (remarks returned, round N+1 expected;  │
+      │               finding stays OPEN, follow_up_count++) │
+      │                                                     │
+      │              accepted ──────────────────────────────┤
+      ↓                                                     ↓
+   reminders + escalation running throughout            CLOSED
+                                                (auditor only, with remarks)
 ```
 
-Every transition appends an AuditEvent. The trail is a by-product of operation,
-never a report generated afterwards. Say this on camera.
-
-**S0 — Applicability (zero tokens).** Evaluate each control's `applies_when`
-expression against the area's attributes. Boolean logic. Two areas with different
-attributes must visibly receive different control sets.
-
-**S1 — Trigger (zero tokens).** Generate CheckInstances from control frequency
-across a simulated calendar. State machine: pending → submitted → assessed →
-overdue → waived. Escalate overdue up the owner chain after N days. Route to the
-assigned team by logging a notification payload. **Active ComplianceExceptions
-suppress instance generation; expired ones raise an alert of their own.**
-
-**S2 — Pre-screen (zero tokens).** Resolve everything resolvable before spending
-a model call:
-- No evidence → `insufficient_evidence`.
-- Wrong evidence type → `insufficient_evidence`.
-- Content hash unchanged since last assessed period → carry the prior finding
-  forward, flagged `carried_forward`.
-- Older than `freshness_days` → `gap` by rule.
-- `evidence_kind == structured` with a numeric threshold → evaluate in code.
-
-**S3 — Assess (one model call per survivor).** Chunk the document, retrieve only
-the sections relevant to the criteria, never send the whole document. Strict JSON
-out: `verdict (compliant|partial|gap|insufficient_evidence), confidence,
-rationale, cited_spans[], gaps[], recommended_action, needs_human_review`.
-
-`cited_spans` is mandatory — an uncited compliance verdict is a bug. Low
-confidence sets `needs_human_review` rather than asserting. System prompt constant
-and first, so caching hits and so **identical evidence yields identical verdicts
-across areas** — this is what makes the consistency claim true.
-
-**S4 — Flag, route, and close the loop (zero tokens).** Classify into the
-statement's three categories: **gap** (content fails criteria), **exception**
-(an approved deviation, or an expired one), **overdue** (no evidence by due date —
-raised with no model call at all). Severity from a documented formula: control
-severity weight × verdict × area criticality × overdue duration.
-
-Every non-compliant finding raises an **Action** assigned to the owning team with
-a due date. When remediation evidence arrives, the instance re-enters S2/S3, a new
-Finding is written with `supersedes_finding_id` set, and if it passes, the Action
-resolves. That closed loop is the strongest single beat in the demo.
+Two independent clocks run on every open finding: the **reminder cadence** and the
+**escalation timer**. Both are severity-driven (§5).
 
 ---
 
-## 5. Cost discipline
+## 5. Reminders and escalation
 
-1. S0, S1, S2, S4: zero tokens, permanently.
-2. Missing, wrong-type and stale evidence never reach a model.
-3. Unchanged evidence reuses the prior finding via content hash.
-4. Retrieve relevant sections; never send whole documents.
-5. One call per assessment; batch short criteria sharing a document.
-6. Stable system prompt placed first for cache hits.
-7. Strict JSON, enums, hard `max_tokens`.
-8. Cheap model for pre-screen classification; large model only at S3.
+Deterministic, severity-driven, configurable:
 
-**Naive baseline to measure once:** every instance, every period, full document
-plus full criteria to the large model, no rules, no reuse. **Cache to disk on
-first run; never re-run it.**
-
----
-
-## 6. What gets measured
-
-| Metric | Why it matters |
-|---|---|
-| **Missed-check rate**, simulated manual vs automated | The statement's first named pain. Lead with this. |
-| **Verdict variance** for the same control across areas | "Inconsistent" is the second named pain. Nobody else will measure it. |
-| **Time-to-detection** of a non-compliance | "Delayed identification" — third named pain. |
-| Precision / recall / false-positive rate on gap detection | Proves the assessment is real, not theatre. |
-| Share of instances resolved with **zero model calls** | The cost story. |
-| Tokens per audit cycle, naive vs SentinelOps | The cost story, quantified. |
-| Actions raised vs resolved, mean time to resolution | Proves the loop closes. |
-
-`TokenMeter` wraps every model call: tier, model, input/output/cached tokens,
-latency, cost → SQLite. **Counts read from the response object, never estimated.**
-
----
-
-## 7. Synthetic data — mandated, and it gives you ground truth
-
-Seeded and reproducible. A fictional organisation:
-
-- **6–8 process areas**, genuinely varied attributes so applicability differs.
-- **12–15 controls** across monthly / quarterly / annual: access reviews, vendor
-  due diligence, data retention, incident post-mortems, training completion,
-  backup verification, supplier security attestation.
-- **At least 3 controls with `evidence_kind = structured`** — training completion
-  tables, backup verification logs, access review exports. The statement says
-  "process data **or** documents"; show both.
-- **A 12-month calendar**, so recurrence, overdue and escalation actually happen.
-- Evidence of mixed quality: compliant, partial, non-compliant, stale,
-  wrong-type, missing.
-- **Near-miss documents** that read compliant but fail exactly one clause. Without
-  these your precision figure is meaningless.
-- **The same evidence submitted for the same control in two different areas**, so
-  verdict consistency is measurable.
-- **2–3 ComplianceExceptions**, one of which expires mid-year.
-- **Remediation evidence** for several gaps, so the closed loop can be demoed.
-- **Truth file** — every injected gap, which clause fails, expected verdict — in a
-  path the pipeline never reads. Test that nothing under `src/` imports it.
-
----
-
-## 8. Build slices — each ends in a commit that runs
-
-| # | Slice | Target | Key? |
+| Severity | Default target | First reminder | Escalation |
 |---|---|---|---|
-| 1 | Project, entities, SQLite, `llm/` boundary, `TokenMeter`, one end-to-end path | Aug 16 | no |
-| 2 | Synthetic generator: areas, controls, calendar, document + structured evidence, near-misses, exceptions, remediation, truth file | Aug 17 | no |
-| 3 | S0 applicability rules engine | Aug 18 | no |
-| 4 | S1 scheduling, trigger, routing, escalation, exception suppression, audit trail with owners | Aug 20 | no |
-| 5 | S2 pre-screen incl. structured threshold evaluation | Aug 21 | no |
-| 6 | S3 assessment with retrieval and citations; real provider | Aug 22 | **yes** |
-| 7 | S4 flagging, severity, Action lifecycle, remediation re-assessment loop | Aug 23 | yes |
-| 8 | Evaluation harness: baseline, all seven metrics, `results.md` | Aug 24 | **yes** |
-| 9 | Dashboard | Aug 26 | no |
-| — | **CODE FREEZE** | **Aug 26** | |
-| 10 | Script, record, edit video | Aug 27–30 | |
-| 11 | Submit | Aug 31 am | |
+| Major (urgent) | 3–4 days | 1 day before target | 1 day past target |
+| Major | 1 week | 2 days before | 3 days past target |
+| Minor | 2 weeks | 3 days before | 5 days past target |
+| Observation | 2–4 weeks | 5 days before | 7 days past target |
 
-Slices 1–5 need no API key. Build them while credits are pending.
+**Maximum one week from target date to escalation** in every case — the
+stakeholder's stated preference. Escalation goes to the owner's `reports_to` and
+to PA/InfoSec, at increasing levels. Reminders continue after escalation; they are
+not replaced by it. `follow_up_count` increments on every reminder **and** on every
+insufficient-evidence round.
 
 ---
 
-## 9. Dashboard — the Expected Outcome names it explicitly
+## 6. Audit report generation
 
-One screen: compliance status by process area; overdue and escalation queue;
-finding detail with **cited spans highlighted inside the source document**; open
-actions with owners and due dates; audit timeline per check instance; live token
-and cost meter; calendar-advance control.
+Confirmed as wanted. At audit completion, generate the report currently written
+and emailed by hand: audit kind, scope, auditor, dates, and every finding with its
+description, category, severity, owner, agreed action plan and target date — plus
+any recurrence links to prior findings.
 
-The highlighted-citation view is the shot the video is built around. Make that one
-look good; keep everything else plain.
+Draft the narrative summary with one model call over the structured findings; every
+statement in it must cite finding ids. The auditor reviews and confirms before it
+is issued; issuing appends an audit event.
+
+This replaces a real manual step and costs almost nothing, since the data is
+already structured.
 
 ---
 
-## 10. Video — cap 10 min, target 7
+## 7. Segregation of duties — enforced and tested
 
-1. **0:00–1:15 The problem, concretely.** A quarterly access review nobody
-   remembered, found four months later in an audit. Two areas that ran the same
-   check and reached different conclusions. Name the operational risk.
-2. **1:15–2:15 Architecture and data flow.** The five stages, one diagram,
-   explained once. The guidelines explicitly ask for this.
-3. **2:15–5:00 Demo.** Advance the calendar: checks generate per area — visibly
-   *different* checks — route to teams, go overdue, escalate. A compliant document
-   passes. **A near-miss is flagged with the failing clause highlighted.** A
-   structured data check evaluates with no model call. An expired exception raises
-   an alert. An Action is raised, remediation evidence submitted, re-assessed, and
-   **resolved** — with the audit trail assembling itself throughout.
-4. **5:00–5:45 AI capability.** Which model where and why. Why scheduling and
-   applicability deliberately never touch a model. How citations and the
-   human-review flag keep every decision auditable.
-5. **5:45–6:30 Numbers.** Missed-check rate, verdict consistency, time-to-detection,
-   precision/recall — then tokens and cost.
-6. **6:30–7:00 Business value, limitations, next steps.** Named by you first.
+| Action | pa_infosec | unit_owner | management |
+|---|---|---|---|
+| Conduct audit, raise finding, assign severity | ✔ | ✘ | ✘ |
+| Set owner progress, submit evidence | ✘ | ✔ (own unit only) | ✘ |
+| Respond to a submission (accept / insufficient) | ✔ | ✘ | ✘ |
+| **Close a finding** | ✔ | ✘ | ✘ |
+| View escalations and portfolio trend | ✔ | own unit | ✔ |
 
-Script word for word. Record audio separately from screen capture.
+The identity that submitted evidence may never be the identity that accepts it or
+closes the finding. Both blocked paths have tests. In the UI the owner's Close
+control is **absent, not disabled**.
+
+---
+
+## 8. Analytics
+
+Deterministic, computed from state and the audit log:
+
+- Open vs closed — count **and percentage**, overall and per unit.
+- Severity mix: Major / Minor / Observation, per unit.
+- Overdue findings with **ageing**, bucketed (0–30, 31–60, 61–90, 90+ days).
+- Findings by auditable unit, by gap category, by audit kind.
+- **Recurring findings** — same gap category in a different unit, project or period.
+- Findings requiring **multiple evidence rounds or multiple reminders**, with the
+  distribution.
+- **Trend over time** — open finding count by month across the corpus window.
+- Closure performance — mean and median days from raise to closure, by severity.
+- Upcoming audits and compliance activities due in the next 30 days.
+
+---
+
+## 9. Cost discipline
+
+Still correct engineering, but **demoted in the pitch** — at this volume, cost is
+not the story. Keep the meter running and let it speak for itself.
+
+Deterministic everywhere except the five uses in §2. Evidence pre-screen resolves
+missing, wrong-type, stale and unchanged submissions before any model call. Strict
+JSON, hard `max_tokens`, constant system prompt placed first. One prioritisation
+call per cycle, not per finding. Token counts read from the response object, never
+estimated.
+
+---
+
+## 10. Data
+
+Synthetic, seeded, reproducible. **Realistic volume, not inflated:** 6 support
+functions plus 3–4 project teams; 18 months; roughly 80–100 findings total with
+15–18 open at the "today" mark. Include: audits of all four kinds; findings across
+all three severities; several needing 3+ evidence rounds; at least two recurring
+gap-category sets spanning different units and periods; near-miss evidence; one
+adversarial injection document; exceptions including one that lapses; and an
+isolated truth file the pipeline never reads.
 
 ---
 
 ## 11. Non-goals
 
-No auth, no user management, no Postgres, no Docker, no real integrations, no
-email sending (log the payload), no multi-tenancy, no policy-authoring UI, no
-agent loop. Every hour here is an hour not spent on the video.
+No auth or user management — the role switcher is an identity selector. No real
+email. No Postgres, Docker or multi-tenancy. No agent loop. No live integrations.
 
 ---
 
 ## 12. Rules of engagement
 
-- Stuck 90 minutes → stub it, commit, note it in `STUBS.md`, move on.
-- Read the diff on every commit; be able to explain every file.
-- If a change makes the section 4 diagram harder to draw on one slide, don't.
-- Maintain `PROGRESS.md`: one line per completed slice.
-
-## 13. Cut list, if behind
-
-Cut from the top: calendar-advance UI control (script it instead) · audit timeline
-visualisation (keep the data) · the second structured control · mean-time-to-
-resolution metric.
-
-**Never cut:** citations, the truth file, the closed action loop, the near-miss
-flag, the baseline comparison, the dashboard, the video.
+- One slice per session. Never build ahead.
+- 90 minutes stuck → stub it, note in `STUBS.md`, commit, move on.
+- Read every file list; be able to explain any file. AI Day is live.
+- Audit trail is a by-product, written as things happen, and hash-chained.
+- Simulated business time on every audit event and notification — never wall-clock.
+- If a change makes the §4 lifecycle harder to draw on one slide, don't make it.

@@ -3,6 +3,8 @@
 Compliance checks that cannot be forgotten, judged the same way in every process
 area, with the audit trail written as it happens rather than assembled afterwards.
 
+**[Full user guide, with screenshots →](docs/USER_GUIDE.md)**
+
 ## Running the dashboard
 
 ```

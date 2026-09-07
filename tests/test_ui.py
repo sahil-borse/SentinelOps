@@ -14,7 +14,7 @@ import pytest
 
 from sentinelops.repositories import repositories
 from sentinelops.synth import generate_corpus, seed_database
-from sentinelops.ui import service, view
+from sentinelops.ui import service, story, view
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "sentinelops"
 
@@ -425,8 +425,13 @@ def test_the_dashboard_renders_end_to_end(tmp_path, monkeypatch, app_cache_clear
 
     labels = {button.label for button in app.button}
     for expected in ("Run cycle now", "+1 day", "+1 week", "+1 month",
-                     "Verify audit chain", "Generate audit pack", "Reset demo"):
+                     "Verify audit chain", "Generate audit pack", "Start over"):
         assert expected in labels
+
+    # the walkthrough leads, with step one offered first
+    assert "GUIDED WALKTHROUGH" in " ".join(m.value for m in app.markdown)
+    assert story.STEPS[0].button in labels
+    assert "1 · Raise this month's checks" in headings
 
     # the corpus seeded itself on first open, with no cycle run yet
     assert any("Simulated date" == m.label for m in app.metric)
@@ -466,3 +471,348 @@ def test_the_verify_button_reports_on_screen(tmp_path, monkeypatch, app_cache_cl
 
     assert not app.exception, [str(e) for e in app.exception]
     assert any("Chain intact" in element.value for element in app.success)
+
+
+# --- the guided walkthrough -------------------------------------------------
+
+def test_the_walkthrough_starts_at_step_one_on_a_fresh_demo(conn, corpus):
+    seed_database(conn, corpus)
+    assert story.current_step(conn) == 0
+    assert story.STEPS[0].key == "raise"
+
+
+def test_the_walkthrough_advances_as_the_work_actually_happens(conn, corpus):
+    """Progress is read from the database, not from a click counter.
+
+    Reload the page mid-demo and it picks up where the *data* is, not where a
+    session variable thinks it is.
+    """
+    seed_database(conn, corpus)
+    assert story.current_step(conn) == 0
+
+    story.run(conn, "raise")
+    assert story.current_step(conn) == 1
+
+    story.run(conn, "time")
+    assert story.current_step(conn) >= 2
+
+
+def test_step_one_explains_why_areas_differ(conn, corpus):
+    seed_database(conn, corpus)
+    outcome = story.run(conn, "raise")
+    joined = " ".join(outcome.detail)
+    assert "checks raised automatically" in joined
+    assert "in scope for" in joined, "it must say the areas differ, and by how much"
+
+
+def test_step_two_reports_escalations_that_actually_happened(live):
+    """It must describe the ladder that fires, not the one that does not.
+
+    A check with no evidence is settled by the pre-screen in the same tick that
+    marks it overdue, so it never climbs the check-level ladder. The action
+    raised from it escalates instead, on its own clock — which is what the
+    narrative says.
+    """
+    outcome = story.run(live, "time")
+    joined = " ".join(outcome.detail)
+    assert "outstanding" in joined
+    assert "escalated" in joined and "Group Compliance" in joined
+
+    escalated = [
+        a for a in repositories(live)["actions"].list() if a.status == "escalated"
+    ]
+    assert escalated, "the claim in the narrative must be true of the data"
+    assert str(len(escalated)) in joined
+
+
+def test_step_three_finds_something_worth_showing(live):
+    target = story.pick_near_miss(live)
+    assert target is not None
+    detail = view.finding_detail(live, target)
+    assert detail["finding"].decided_by == "s3_model"
+    assert detail["finding"].verdict in ("gap", "partial")
+    assert detail["finding"].cited_spans
+    assert detail["evidence"] is not None
+
+    outcome = story.run(live, "nearmiss")
+    assert outcome.focus == target
+    assert "highlighted" in " ".join(outcome.detail)
+
+
+def test_step_four_quotes_the_real_meter(live):
+    outcome = story.run(live, "cost")
+    meter = view.token_meter(live)
+    assert f"{meter['zero_model_share']:.0%}" in outcome.headline
+    assert str(meter["calls"]) in " ".join(outcome.detail)
+
+
+def test_step_five_actually_closes_the_loop(live):
+    target = story.pick_fix_target(live)
+    assert target is not None
+    before = view.finding_detail(live, target)["finding"]
+
+    outcome = story.run(live, "fix")
+
+    after = view.finding_detail(live, outcome.focus)["finding"]
+    assert after.id != before.id
+    assert after.supersedes_finding_id == before.id
+    assert "same" in " ".join(outcome.detail)
+
+
+def test_the_correction_it_writes_is_judged_not_waved_through(live):
+    """The generated document goes through the real assessment, not a shortcut."""
+    target = story.pick_fix_target(live)
+    text = story.remediation_text(live, target)
+    control = repositories(live)["controls"].get(
+        repositories(live)["instances"].get(target).control_id
+    )
+    for clause in control.criteria_text.splitlines():
+        assert clause.split(". ", 1)[-1].strip() in text
+
+    story.run(live, "fix")
+    finding = view.finding_detail(live, target)["finding"]
+    assert finding.decided_by in ("s3_model", "structured_threshold",
+                                  "wrong_evidence_type", "stale_evidence")
+    assert finding.cited_spans or finding.decided_by != "s3_model"
+
+
+def test_step_six_verifies_and_builds(live, tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "PACK_DIR", tmp_path)
+    outcome = story.run(live, "prove")
+    assert "verified" in outcome.headline
+    assert outcome.warning is None
+    assert (tmp_path / "audit_pack_2026.html").exists()
+
+
+def test_step_six_reports_a_tampered_record(live, tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "PACK_DIR", tmp_path)
+    live.execute("UPDATE audit_events SET owner = 'Nobody' WHERE seq = 12")
+    live.commit()
+    outcome = story.run(live, "prove")
+    assert outcome.warning
+    assert "tampered" in outcome.headline
+
+
+def test_every_step_has_a_reason_a_person_would_recognise():
+    for step in story.STEPS:
+        assert len(step.why) > 120, f"{step.key} needs a real explanation"
+        assert step.button and step.title
+        # no identifiers or field names leaking into the narrative
+        for jargon in ("decided_by", "CHK-", "CTRL-", "AREA-", "s3_model",
+                       "prescreen", "supersedes_finding_id"):
+            assert jargon not in step.why, f"{step.key} leaks jargon: {jargon}"
+
+
+def test_an_unknown_step_is_refused(live):
+    with pytest.raises(ValueError, match="unknown step"):
+        story.run(live, "not-a-step")
+
+
+def test_submitting_evidence_reports_back_on_screen(tmp_path, monkeypatch,
+                                                    app_cache_cleared):
+    """The bug this test exists for: it worked, and said nothing.
+
+    `st.success(...)` written immediately before `st.rerun()` is discarded by
+    the rerun, so a successful upload looked like a dead button. Messages are
+    now parked in session state and rendered on the way back.
+    """
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setattr(service, "DB_PATH", tmp_path / "demo.db")
+    app = AppTest.from_file(str(SRC / "ui" / "app.py"), default_timeout=300)
+    app.run()
+    next(b for b in app.button if b.label == "Run cycle now").click().run()
+
+    app.text_area[0].set_value(
+        "Quarterly review - corrected resubmission\n\n"
+        "1. Every privileged account was listed and reviewed line by line.\n"
+        "2. Reviewer recorded and countersigned.\n"
+        "3. Accounts no longer required were revoked, with tickets attached.\n"
+    ).run()
+    next(b for b in app.button if b.label == "Submit evidence").click().run()
+
+    assert not app.exception, [str(e) for e in app.exception]
+    said = " ".join(element.value for element in app.success)
+    assert "SUB-UI-" in said, "the screen must confirm what was filed"
+    assert "bytes" in said
+    assert "Re-checked" in said or "Not re-checked" in said
+
+
+def test_submitting_nothing_says_so(tmp_path, monkeypatch, app_cache_cleared):
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setattr(service, "DB_PATH", tmp_path / "demo.db")
+    app = AppTest.from_file(str(SRC / "ui" / "app.py"), default_timeout=300)
+    app.run()
+    next(b for b in app.button if b.label == "Run cycle now").click().run()
+    next(b for b in app.button if b.label == "Submit evidence").click().run()
+
+    assert not app.exception, [str(e) for e in app.exception]
+    assert any("Nothing to submit" in element.value for element in app.error)
+
+
+def test_no_message_is_written_immediately_before_a_rerun():
+    """The class of bug, not just the instance.
+
+    Anything printed on the line before `st.rerun()` never reaches the screen.
+    Park it in session state instead.
+    """
+    source = (SRC / "ui" / "app.py").read_text(encoding="utf-8").splitlines()
+    for number, line in enumerate(source):
+        if line.strip() != "st.rerun()":
+            continue
+        window = " ".join(source[max(0, number - 3):number])
+        for painter in ("st.success(", "st.error(", "st.warning(", "st.info("):
+            assert painter not in window, (
+                f"line {number + 1}: {painter} just before st.rerun() is discarded"
+            )
+
+
+# --- long documents must not become an endless scroll ----------------------
+
+LONG = (
+    ("preamble text. " * 500)
+    + "\nThe reviewer field was left blank.\n"
+    + ("appendix text. " * 800)
+)
+
+
+def test_the_page_height_does_not_depend_on_the_document(live):
+    """The whole point: a fifty-page upload occupies the same space as a note."""
+    short = view.document_frame("A short report.", [])
+    long_one = view.document_frame(LONG, ["The reviewer field was left blank."])
+    assert short.height == long_one.height == view.COLLAPSED_HEIGHT
+
+
+def test_show_more_makes_the_panel_taller_not_the_page_longer():
+    collapsed = view.document_frame(LONG, [])
+    expanded = view.document_frame(LONG, [], expanded=True)
+    assert expanded.height > collapsed.height
+    assert expanded.height == view.EXPANDED_HEIGHT
+    assert expanded.total_chars == collapsed.total_chars, "same document, taller box"
+
+
+def test_the_whole_document_is_present_in_both_states():
+    """Nothing is elided away — it is all there, just inside a scrollbox."""
+    for expanded in (False, True):
+        frame = view.document_frame(LONG, ["The reviewer field was left blank."],
+                                    expanded=expanded)
+        assert "preamble text." in frame.html
+        assert "appendix text." in frame.html
+        assert "<mark>The reviewer field was left blank.</mark>" in frame.html
+
+
+def test_the_frame_scrolls_to_the_first_citation():
+    """A long document should arrive at its highlight, not at page one."""
+    frame = view.document_frame(LONG, ["The reviewer field was left blank."])
+    assert "scrollIntoView" in frame.html
+    assert "querySelector('mark')" in frame.html
+
+
+def test_the_frame_is_a_self_contained_page():
+    frame = view.document_frame(LONG, [])
+    assert frame.html.startswith("<!doctype html>")
+    assert "<style>" in frame.html
+    assert "overflow" not in frame.html, "the iframe scrolls, not an inner div"
+
+
+def test_the_caption_says_what_is_on_screen():
+    frame = view.document_frame(LONG, ["The reviewer field was left blank."])
+    caption = frame.caption()
+    assert f"{frame.total_chars:,} characters" in caption
+    assert "1 cited passage highlighted" in caption
+    assert "scroll inside the panel" in caption
+
+
+def test_a_document_with_no_citation_still_renders_whole():
+    frame = view.document_frame(LONG, [])
+    assert frame.passages == 0
+    assert "<mark>" not in frame.html
+    assert "appendix text." in frame.html
+
+
+def test_the_frame_escapes_everything():
+    content = ("x " * 400) + "<script>alert(1)</script>" + ("y " * 400)
+    frame = view.document_frame(content, ["<script>alert(1)</script>"])
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in frame.html
+    # the only real script tag is the one the frame itself adds to scroll
+    assert frame.html.count("<script>") == 1
+
+
+def test_an_absurd_upload_is_capped_before_the_browser_suffers():
+    enormous = "line of text. " * 40_000
+    frame = view.document_frame(enormous, [])
+    assert frame.capped
+    assert "further characters" in frame.html
+    assert len(frame.html) < view.MAX_RENDERED_CHARS * 1.4
+    assert "first 200,000 shown" in frame.caption()
+
+
+def test_a_very_large_upload_stays_readable(live):
+    """An uploaded chat export should not produce a page metres long."""
+    target = view.instances_awaiting_evidence(live)[0]
+    huge = "Chat export.\n" + ("Some line of conversation. " * 4000)
+    service.submit_evidence(
+        live, instance_id=target, filename="export.md", content=huge,
+        author="R. Mehta", doc_type=service.doc_types_for(live, target)[0],
+        as_of=date(2026, 6, 28),
+    )
+    service.reassess(live, target, date(2026, 6, 28))
+
+    detail = view.finding_detail(live, target)
+    frame = view.document_frame(
+        detail["evidence"].content, detail["finding"].cited_spans
+    )
+    assert frame.total_chars > 100_000
+    assert frame.height == view.COLLAPSED_HEIGHT, "the page stays the same length"
+
+
+# --- markdown inside styled panels -----------------------------------------
+
+def test_emphasis_renders_rather_than_showing_its_asterisks():
+    """Streamlit skips markdown inside a raw-HTML block, so we convert it."""
+    assert view.rich("**725 entries verified**") == "<strong>725 entries verified</strong>"
+    assert view.rich("decided by `s3_model`") == "decided by <code>s3_model</code>"
+    assert "**" not in view.rich("**bold** and `code`")
+
+
+def test_the_narrative_is_escaped_before_it_is_emphasised():
+    assert view.rich("<script>alert(1)</script>") == (
+        "&lt;script&gt;alert(1)&lt;/script&gt;"
+    )
+    assert view.rich("**<b>x</b>**") == "<strong>&lt;b&gt;x&lt;/b&gt;</strong>"
+
+
+def test_every_narrative_string_survives_conversion():
+    for step in story.STEPS:
+        for text in (step.title, step.why, step.button):
+            assert "**" not in view.rich(text)
+
+
+def test_the_show_more_button_is_offered_only_when_it_would_do_something():
+    """A five-line report does not need an enlarge control."""
+    assert view.document_frame("A short report.\nTwo lines.", []).fits
+    assert not view.document_frame("a line of text\n" * 60, []).fits
+
+
+def test_the_walkthrough_panel_renders_emphasis_on_screen(tmp_path, monkeypatch,
+                                                          app_cache_cleared):
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setattr(service, "DB_PATH", tmp_path / "demo.db")
+    app = AppTest.from_file(str(SRC / "ui" / "app.py"), default_timeout=300)
+    app.run()
+    next(b for b in app.button
+         if b.label == story.STEPS[0].button).click().run()
+
+    # Streamlit *does* render markdown at the top level, even alongside inline
+    # HTML — the asterisks only survive inside an HTML block element. So the
+    # check is on the styled panels specifically, not on every string.
+    panels = [
+        m.value for m in app.markdown
+        if "class='why'" in m.value or "class='outcome'" in m.value
+    ]
+    assert panels, "the walkthrough panels must be on screen"
+    joined = " ".join(panels)
+    assert "<strong>" in joined, "emphasis must be converted to HTML"
+    assert "**" not in joined, "raw asterisks inside an HTML block reach the screen"
