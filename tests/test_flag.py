@@ -511,23 +511,22 @@ def test_events_are_stamped_with_the_cycle_date_not_today(conn, corpus):
     from datetime import datetime
 
     seed_database(conn, corpus)
+
+    # Everything the *cycle* wrote, and nothing else. Seeding also writes
+    # history — the exception register, and an audit programme whose audits were
+    # conducted on their own dates across the eighteen months — and those
+    # legitimately carry the dates they happened on rather than the date of this
+    # run. The split is by sequence number rather than by action name: a list of
+    # actions to ignore has to be lengthened every time a stage learns to write
+    # a new one, and the day somebody adds the wrong name to it this test stops
+    # watching the thing it exists to watch.
+    before = len(repositories(conn)["audit"].read_all())
+
     run_cycle(conn, date(2026, 3, 28))
     prescreen(conn, date(2026, 3, 28))
     flag_run(conn, date(2026, 3, 28))
 
-    # Everything the *cycle* wrote. Seeding also writes history — the exception
-    # register, and an audit programme whose audits were conducted on their own
-    # dates across the eighteen months — and those legitimately carry the dates
-    # they happened on rather than the date of this run.
-    seeded = {
-        "exception_registered", "corpus_seeded", "audit_conducted",
-        "finding_raised", "finding_severity_assigned", "finding_closed",
-        "notification_logged", "finding_reminder_sent", "finding_escalated",
-    }
-    events = [
-        e for e in repositories(conn)["audit"].read_all()
-        if e.action not in seeded
-    ]
+    events = repositories(conn)["audit"].read_all()[before:]
     stamps = [e.ts for e in events]
     assert stamps
     assert all(s.date() == date(2026, 3, 28) for s in stamps)

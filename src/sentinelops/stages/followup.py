@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
-from .. import authority, directory
+from .. import authority, directory, notify
 from ..directory import Directory
 from ..repositories import simulated_clock
 from ..entities import Finding, Severity
@@ -53,6 +53,39 @@ SEVERITY_RULES: dict[str, FollowUpRule] = {
 #: falling due and somebody senior hearing about it.
 MAX_DAYS_TO_ESCALATION = 7
 
+
+def policy_table() -> str:
+    """Section 5's table, rendered from the constants that actually drive it.
+
+    Printable because a policy nobody can read is one nobody can challenge, and
+    because the alternative — a table in a document that drifts from the code —
+    is how "escalation after three days" becomes true in the slide deck and
+    false in the system. This reads `SEVERITY_RULES`, so it cannot disagree
+    with what runs.
+    """
+    lines = [
+        f"{'severity':<16} {'target':>8} {'remind':>10} {'escalate':>10}"
+        f"   {'target -> escalation':>21}",
+        f"{'-' * 16} {'-' * 8:>8} {'-' * 10:>10} {'-' * 10:>10}   {'-' * 21:>21}",
+    ]
+    for name, rule in SEVERITY_RULES.items():
+        lines.append(
+            f"{name:<16} {rule.target_days:>6}d  "
+            f"{rule.remind_before:>8} before "
+            f"{rule.escalate_after:>6}d past   "
+            f"{rule.escalate_after:>13}d / {MAX_DAYS_TO_ESCALATION}d max"
+        )
+    lines.append("")
+    lines.append(
+        f"Ceiling: no severity may take more than {MAX_DAYS_TO_ESCALATION} days "
+        f"from target date to escalation."
+    )
+    lines.append(
+        "Reminders continue after escalation; escalating hands the problem on, "
+        "it does not put it down."
+    )
+    return "\n".join(lines)
+
 #: A Major finding against a business-critical unit is the urgent variant.
 #: Section 5 names "Major (urgent)" without saying what makes one urgent, so the
 #: rule is stated here rather than left to a judgement call at the call site.
@@ -77,6 +110,7 @@ class FollowUpReport:
     reminded: list[str] = field(default_factory=list)
     escalated: list[tuple[str, int]] = field(default_factory=list)
     notifications: list[dict[str, Any]] = field(default_factory=list)
+    outbox: notify.Outbox = field(default_factory=notify.Outbox)
 
     def summary(self) -> str:
         return (
@@ -85,9 +119,18 @@ class FollowUpReport:
         )
 
 
-def _log(repo, *, kind: str, to: str, finding: Finding, subject: str, as_of: date,
-         actor_identity: str, report: FollowUpReport) -> None:
-    payload = {
+def _log(repo, people, *, kind: str, to: str, finding: Finding, subject: str,
+         body: str, as_of: date, actor_identity: str, report: FollowUpReport,
+         escalation_level: int = 0, copy_audit: bool | None = None) -> None:
+    """Write the notification as a record. The report keeps a payload view so
+    existing callers reading `report.notifications` still see what was sent."""
+    written = notify.send(
+        repo, people, to=to, kind=kind, subject=subject, body=body,
+        related_entity=finding.id, as_of=as_of,
+        escalation_level=escalation_level, actor_identity=actor_identity,
+        copy_audit=copy_audit, outbox=report.outbox,
+    )
+    report.notifications.append({
         "kind": kind,
         "to_identity": to,
         "finding_id": finding.id,
@@ -96,14 +139,9 @@ def _log(repo, *, kind: str, to: str, finding: Finding, subject: str, as_of: dat
         "follow_up_count": finding.follow_up_count,
         "subject": subject,
         "as_of": as_of.isoformat(),
-        "delivery": "logged_not_sent",
-    }
-    report.notifications.append(payload)
-    repo["audit"].append(
-        actor="system", owner=to, action="notification_logged",
-        entity_type="Finding", entity_id=finding.id, detail=payload,
-        actor_identity=actor_identity,
-    )
+        "recipients": [n.recipient_identity for n in written],
+        "delivery": "recorded_not_sent",
+    })
 
 
 def _escalation_levels(repo) -> dict[str, int]:
@@ -139,9 +177,17 @@ def record_reminder(repo, finding: Finding, as_of: date, people: Directory,
             "days_to_target": days,
         },
     )
-    _log(repo, kind="reminder", to=finding.owner_identity, finding=finding,
-         subject=f"{finding.id} is {when}", as_of=as_of,
-         actor_identity=finding.owner_identity, report=report)
+    _log(
+        repo, people, kind="reminder", to=finding.owner_identity,
+        finding=finding, subject=f"{finding.id} is {when}",
+        body=(
+            f"{finding.description}\n\n"
+            f"Agreed action: {finding.agreed_action_plan or 'not recorded'}\n"
+            f"Severity {finding.severity}. Target {finding.target_date}. "
+            f"This is chase number {finding.follow_up_count}."
+        ),
+        as_of=as_of, actor_identity=finding.owner_identity, report=report,
+    )
     report.reminded.append(finding.id)
 
 
@@ -172,12 +218,28 @@ def escalate(repo, finding: Finding, level: int, as_of: date, people: Directory,
         actor_identity=manager.id if manager else "",
     )
     for recipient in ([manager] if manager else []) + auditors:
-        _log(repo, kind="escalation", to=recipient.id, finding=finding,
-             subject=(
-                 f"Escalation level {level}: {finding.id} is {days_late} day(s) "
-                 f"past its target date"
-             ),
-             as_of=as_of, actor_identity=recipient.id, report=report)
+        _log(
+            repo, people, kind="escalation", to=recipient.id, finding=finding,
+            subject=(
+                f"Escalation level {level}: {finding.id} is {days_late} day(s) "
+                f"past its target date"
+            ),
+            body=(
+                f"{finding.description}\n\n"
+                f"Owner {people.name(finding.owner_identity)} has been chased "
+                f"{finding.follow_up_count} time(s). Severity "
+                f"{finding.severity}, target {finding.target_date}, "
+                f"{days_late} day(s) past it. Escalation threshold for this "
+                f"severity is {rule_for(finding.severity).escalate_after} days."
+            ),
+            as_of=as_of, actor_identity=recipient.id, report=report,
+            escalation_level=level,
+            # This loop already addresses the audit team by name, so the
+            # automatic copy is switched off: with it on, every auditor would
+            # receive the manager's copy *and* their own, and an inbox that
+            # double-files is one people stop reading.
+            copy_audit=False,
+        )
     report.escalated.append((finding.id, level))
 
 
@@ -439,6 +501,17 @@ def close_on_repo(
                 ),
             },
             actor_identity=by,
+        )
+        notify.send(
+            repo, people or directory.Directory(),
+            to=finding.owner_identity, kind="closure",
+            subject=f"{finding.id} is closed",
+            body=(
+                f"{remarks}\n\nClosed by {owner_name} after "
+                f"{finding.follow_up_count} follow-up(s) and "
+                f"{len(rounds)} evidence round(s)."
+            ),
+            related_entity=finding.id, as_of=as_of, actor_identity=by,
         )
     return finding
 

@@ -196,6 +196,61 @@ class InboundSubmission:
 #: third answer, and "pending" is the absence of one rather than a verdict.
 AuditorResponse = Literal["pending", "accepted", "insufficient"]
 
+#: Every reason this system has to tell somebody something. A closed set,
+#: because an inbox you cannot filter is a mailbox, and the point of making
+#: notifications first-class was to be able to ask "what is waiting for me".
+NotificationKind = Literal[
+    "audit_due",
+    "activity_due",
+    "finding_raised",
+    "reminder",
+    "evidence_requested",
+    "overdue",
+    "escalation",
+    "evidence_submitted",
+    "closure",
+    "exception_lapsed",
+]
+
+
+@dataclass
+class Notification:
+    """Something somebody needs to know, kept rather than logged.
+
+    These used to be dictionaries written into the audit trail — the trail knew
+    a notification had happened, but nobody could ask "what is waiting for
+    D. Ferreira this morning?" without replaying every event and reassembling
+    payloads. Section 3 makes it a record, and that turns the same data into a
+    per-identity inbox.
+
+    **Nothing is sent.** Section 11 rules out real email, so `sent_at` is the
+    moment the system decided to tell somebody, in simulated business time. A
+    delivery mechanism would sit behind this and read the same rows.
+
+    `related_entity` is the id of the thing this is about. Ids carry their own
+    type in the prefix — `FND-`, `CHK-`, `AUD-`, `EXC-` — so one column is
+    enough to find every notification about a finding, which is what the
+    history view needs.
+
+    `read_at` is the only mutable field. A notification is a statement that
+    something happened and does not get edited; whether somebody has looked at
+    it is a different fact about the reader, not about the event.
+    """
+
+    id: str
+    recipient_identity: str
+    kind: NotificationKind
+    subject: str
+    body: str
+    sent_at: datetime
+    related_entity: str
+    escalation_level: int = 0
+    read_at: datetime | None = None
+
+    @property
+    def unread(self) -> bool:
+        return self.read_at is None
+
 
 @dataclass
 class EvidenceSubmission:

@@ -74,6 +74,11 @@ KNOWN_ACTIONS = (
     "evidence_round_accepted",
     "evidence_round_insufficient",
     "notification_logged",
+    # A notification that became a record. `notification_logged` is the trail
+    # entry the scheduling stage has always written; this is the one written
+    # beside the row in the notifications table. Both appear, because the pack
+    # shows what the trail says happened and the trail says both things.
+    "notification_sent",
     "prescreen_completed",
     "assessment_completed",
     "flagging_completed",

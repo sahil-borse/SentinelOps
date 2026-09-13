@@ -32,6 +32,17 @@ CREATE TABLE IF NOT EXISTS evidence (
     kind TEXT NOT NULL, doc_type TEXT NOT NULL, content TEXT NOT NULL,
     content_hash TEXT NOT NULL, submitted_at TEXT NOT NULL, author TEXT NOT NULL,
     is_remediation INTEGER NOT NULL);
+-- Notifications are records, not log lines: the inbox is a query over this.
+CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    recipient_identity TEXT NOT NULL REFERENCES identities(id),
+    kind TEXT NOT NULL, subject TEXT NOT NULL, body TEXT NOT NULL,
+    sent_at TEXT NOT NULL, related_entity TEXT NOT NULL,
+    escalation_level INTEGER NOT NULL, read_at TEXT);
+CREATE INDEX IF NOT EXISTS notifications_by_recipient
+    ON notifications (recipient_identity, sent_at);
+CREATE INDEX IF NOT EXISTS notifications_by_entity
+    ON notifications (related_entity);
 CREATE TABLE IF NOT EXISTS scheduled_audits (
     id TEXT PRIMARY KEY, kind TEXT NOT NULL, scope TEXT NOT NULL,
     auditor_identity TEXT NOT NULL REFERENCES identities(id),

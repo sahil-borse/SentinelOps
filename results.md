@@ -1,6 +1,6 @@
 # SentinelOps — evaluation results
 
-Generated 2026-09-14 01:15 · corpus seed `20260831` ·
+Generated 2026-09-14 01:59 · corpus seed `20260831` ·
 fingerprint `ce0804377f276bf1` · 16 scheduled cycles
 
 > **These runs used `FakeModelClient`, not a language model.** The stub is a
@@ -333,5 +333,5 @@ simulation seed (4242). The corpus fingerprint
 `ce0804377f276bf1` pins the exact evidence these numbers were
 measured on; if it changes, they were measured on something else.
 
-Audit chain over the whole run: **OK - 4504 entries, chain intact**
-(4,504 events).
+Audit chain over the whole run: **OK - 5158 entries, chain intact**
+(5,158 events).

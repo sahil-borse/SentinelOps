@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 
-from .. import authority
+from .. import authority, notify
 from ..directory import Directory
 from ..entities import EvidenceSubmission, Finding
 from ..repositories import simulated_clock
@@ -113,6 +113,20 @@ def open_round(
             },
             actor_identity=by,
         )
+        # The audit team is told as a matter of course: section 1 has them
+        # reviewing every submission, and a queue they have to remember to look
+        # at is the thing this system exists to replace.
+        notify.send(
+            repo, people, to=by, kind="evidence_submitted",
+            subject=f"Round {number} filed on {finding.id}",
+            body=(
+                f"{people.name(by)} filed {evidence_ref} against "
+                f"{finding.id}.\n\n{note or 'No note supplied.'}\n\n"
+                f"Awaiting review. The finding stays open until an auditor is "
+                f"satisfied."
+            ),
+            related_entity=finding.id, as_of=as_of, actor_identity=by,
+        )
     return submission
 
 
@@ -178,7 +192,30 @@ def respond(
             },
             actor_identity=by,
         )
+        if response == "insufficient":
+            # The gaps go back to the owner as a request, not a verdict. This
+            # is the notification the stakeholder described: "communicate the
+            # gaps and request revised evidence".
+            notify.send(
+                repo, people, to=finding_owner(repo, submission.finding_id),
+                kind="evidence_requested",
+                subject=(
+                    f"More evidence needed on {submission.finding_id} "
+                    f"(round {submission.round_number} was not sufficient)"
+                ),
+                body=(
+                    f"{remarks}\n\nPlease file a further round. The finding "
+                    f"remains open."
+                ),
+                related_entity=submission.finding_id, as_of=as_of,
+                actor_identity=by,
+            )
     return submission
+
+
+def finding_owner(repo, finding_id: str) -> str:
+    finding = repo["findings"].get(finding_id)
+    return finding.owner_identity if finding else ""
 
 
 def round_count(repo, finding_id: str) -> int:

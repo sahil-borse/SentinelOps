@@ -60,7 +60,13 @@ DEFAULT_POLICY = SchedulePolicy()
 
 @dataclass(frozen=True)
 class Notification:
-    """A routed alert. Logged, never sent — see section 11, no email."""
+    """A routed alert, on its way to becoming a record.
+
+    This stage's own shape, kept because seven call sites read naturally in it.
+    `_log` is the single place it turns into a persisted `Notification` — one
+    bridge rather than seven, so the mapping below lives in one readable table
+    instead of being spelled out at each site.
+    """
 
     kind: str
     to_team: str
@@ -69,6 +75,11 @@ class Notification:
     entity_id: str
     subject: str
     as_of: date
+    #: Who it is actually for. Left blank where it is simply the owning unit's
+    #: owner, which `_log` resolves from the entity.
+    to_identity: str = ""
+    body: str = ""
+    escalation_level: int = 0
 
     def payload(self) -> dict[str, Any]:
         return {
@@ -189,7 +200,42 @@ def waives(
     )
 
 
+#: This stage's vocabulary, mapped onto section 3's closed set of kinds.
+#:
+#: `waived` is the awkward one. Section 3 does not name it, and the nearest
+#: honest fit is `closure`: the obligation was discharged without evidence
+#: because an approved deviation excused it. Inventing an eleventh kind would
+#: drift from the spec; silently dropping the notification would leave the owner
+#: un-told that their check had been settled. The body says which it was.
+KIND_MAP: dict[str, str] = {
+    "assigned": "activity_due",
+    "due_soon": "activity_due",
+    "overdue": "overdue",
+    "escalation": "escalation",
+    "exception_expired": "exception_lapsed",
+    "waived": "closure",
+}
+
+
+def _recipient(repo, notification: Notification) -> str:
+    """Who this is for. The owning unit's owner unless the site said otherwise."""
+    if notification.to_identity:
+        return notification.to_identity
+    unit_id = ""
+    if notification.entity_type == "CheckInstance":
+        instance = repo["instances"].get(notification.entity_id)
+        unit_id = instance.auditable_unit_id if instance else ""
+    elif notification.entity_type == "ComplianceException":
+        exception = repo["exceptions"].get(notification.entity_id)
+        unit_id = exception.auditable_unit_id if exception else ""
+    unit = repo["units"].get(unit_id) if unit_id else None
+    return unit.owner_identity if unit else ""
+
+
 def _log(repo, notification: Notification, actor: str = "system") -> None:
+    """Record it, and keep the trail entry the pack and the tests already read."""
+    from .. import notify
+
     repo["audit"].append(
         actor=actor,
         owner=notification.to_owner,
@@ -197,6 +243,24 @@ def _log(repo, notification: Notification, actor: str = "system") -> None:
         entity_type=notification.entity_type,
         entity_id=notification.entity_id,
         detail=notification.payload(),
+    )
+
+    recipient = _recipient(repo, notification)
+    if not recipient:
+        # Nobody to address it to — a unit with no owner, which the corpus does
+        # not contain. Better a trail entry with no inbox row than a row filed
+        # against an identity that does not exist.
+        return
+    people = Directory({i.id: i for i in repo["identities"].list()})
+    notify.send(
+        repo, people,
+        to=recipient,
+        kind=KIND_MAP.get(notification.kind, "activity_due"),
+        subject=notification.subject,
+        body=notification.body or notification.subject,
+        related_entity=notification.entity_id,
+        as_of=notification.as_of,
+        escalation_level=notification.escalation_level,
     )
 
 
