@@ -28,7 +28,13 @@ class Step:
     key: str
     title: str
     #: The problem this step is about, before anything happens.
-    why: str
+    #:
+    #: A string, or a callable taking the connection. Callable where the copy
+    #: quotes a number: "fourteen controls across seven business areas" was
+    #: written when there were seven, survived a roster change to ten, and was
+    #: still on screen being wrong. Counting at render time is a line longer and
+    #: cannot drift.
+    why: str | Callable[[Any], str]
     button: str
     #: Reads the database and says, in plain words, whether this step has run.
     done: Callable[[Any], bool]
@@ -44,6 +50,19 @@ class Outcome:
 
 def _instances(conn) -> list:
     return repositories(conn)["instances"].list()
+
+
+def _control_count(conn) -> int:
+    return len(repositories(conn)["controls"].list())
+
+
+def _unit_count(conn) -> int:
+    return len(repositories(conn)["units"].list())
+
+
+def why_for(step: "Step", conn) -> str:
+    """The step's copy, with any counts read from the register."""
+    return step.why(conn) if callable(step.why) else step.why
 
 
 def _has_checks(conn) -> bool:
@@ -78,11 +97,12 @@ STEPS: tuple[Step, ...] = (
     Step(
         key="raise",
         title="1 · Raise this month's checks",
-        why=(
-            "Fourteen compliance controls apply across seven business areas — but "
-            "not the same ones everywhere. Working out which control applies where, "
-            "and when it is next due, is the part teams do from memory and a "
-            "spreadsheet. It is also the part they forget."
+        why=lambda conn: (
+            f"{_control_count(conn)} compliance controls apply across "
+            f"{_unit_count(conn)} auditable units — but not the same ones "
+            "everywhere. Working out which control applies where, and when it is "
+            "next due, is the part teams do from memory and a spreadsheet. It is "
+            "also the part they forget."
         ),
         button="Raise the checks that are due",
         done=_has_checks,

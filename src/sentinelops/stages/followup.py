@@ -22,12 +22,14 @@ problem on and stopping: the owner still owes the evidence.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from .. import authority, directory
 from ..directory import Directory
+from ..repositories import simulated_clock
 from ..entities import Finding, Severity
 
 @dataclass(frozen=True)
@@ -283,28 +285,43 @@ def assign_severity(
 def set_progress(
     repo, finding: Finding, progress: str, *, by: str,
     detail: dict[str, Any] | None = None,
+    owner_name: str = "", as_of: date | None = None,
 ) -> Finding:
-    """Record self-reported owner progress on a finding already in hand."""
+    """Record self-reported owner progress on a finding already in hand.
+
+    `as_of` stamps the event in business time. It is optional because most
+    callers are already inside a stage that entered the clock; a caller that is
+    not — the dashboard, a demo — must pass it or the trail records the date the
+    machine was switched on. `owner_name` is the same courtesy for the `owner`
+    column, which is meant to read as a person rather than an identity id.
+    """
     was = finding.owner_progress
     finding.owner_progress = progress  # type: ignore[assignment]
-    repo["findings"].update(finding)
-    repo["audit"].append(
-        actor="user", owner=by, action="finding_progress_recorded",
-        entity_type="Finding", entity_id=finding.id,
-        detail={
-            "progress": progress,
-            "previous": was,
-            "status": finding.status,
-            "note": "self-reported by the owner; the finding stays open",
-            **(detail or {}),
-        },
-        actor_identity=by,
+    stamp = (
+        simulated_clock(datetime.combine(as_of, time(10, 30)))
+        if as_of is not None else nullcontext()
     )
+    with stamp:
+        repo["findings"].update(finding)
+        repo["audit"].append(
+            actor="user", owner=owner_name or by,
+            action="finding_progress_recorded",
+            entity_type="Finding", entity_id=finding.id,
+            detail={
+                "progress": progress,
+                "previous": was,
+                "status": finding.status,
+                "note": "self-reported by the owner; the finding stays open",
+                **(detail or {}),
+            },
+            actor_identity=by,
+        )
     return finding
 
 
 def record_insufficient_round(
     repo, finding: Finding, *, by: str, remarks: str, assessment_id: str = "",
+    owner_name: str = "", as_of: date | None = None,
 ) -> Finding:
     """The auditor was not satisfied. Another round is owed.
 
@@ -315,24 +332,32 @@ def record_insufficient_round(
     owner's side: being chased again.
     """
     finding.follow_up_count += 1
-    repo["findings"].update(finding)
-    repo["audit"].append(
-        actor="user", owner=by, action="evidence_found_insufficient",
-        entity_type="Finding", entity_id=finding.id,
-        detail={
-            "remarks": remarks,
-            "assessment_id": assessment_id,
-            "follow_up_count": finding.follow_up_count,
-            "status": finding.status,
-            "note": "the finding remains open until the auditor is satisfied",
-        },
-        actor_identity=by,
+    stamp = (
+        simulated_clock(datetime.combine(as_of, time(11, 15)))
+        if as_of is not None else nullcontext()
     )
+    with stamp:
+        repo["findings"].update(finding)
+        repo["audit"].append(
+            actor="user", owner=owner_name or by,
+            action="evidence_found_insufficient",
+            entity_type="Finding", entity_id=finding.id,
+            detail={
+                "remarks": remarks,
+                "assessment_id": assessment_id,
+                "follow_up_count": finding.follow_up_count,
+                "status": finding.status,
+                "note": (
+                    "the finding remains open until the auditor is satisfied"
+                ),
+            },
+            actor_identity=by,
+        )
     return finding
 
 
 def record_owner_progress(
-    conn, finding_id: str, progress: str, *, by: str
+    conn, finding_id: str, progress: str, *, by: str, as_of: date | None = None
 ) -> Finding:
     """What the owner says they have done. Advisory, and it closes nothing."""
     from ..repositories import repositories
@@ -341,7 +366,8 @@ def record_owner_progress(
     finding = repo["findings"].get(finding_id)
     if finding is None:
         raise ValueError(f"no such finding: {finding_id}")
-    identity = directory.load(conn).get(by)
+    people = directory.load(conn)
+    identity = people.get(by)
     authority.require(identity.role if identity else None, "set_owner_progress",
                       actor_id=by)
     # "own unit only", from the section 7 table. An owner reporting progress on
@@ -352,43 +378,110 @@ def record_owner_progress(
             f"{finding.auditable_unit_id}; an owner reports progress on their "
             "own unit's findings only"
         )
-    return set_progress(repo, finding, progress, by=by)
+    return set_progress(
+        repo, finding, progress, by=by,
+        owner_name=people.name(by), as_of=as_of,
+    )
 
 
 def close_on_repo(
     repo, finding: Finding, *, by: str, remarks: str, as_of: date,
-    people: Directory | None = None,
+    people: Directory | None = None, excused: bool = False,
 ) -> Finding:
     """Close a finding a caller already has in hand.
 
     Same decision as `close_finding`, minus the lookup — S4 holds the finding
     when a waiver settles it and should not go back to the database for it.
 
-    Both section 7 rules are checked here rather than at the call site, because
-    this is the last point before the state changes and a caller that forgot to
-    ask is exactly the case the control exists for.
+    Three gates, all checked here rather than at the call site, because this is
+    the last point before the state changes and a caller that forgot to ask is
+    exactly the case the control exists for: closure remarks, section 7's two
+    rules, and whether the auditor is actually satisfied.
+
+    `excused` is the waiver path and the only way past the third gate. It is a
+    named argument rather than a silent special case because "closed because the
+    obligation was excused" and "closed because the evidence was accepted" are
+    different facts about a finding, and a reader of the trail should not have to
+    infer which one happened.
     """
     if not remarks.strip():
         raise ValueError("a finding cannot be closed without closure remarks")
     _authorise_closure(repo, finding, by, people)
+    _require_auditor_satisfied(repo, finding, excused=excused)
+    closed_at = datetime.combine(as_of, time(12, 0))
     finding.status = "closed"
     finding.closed_by = by
-    finding.closed_at = datetime.combine(as_of, time(12, 0))
+    finding.closed_at = closed_at
     finding.closure_remarks = remarks
-    repo["findings"].update(finding)
-    repo["audit"].append(
-        actor="user", owner=by, action="finding_closed",
-        entity_type="Finding", entity_id=finding.id,
-        detail={
-            "closed_by": by,
-            "closure_remarks": remarks,
-            "follow_up_count": finding.follow_up_count,
-            "days_open": (as_of - finding.raised_at.date()).days,
-            "owner_progress_at_closure": finding.owner_progress,
-        },
-        actor_identity=by,
-    )
+    from .rounds import rounds_for
+
+    rounds = rounds_for(repo, finding.id)
+    # Business time, and a person's name rather than an identity id — the
+    # closure is the row a reader of the trail looks at first.
+    owner_name = people.name(by) if people is not None else by
+    with simulated_clock(closed_at):
+        repo["findings"].update(finding)
+        repo["audit"].append(
+            actor="user", owner=owner_name, action="finding_closed",
+            entity_type="Finding", entity_id=finding.id,
+            detail={
+                "closed_by": by,
+                "closure_remarks": remarks,
+                "follow_up_count": finding.follow_up_count,
+                "days_open": (as_of - finding.raised_at.date()).days,
+                "owner_progress_at_closure": finding.owner_progress,
+                "evidence_rounds": len(rounds),
+                "insufficient_rounds": len(
+                    [r for r in rounds if r.auditor_response == "insufficient"]
+                ),
+                "basis": "obligation excused" if excused else (
+                    "evidence accepted" if rounds else "satisfied without a round"
+                ),
+            },
+            actor_identity=by,
+        )
     return finding
+
+
+def _require_auditor_satisfied(repo, finding: Finding, *, excused: bool) -> None:
+    """Section 1, in as many words: *the finding remains Open until the auditor
+    is fully satisfied. Only then is it formally closed.*
+
+    Section 7 says who may close. This says *when*, and it is a different rule:
+    the right person closing at the wrong moment is exactly the failure the
+    stakeholder described — a finding marked closed while the owner's evidence
+    is still sitting unanswered, or right after the auditor said it was not good
+    enough. Without this, "the finding stays open until the auditor is
+    satisfied" was a sentence in a docstring rather than something the code
+    would refuse to break.
+
+    A finding with **no rounds at all** may still be closed. Not every finding
+    is settled through this system: an auditor may have reviewed the evidence in
+    a meeting, or the finding may be an observation the unit fixed in front of
+    them. What the trail records in that case is `satisfied without a round`,
+    so the distinction survives rather than being smoothed over.
+    """
+    if excused:
+        return
+
+    from .rounds import rounds_for
+
+    rounds = rounds_for(repo, finding.id)
+    if not rounds:
+        return
+    latest = rounds[-1]
+    if latest.auditor_response == "pending":
+        raise ValueError(
+            f"{finding.id} cannot be closed while round {latest.round_number} "
+            f"({latest.id}) is unanswered — the auditor has not looked at the "
+            f"evidence yet"
+        )
+    if latest.auditor_response == "insufficient":
+        raise ValueError(
+            f"{finding.id} cannot be closed: round {latest.round_number} was "
+            f"found insufficient and no further evidence has been filed. The "
+            f"finding stays open until the auditor is satisfied"
+        )
 
 
 def _authorise_closure(repo, finding: Finding, by: str,
@@ -407,7 +500,8 @@ def _authorise_closure(repo, finding: Finding, by: str,
 
 
 def close_finding(
-    conn, finding_id: str, *, by: str, remarks: str, as_of: date
+    conn, finding_id: str, *, by: str, remarks: str, as_of: date,
+    excused: bool = False,
 ) -> Finding:
     """Only ever the auditor, and only ever with remarks.
 
@@ -424,5 +518,5 @@ def close_finding(
         raise ValueError(f"no such finding: {finding_id}")
     return close_on_repo(
         repo, finding, by=by, remarks=remarks, as_of=as_of,
-        people=directory.load(conn),
+        people=directory.load(conn), excused=excused,
     )

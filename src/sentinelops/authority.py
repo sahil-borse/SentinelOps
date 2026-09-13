@@ -48,6 +48,32 @@ PERMISSIONS: dict[str, tuple[Role, ...]] = {
 SYSTEM_ACTIONS = frozenset({"raise_finding"})
 
 
+#: Roles and actions as a sentence reads them. A refusal is read by a person,
+#: often a person who has just been stopped from doing their job, and "a
+#: management may not close finding" is a worse explanation than it needs to be.
+ROLE_READS: dict[str, str] = {
+    "pa_infosec": "PA/InfoSec",
+    "unit_owner": "a unit owner",
+    "management": "management",
+}
+
+ACTION_READS: dict[str, str] = {
+    "conduct_audit": "conduct an audit",
+    "raise_finding": "raise a finding",
+    "assign_severity": "assign a severity",
+    "set_owner_progress": "report owner progress",
+    "submit_evidence": "submit evidence",
+    "respond_to_submission": "respond to an evidence submission",
+    "close_finding": "close a finding",
+    "view_escalations": "view escalations",
+    "view_portfolio": "view the portfolio",
+}
+
+
+def _reads_as(role: str | None) -> str:
+    return ROLE_READS.get(role or "", role or "a roleless identity")
+
+
 class AuthorityError(PermissionError):
     """A blocked action. Raised, never returned — a refusal that can be ignored
     by a caller who forgot to check the return value is not a control."""
@@ -74,8 +100,9 @@ def permitted(role: str | None, action: str) -> Decision:
         return Decision(True)
     return Decision(
         False,
-        f"a {role or 'roleless identity'} may not {action.replace('_', ' ')}; "
-        f"section 7 reserves it for {' or '.join(allowed)}",
+        f"{_reads_as(role)} may not {ACTION_READS.get(action, action)}; "
+        f"section 7 reserves it for "
+        f"{' or '.join(_reads_as(r) for r in allowed)}",
     )
 
 
@@ -90,7 +117,7 @@ def separated(submitter_ids, actor_id: str, action: str) -> Decision:
         return Decision(
             False,
             f"{actor_id} submitted evidence on this finding and may not also "
-            f"{action.replace('_', ' ')} it",
+            f"{ACTION_READS.get(action, action)}",
         )
     return Decision(True)
 

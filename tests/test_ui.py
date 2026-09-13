@@ -601,14 +601,32 @@ def test_step_six_reports_a_tampered_record(live, tmp_path, monkeypatch):
     assert "tampered" in outcome.headline
 
 
-def test_every_step_has_a_reason_a_person_would_recognise():
+def test_every_step_has_a_reason_a_person_would_recognise(live):
+    """Read through `why_for`, the way the screen does.
+
+    A step's copy may be a callable where it quotes a number — "fourteen
+    controls across seven business areas" was written when there were seven,
+    survived a roster change to ten and was still on screen being wrong. Testing
+    the raw attribute would skip exactly the steps that count.
+    """
     for step in story.STEPS:
-        assert len(step.why) > 120, f"{step.key} needs a real explanation"
+        why = story.why_for(step, live)
+        assert len(why) > 120, f"{step.key} needs a real explanation"
         assert step.button and step.title
         # no identifiers or field names leaking into the narrative
         for jargon in ("decided_by", "CHK-", "CTRL-", "AREA-", "s3_model",
                        "prescreen", "supersedes_assessment_id"):
-            assert jargon not in step.why, f"{step.key} leaks jargon: {jargon}"
+            assert jargon not in why, f"{step.key} leaks jargon: {jargon}"
+
+
+def test_copy_that_quotes_a_number_counts_it(live):
+    """The counts in the narrative match the register, not a memory of it."""
+    from sentinelops.repositories import repositories
+
+    repo = repositories(live)
+    why = story.why_for(story.STEPS[0], live)
+    assert str(len(repo["controls"].list())) in why
+    assert str(len(repo["units"].list())) in why
 
 
 def test_an_unknown_step_is_refused(live):
@@ -802,9 +820,9 @@ def test_the_narrative_is_escaped_before_it_is_emphasised():
     assert view.rich("**<b>x</b>**") == "<strong>&lt;b&gt;x&lt;/b&gt;</strong>"
 
 
-def test_every_narrative_string_survives_conversion():
+def test_every_narrative_string_survives_conversion(live):
     for step in story.STEPS:
-        for text in (step.title, step.why, step.button):
+        for text in (step.title, story.why_for(step, live), step.button):
             assert "**" not in view.rich(text)
 
 

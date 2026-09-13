@@ -94,10 +94,25 @@ def test_an_unlisted_action_is_a_hard_error_not_a_default():
 
 
 def test_a_refusal_says_why():
+    """Named through the lookup rather than by literal, so rewording the copy
+    is a copy change and not a test failure. What must hold is that the refusal
+    says what was refused and who may do it instead."""
     decision = authority.permitted("unit_owner", "close_finding")
     assert not decision
-    assert "close finding" in decision.reason
-    assert "pa_infosec" in decision.reason
+    assert authority.ACTION_READS["close_finding"] in decision.reason
+    assert authority.ROLE_READS["pa_infosec"] in decision.reason
+    assert "section 7" in decision.reason
+
+
+def test_every_action_and_role_reads_as_a_sentence():
+    """A refusal is read by somebody who has just been stopped from doing their
+    job. Every entry in the permission table needs a readable form, or one of
+    them eventually reaches them as "a management may not close finding"."""
+    for action in authority.PERMISSIONS:
+        assert action in authority.ACTION_READS, action
+        assert not authority.ACTION_READS[action].endswith("_"), action
+    for role in ("pa_infosec", "unit_owner", "management"):
+        assert role in authority.ROLE_READS, role
 
 
 # --- blocked path 1: the owner may not close their own finding ---------------
@@ -109,7 +124,7 @@ def test_an_owner_cannot_close_their_own_finding(seeded, finding):
             seeded, finding.id, by=finding.owner_identity,
             remarks="Looks done to me.", as_of=AS_OF,
         )
-    assert "close finding" in str(refused.value)
+    assert authority.ACTION_READS["close_finding"] in str(refused.value)
     assert repositories(seeded)["findings"].get(finding.id).status == "open"
 
 

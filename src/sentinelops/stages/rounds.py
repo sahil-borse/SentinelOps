@@ -31,6 +31,7 @@ from datetime import date, datetime, time
 from .. import authority
 from ..directory import Directory
 from ..entities import EvidenceSubmission, Finding
+from ..repositories import simulated_clock
 
 
 def rounds_for(repo, finding_id: str) -> list[EvidenceSubmission]:
@@ -77,31 +78,41 @@ def open_round(
         )
 
     number = len(existing) + 1
+    filed_at = datetime.combine(as_of, time(10, 0))
     submission = EvidenceSubmission(
         id=f"SUB-{finding.id.removeprefix('FND-')}-R{number}",
         finding_id=finding.id,
         round_number=number,
         submitted_by=by,
-        submitted_at=datetime.combine(as_of, time(10, 0)),
+        submitted_at=filed_at,
         evidence_ref=evidence_ref,
         owner_note=note,
         auditor_response="pending",
     )
-    repo["rounds"].add(submission)
-    repo["audit"].append(
-        actor="user", owner=people.name(by), action="evidence_round_opened",
-        entity_type="EvidenceSubmission", entity_id=submission.id,
-        detail={
-            "finding_id": finding.id,
-            "round_number": number,
-            "evidence_ref": evidence_ref,
-            "submitted_by": by,
-            "owner_note": note,
-            "finding_status": finding.status,
-            "note": "filing evidence does not move the finding; the auditor does",
-        },
-        actor_identity=by,
-    )
+    # Section 12: simulated business time on every audit event, never the wall
+    # clock. These functions are usually called from inside a stage that has
+    # already entered the clock, which hid the omission — called directly, from
+    # the dashboard or a demo, they were stamping the date the machine happened
+    # to be switched on.
+    with simulated_clock(filed_at):
+        repo["rounds"].add(submission)
+        repo["audit"].append(
+            actor="user", owner=people.name(by),
+            action="evidence_round_opened",
+            entity_type="EvidenceSubmission", entity_id=submission.id,
+            detail={
+                "finding_id": finding.id,
+                "round_number": number,
+                "evidence_ref": evidence_ref,
+                "submitted_by": by,
+                "owner_note": note,
+                "finding_status": finding.status,
+                "note": (
+                    "filing evidence does not move the finding; the auditor does"
+                ),
+            },
+            actor_identity=by,
+        )
     return submission
 
 
@@ -143,28 +154,30 @@ def respond(
         submitters_of(repo, submission.finding_id), by, "respond_to_submission"
     )
 
+    answered_at = datetime.combine(as_of, time(11, 0))
     submission.auditor_response = response  # type: ignore[assignment]
     submission.auditor_remarks = remarks
     submission.responded_by = by
-    submission.responded_at = datetime.combine(as_of, time(11, 0))
-    repo["rounds"].update(submission)
-    repo["audit"].append(
-        actor="user", owner=people.name(by),
-        action=(
-            "evidence_round_accepted" if response == "accepted"
-            else "evidence_round_insufficient"
-        ),
-        entity_type="EvidenceSubmission", entity_id=submission.id,
-        detail={
-            "finding_id": submission.finding_id,
-            "round_number": submission.round_number,
-            "response": response,
-            "remarks": remarks,
-            "responded_by": by,
-            "submitted_by": submission.submitted_by,
-        },
-        actor_identity=by,
-    )
+    submission.responded_at = answered_at
+    with simulated_clock(answered_at):
+        repo["rounds"].update(submission)
+        repo["audit"].append(
+            actor="user", owner=people.name(by),
+            action=(
+                "evidence_round_accepted" if response == "accepted"
+                else "evidence_round_insufficient"
+            ),
+            entity_type="EvidenceSubmission", entity_id=submission.id,
+            detail={
+                "finding_id": submission.finding_id,
+                "round_number": submission.round_number,
+                "response": response,
+                "remarks": remarks,
+                "responded_by": by,
+                "submitted_by": submission.submitted_by,
+            },
+            actor_identity=by,
+        )
     return submission
 
 

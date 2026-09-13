@@ -98,7 +98,7 @@ with st.container(border=True):
         f"{len(story.STEPS)}</span>", unsafe_allow_html=True,
     )
     st.subheader(step.title)
-    st.markdown(f"<div class='why'>{view.rich(step.why)}</div>",
+    st.markdown(f"<div class='why'>{view.rich(story.why_for(step, conn))}</div>",
                 unsafe_allow_html=True)
 
     go, back, forward, _ = st.columns([2, 1, 1, 3])

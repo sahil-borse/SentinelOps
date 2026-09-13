@@ -322,3 +322,175 @@ def test_the_corpus_exercises_multi_round_findings(conn, corpus):
             f"{record.finding_id} was found insufficient with no later round, "
             f"so it cannot be closed"
         )
+
+
+# --- section 1: open until the auditor is satisfied --------------------------
+
+def test_a_finding_cannot_be_closed_while_a_round_is_unanswered(ctx):
+    """The right person closing at the wrong moment.
+
+    Section 7 says who may close; this is *when*. The owner has filed evidence
+    and the auditor has not looked at it — closing here would record that the
+    auditor was satisfied by something they never read.
+    """
+    conn, repo, people, finding, auditor = ctx
+    rounds.open_round(
+        repo, people, finding, by=finding.owner_identity,
+        evidence_ref="EV-1", as_of=AS_OF,
+    )
+    with pytest.raises(ValueError) as refused:
+        followup.close_finding(
+            conn, finding.id, by=auditor.id,
+            remarks="Looks fine at a glance.", as_of=AS_OF,
+        )
+    assert "unanswered" in str(refused.value)
+    assert repo["findings"].get(finding.id).status == "open"
+
+
+def test_a_finding_cannot_be_closed_after_an_insufficient_round(ctx):
+    """Section 1, in as many words: the finding remains Open until the auditor
+    is fully satisfied. Saying "not good enough" and then closing it anyway is
+    the contradiction this blocks."""
+    conn, repo, people, finding, auditor = ctx
+    first = rounds.open_round(
+        repo, people, finding, by=finding.owner_identity,
+        evidence_ref="EV-1", as_of=AS_OF,
+    )
+    rounds.respond(
+        repo, people, first, response="insufficient", by=auditor.id,
+        remarks="The tracker does not cover March.", as_of=AS_OF,
+    )
+    with pytest.raises(ValueError) as refused:
+        followup.close_finding(
+            conn, finding.id, by=auditor.id,
+            remarks="Closing it anyway.", as_of=AS_OF,
+        )
+    assert "insufficient" in str(refused.value)
+    assert repo["findings"].get(finding.id).status == "open"
+
+
+def test_an_accepted_round_allows_closure(ctx):
+    """The positive half: the gate blocks the wrong moment, not every moment."""
+    conn, repo, people, finding, auditor = ctx
+    first = rounds.open_round(
+        repo, people, finding, by=finding.owner_identity,
+        evidence_ref="EV-1", as_of=AS_OF,
+    )
+    rounds.respond(
+        repo, people, first, response="accepted", by=auditor.id,
+        remarks="Complete and reconciled.", as_of=AS_OF,
+    )
+    closed = followup.close_finding(
+        conn, finding.id, by=auditor.id,
+        remarks="Evidence accepted at round 1.", as_of=AS_OF,
+    )
+    assert closed.status == "closed"
+
+
+def test_a_finding_with_no_rounds_at_all_may_still_be_closed(ctx):
+    """Not every finding is settled through this system.
+
+    An auditor may have reviewed the evidence in a meeting, or watched the unit
+    fix it. The trail records `satisfied without a round` so the distinction
+    survives rather than being smoothed into "evidence accepted".
+    """
+    conn, repo, people, finding, auditor = ctx
+    closed = followup.close_finding(
+        conn, finding.id, by=auditor.id,
+        remarks="Reviewed with the team on site; register now current.",
+        as_of=AS_OF,
+    )
+    assert closed.status == "closed"
+    event = [
+        e for e in repo["audit"].read_for("Finding", finding.id)
+        if e.action == "finding_closed"
+    ][0]
+    assert event.detail["basis"] == "satisfied without a round"
+    assert event.detail["evidence_rounds"] == 0
+
+
+def test_the_closure_event_records_what_satisfied_the_auditor(ctx):
+    conn, repo, people, finding, auditor = ctx
+    first = rounds.open_round(
+        repo, people, finding, by=finding.owner_identity,
+        evidence_ref="EV-1", as_of=AS_OF,
+    )
+    rounds.respond(
+        repo, people, first, response="insufficient", by=auditor.id,
+        remarks="March is missing.", as_of=AS_OF,
+    )
+    second = rounds.open_round(
+        repo, people, finding, by=finding.owner_identity,
+        evidence_ref="EV-2", as_of=AS_OF + timedelta(days=5),
+    )
+    rounds.respond(
+        repo, people, second, response="accepted", by=auditor.id,
+        remarks="March is now covered.", as_of=AS_OF + timedelta(days=5),
+    )
+    followup.close_finding(
+        conn, finding.id, by=auditor.id, remarks="Accepted at round 2.",
+        as_of=AS_OF + timedelta(days=5),
+    )
+    event = [
+        e for e in repo["audit"].read_for("Finding", finding.id)
+        if e.action == "finding_closed"
+    ][0]
+    assert event.detail["basis"] == "evidence accepted"
+    assert event.detail["evidence_rounds"] == 2
+    assert event.detail["insufficient_rounds"] == 1
+
+
+# --- the section 4 walkthrough, as a test ------------------------------------
+
+def test_the_lifecycle_demo_walks_three_rounds_and_refuses_six_attempts(capsys):
+    """`python -m sentinelops.demo.lifecycle` is the slide for section 4.
+
+    Run here so it cannot rot: if a guard is weakened the demo stops refusing,
+    and the assertion that it refused six times fails rather than the demo
+    quietly printing a shorter list nobody counts.
+    """
+    from sentinelops.demo import lifecycle
+
+    lifecycle.main()
+    out = capsys.readouterr().out
+
+    assert out.count("round 1") and out.count("round 2") and out.count("round 3")
+    assert out.count("INSUFFICIENT") == 2
+    assert out.count("ACCEPTED") == 1
+    assert "CLOSED" in out
+    assert out.count("REFUSED") == 6
+    assert "after six refused attempts: status=open" in out
+    assert "ok=True" in out
+
+    # every row of the trail is business time, never the machine's clock
+    import re
+    stamps = re.findall(r"^\s+\d+\s+(\d{4}-\d{2}-\d{2})", out, re.MULTILINE)
+    assert stamps, "the trail printed no rows"
+    assert all(s.startswith("2027-") for s in stamps), (
+        f"wall-clock timestamps leaked into the trail: "
+        f"{sorted({s for s in stamps if not s.startswith('2027-')})}"
+    )
+
+
+def test_the_demo_uses_the_same_functions_as_the_pipeline():
+    """A demo with its own private path proves nothing about the product."""
+    import ast
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "src" / "sentinelops" / "demo" / "lifecycle.py"
+    ).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    imported = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+    assert {"followup", "rounds"} <= imported, (
+        "the demo must drive the real stages"
+    )
+    # and it must not reach into the tables behind their backs
+    assert "UPDATE findings" not in source
+    assert 'finding.status = ' not in source

@@ -501,6 +501,11 @@ def _close_out_waived(
                 f"({exception_flag.id}). The assessment it arose from stands."
             ),
             as_of=as_of,
+            # The one path past "the auditor must be satisfied by the evidence".
+            # A waiver excuses the obligation, so there is no evidence owed and
+            # none to be satisfied by — a different fact from "we accepted what
+            # they sent", and the trail records which.
+            excused=True,
         )
         report.findings_closed_by_waiver.append(finding.id)
 
