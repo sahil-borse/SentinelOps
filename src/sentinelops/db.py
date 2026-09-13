@@ -32,6 +32,15 @@ CREATE TABLE IF NOT EXISTS evidence (
     kind TEXT NOT NULL, doc_type TEXT NOT NULL, content TEXT NOT NULL,
     content_hash TEXT NOT NULL, submitted_at TEXT NOT NULL, author TEXT NOT NULL,
     is_remediation INTEGER NOT NULL);
+-- The gap taxonomy, derived from the corpus rather than written in advance.
+CREATE TABLE IF NOT EXISTS gap_categories (
+    id TEXT NOT NULL, label TEXT NOT NULL, definition TEXT NOT NULL,
+    taxonomy_version TEXT NOT NULL, derived_at TEXT NOT NULL,
+    derived_from_count INTEGER NOT NULL, merged_from TEXT NOT NULL,
+    prompt_version TEXT NOT NULL,
+    PRIMARY KEY (taxonomy_version, id));
+CREATE INDEX IF NOT EXISTS gap_categories_by_version
+    ON gap_categories(taxonomy_version);
 -- Notifications are records, not log lines: the inbox is a query over this.
 CREATE TABLE IF NOT EXISTS notifications (
     id TEXT PRIMARY KEY,
@@ -61,19 +70,28 @@ CREATE TABLE IF NOT EXISTS inbound_submissions (
 CREATE TABLE IF NOT EXISTS evidence_submissions (
     id TEXT PRIMARY KEY, finding_id TEXT NOT NULL REFERENCES findings(id),
     round_number INTEGER NOT NULL, submitted_by TEXT NOT NULL,
-    submitted_at TEXT NOT NULL, evidence_ref TEXT NOT NULL, owner_note TEXT NOT NULL,
+    submitted_at TEXT NOT NULL, evidence_ref TEXT NOT NULL,
+    evidence_text TEXT NOT NULL DEFAULT '', owner_note TEXT NOT NULL,
     auditor_response TEXT NOT NULL, auditor_remarks TEXT NOT NULL,
     responded_by TEXT NOT NULL, responded_at TEXT,
     UNIQUE (finding_id, round_number));
 CREATE TABLE IF NOT EXISTS assessments (
-    id TEXT PRIMARY KEY, check_instance_id TEXT NOT NULL REFERENCES check_instances(id),
+    id TEXT PRIMARY KEY,
+    check_instance_id TEXT NOT NULL DEFAULT '',
+    submission_id TEXT NOT NULL DEFAULT '',
     verdict TEXT NOT NULL, confidence REAL NOT NULL, rationale TEXT NOT NULL,
     cited_spans TEXT NOT NULL, gaps TEXT NOT NULL, recommended_action TEXT NOT NULL,
     needs_human_review INTEGER NOT NULL, assessed_at TEXT,
     supersedes_assessment_id TEXT REFERENCES assessments(id),
     carried_forward_from TEXT REFERENCES assessments(id),
     decided_by TEXT NOT NULL, criteria_hash TEXT NOT NULL,
-    prompt_version TEXT NOT NULL, evidence_hash TEXT NOT NULL);
+    prompt_version TEXT NOT NULL, evidence_hash TEXT NOT NULL,
+    -- An assessment judges a periodic check's evidence or one evidence round on
+    -- a finding. Never both, never neither -- enforced here so it is a property
+    -- of the database rather than of whichever code path wrote the row.
+    CHECK ((check_instance_id = '') <> (submission_id = '')));
+CREATE INDEX IF NOT EXISTS assessments_by_submission
+    ON assessments(submission_id);
 CREATE TABLE IF NOT EXISTS findings (
     id TEXT PRIMARY KEY, source TEXT NOT NULL,
     auditable_unit_id TEXT NOT NULL REFERENCES auditable_units(id),

@@ -57,6 +57,7 @@ def open_round(
     *,
     by: str,
     evidence_ref: str,
+    evidence_text: str = "",
     note: str = "",
     as_of: date,
 ) -> EvidenceSubmission:
@@ -86,6 +87,7 @@ def open_round(
         submitted_by=by,
         submitted_at=filed_at,
         evidence_ref=evidence_ref,
+        evidence_text=evidence_text,
         owner_note=note,
         auditor_response="pending",
     )
@@ -104,6 +106,7 @@ def open_round(
                 "finding_id": finding.id,
                 "round_number": number,
                 "evidence_ref": evidence_ref,
+                "evidence_chars": len(evidence_text),
                 "submitted_by": by,
                 "owner_note": note,
                 "finding_status": finding.status,

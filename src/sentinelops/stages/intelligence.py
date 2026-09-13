@@ -51,17 +51,19 @@ from ..llm.prompts.recurrence import (
 )
 from ..llm.prompts.recurrence import PROMPT_VERSION as RECURRENCE_PROMPT_VERSION
 from ..llm.prompts.triage import (
-    GAP_CATEGORIES,
+    BATCH_SIZE,
     SEVERITIES,
     TRIAGE_SYSTEM_V1,
     triage_schema_v1,
     triage_user_v1,
 )
+from . import taxonomy
 from ..llm.prompts.triage import PROMPT_VERSION as TRIAGE_PROMPT_VERSION
 from ..llm.protocol import LlmRequest
 
-#: Short answers. A classification that needs four hundred tokens to explain
-#: itself is not a classification.
+#: Short answers, per finding, times the batch. A classification that needs four
+#: hundred tokens to explain itself is not a classification.
+TRIAGE_TOKENS_PER_FINDING = 160
 TRIAGE_MAX_TOKENS = 260
 RECURRENCE_MAX_TOKENS = 500
 
@@ -88,6 +90,15 @@ class TriageReport:
     needs_review: list[str] = field(default_factory=list)
     model_calls: int = 0
     by_category: dict[str, int] = field(default_factory=dict)
+    batches: int = 0
+    taxonomy_version: str = ""
+
+    def summary(self) -> str:
+        return (
+            f"{len(self.classified)} findings classified in {self.batches} "
+            f"batch(es) / {self.model_calls} model call(s), "
+            f"{len(self.needs_review)} flagged for review"
+        )
 
 
 @dataclass
@@ -129,62 +140,110 @@ def _finding_context(repo, people: Directory, finding: Finding) -> dict[str, Any
 def classify(conn, as_of: date, *, client=None, limit: int | None = None):
     """Give every unclassified finding a gap category and a severity suggestion.
 
+    **Batched.** The system prompt and the category catalogue are most of the
+    tokens in a classification call, so sending them once per finding pays for
+    the same paragraph over and over. Findings travel
+    `BATCH_SIZE` at a time and each keeps its own answer.
+
     Runs only on findings that have no category yet, so it is idempotent and a
     second pass over the same corpus spends nothing.
+
+    The taxonomy must already have been derived. There is deliberately no
+    fallback list: a silent default is exactly what this stage stopped doing.
     """
     from ..repositories import repositories, simulated_clock
 
     repo = repositories(conn)
     people = directory.load(conn)
-    report = TriageReport(as_of=as_of)
+    categories = taxonomy.require(conn)
+    report = TriageReport(as_of=as_of, taxonomy_version=categories[0].taxonomy_version)
     pending = [f for f in sorted(repo["findings"].list(), key=lambda f: f.id)
                if not f.gap_category]
     if limit is not None:
         pending = pending[:limit]
 
+    names = tuple(c.id for c in categories)
+    definitions = {c.id: c.definition for c in categories}
     model_client = client or get_client()
+
     with simulated_clock(datetime.combine(as_of, time(7, 0))):
-        for finding in pending:
-            payload, response = _ask_triage(
-                conn, model_client, _finding_context(repo, people, finding)
+        for group in taxonomy.batches(pending, BATCH_SIZE):
+            answers, response = _ask_triage(
+                conn, model_client,
+                [_finding_context(repo, people, f) for f in group],
+                names, definitions,
             )
             report.model_calls += 1
-            _record_triage(repo, people, finding, payload, response, report)
+            report.batches += 1
+            for finding in group:
+                _record_triage(
+                    repo, people, finding, answers[finding.id], response, report,
+                )
     return report
 
 
-def _ask_triage(conn, client, context: dict[str, Any]):
+def _ask_triage(conn, client, contexts: list[dict[str, Any]], names, definitions):
+    """One call, many findings. Returns the answers keyed by finding id."""
     request = LlmRequest(
         system=TRIAGE_SYSTEM_V1,
-        messages=[{"role": "user", "content": triage_user_v1(context)}],
-        response_schema=triage_schema_v1(),
-        max_tokens=TRIAGE_MAX_TOKENS,
+        messages=[{"role": "user", "content": triage_user_v1(contexts, definitions)}],
+        response_schema=triage_schema_v1(names),
+        max_tokens=TRIAGE_TOKENS_PER_FINDING * len(contexts),
         tier="triage",
     )
-    with TokenMeter(conn, tier="triage", label=f"TRIAGE:{context['id']}") as meter:
+    label = f"TRIAGE:{contexts[0]['id']}+{len(contexts) - 1}"
+    with TokenMeter(conn, tier="triage", label=label) as meter:
         response = meter.record(client.complete(request))
     payload = response.parsed_json or {}
 
-    # Validated against the enum whatever came back — a defence that relies on
-    # the model having behaved is not a defence.
-    if payload.get("category") not in GAP_CATEGORIES:
+    # Validated whatever came back — a defence that relies on the model having
+    # behaved is not a defence. Three separate things can go wrong with a batch
+    # and each is named rather than collapsed into "bad response".
+    answers: dict[str, dict[str, Any]] = {}
+    asked = {context["id"] for context in contexts}
+    for entry in payload.get("findings", []):
+        if entry.get("id") not in asked:
+            raise ValueError(
+                f"triage answered for {entry.get('id')!r}, which was not in the "
+                f"batch; an answer about a finding we did not send cannot be "
+                f"filed against one we did"
+            )
+        if entry.get("category") not in names:
+            raise ValueError(
+                f"category {entry.get('category')!r} is outside the derived "
+                f"taxonomy"
+            )
+        if entry.get("suggested_severity") not in SEVERITIES:
+            raise ValueError(
+                f"severity {entry.get('suggested_severity')!r} is outside the enum"
+            )
+        answers[entry["id"]] = entry
+
+    missing = sorted(asked - set(answers))
+    if missing:
         raise ValueError(
-            f"category {payload.get('category')!r} is outside the taxonomy"
+            f"triage returned no answer for {', '.join(missing)}; a batch that "
+            f"silently drops findings leaves them looking unclassifiable when "
+            f"they are only unanswered"
         )
-    if payload.get("suggested_severity") not in SEVERITIES:
-        raise ValueError(
-            f"severity {payload.get('suggested_severity')!r} is outside the enum"
-        )
-    return payload, response
+    return answers, response
 
 
 def _record_triage(repo, people, finding: Finding, payload, response, report):
+    finding_taxonomy_version = report.taxonomy_version
     confidence = float(payload.get("confidence", 0.0))
     finding.gap_category = payload["category"]
-    # The severity *suggestion* only. An audit-raised finding already carries
-    # the severity its auditor assigned, and this must not touch it — section 2
-    # is explicit that the model advises and the auditor decides.
-    finding.suggested_severity = payload["suggested_severity"]
+    # The severity suggestion is *not* written here for audit-raised findings.
+    # Section 1 says severity is finalised after the audit completes and
+    # communicated in the report, so `audits.suggest_severities` owns it and
+    # produces it there, beside the auditor's own assignment at the moment the
+    # two are actually compared. Writing it here would mean the suggestion
+    # existed before the audit it belongs to had finished.
+    #
+    # Activity-track findings have no audit to complete, so there is no later
+    # moment to wait for and the suggestion is recorded now.
+    if finding.source != "audit":
+        finding.suggested_severity = payload["suggested_severity"]
     repo["findings"].update(finding)
 
     report.classified.append(finding.id)
@@ -210,6 +269,7 @@ def _record_triage(repo, people, finding: Finding, payload, response, report):
             "needs_human_review": low,
             "rationale": payload.get("rationale", ""),
             "prompt_version": TRIAGE_PROMPT_VERSION,
+            "taxonomy_version": finding_taxonomy_version,
             "model": response.model,
             "note": "advisory; the auditor may override the category",
         },
@@ -230,8 +290,12 @@ def override_category(conn, finding_id: str, category: str, *, by: str) -> Findi
     identity = people.get(by)
     authority.require(identity.role if identity else None, "assign_severity",
                       actor_id=by)
-    if category not in GAP_CATEGORIES:
-        raise ValueError(f"{category!r} is not in the taxonomy")
+    known = taxonomy.names(conn)
+    if category not in known:
+        raise ValueError(
+            f"{category!r} is not in the derived taxonomy "
+            f"({', '.join(known) or 'none derived'})"
+        )
 
     finding = repo["findings"].get(finding_id)
     if finding is None:
@@ -272,7 +336,25 @@ def candidates_for(repo, finding: Finding) -> list[Finding]:
         if not (different_unit or different_period):
             continue
         out.append(other)
-    out.sort(key=lambda f: f.raised_at)
+
+    # Same track first, then oldest.
+    #
+    # The shortlist is capped, and it used to be capped on age alone. That is an
+    # arbitrary tiebreak, and after a full run the activity track wins it on
+    # volume: it produces hundreds of findings a year against the audit track's
+    # dozens, so twelve slots fill with system-generated descriptions and the
+    # auditor-written prior that is the actual recurrence never reaches the
+    # model. The effect was invisible while the taxonomy was hardcoded, because
+    # activity findings piled into a category the audit track barely used;
+    # deriving the categories from the corpus redistributed them and the
+    # crowding surfaced as recall falling from 50% to 16.7%.
+    #
+    # Same-track-first rather than same-track-only: an auditor finding the same
+    # gap that a periodic check also caught is a real link and worth keeping.
+    # But it competes for the leftover slots instead of taking them by weight of
+    # numbers. This is also the pairing the score is computed over, so the
+    # shortlist and the measurement now agree about what is being compared.
+    out.sort(key=lambda f: (f.source != finding.source, f.raised_at))
     return out[:MAX_CANDIDATES]
 
 

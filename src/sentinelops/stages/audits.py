@@ -31,6 +31,7 @@ from .. import authority, directory
 from ..directory import Directory
 from ..entities import Finding, ScheduledAudit
 from ..llm import get_client
+from ..llm.prompts.triage import BATCH_SIZE as TRIAGE_BATCH_SIZE
 from ..llm.prompts.audit_report import (
     AUDIT_REPORT_SYSTEM_V1,
     PROMPT_VERSION,
@@ -120,6 +121,112 @@ def conduct(
             actor_identity=by,
         )
     return audit
+
+
+def suggest_severities(
+    conn,
+    audit_id: str,
+    *,
+    client=None,
+    as_of: date | None = None,
+) -> dict[str, str]:
+    """Section 2, use 4: suggest a severity for every finding this audit raised.
+
+    **Why here and not at classification.** Section 1 says severity is
+    *finalised after the audit completes* and communicated to the auditee in the
+    report. A suggestion offered earlier is advice about an audit still being
+    written; offered here it sits beside the auditor's own assignment at the
+    moment the report is drawn up, which is when the two are actually compared.
+
+    **The suggestion never becomes the severity.** `severity` stays exactly as
+    the auditor assigned it and `suggested_severity` is written separately, so
+    divergence is visible rather than resolved. The trail records whether they
+    agreed, because "how often does the model differ from the auditor?" is the
+    question that decides whether this capability is worth keeping.
+
+    Batched with classification's call, which reads the same sentence to reach
+    both answers — asking twice would pay twice to re-read one paragraph.
+    """
+    from ..repositories import repositories, simulated_clock
+    from . import intelligence, taxonomy
+
+    repo = repositories(conn)
+    people = directory.load(conn)
+    audit = repo["audits"].get(audit_id)
+    if audit is None:
+        raise ValueError(f"no such audit: {audit_id}")
+    if audit.status != "completed":
+        raise ValueError(
+            f"{audit_id} is {audit.status}; severity is finalised at audit "
+            f"completion, not before"
+        )
+
+    findings = [f for f in findings_of(repo, audit_id) if not f.suggested_severity]
+    if not findings:
+        return {}
+
+    stamp = datetime.combine(
+        as_of or audit.conducted_date or audit.planned_date, time(15, 0)
+    )
+    categories = taxonomy.require(conn)
+    names = tuple(c.id for c in categories)
+    definitions = {c.id: c.definition for c in categories}
+    model_client = client or get_client()
+
+    agreed = 0
+    out: dict[str, str] = {}
+    with simulated_clock(stamp):
+        for group in taxonomy.batches(findings, TRIAGE_BATCH_SIZE):
+            answers, response = intelligence._ask_triage(
+                conn, model_client,
+                [intelligence._finding_context(repo, people, f) for f in group],
+                names, definitions,
+            )
+            for finding in group:
+                answer = answers[finding.id]
+                finding.suggested_severity = answer["suggested_severity"]
+                # The category too, where the auditor left it blank. It comes
+                # back in the same reply and dropping it would mean paying for
+                # it twice.
+                if not finding.gap_category:
+                    finding.gap_category = answer["category"]
+                repo["findings"].update(finding)
+                out[finding.id] = finding.suggested_severity
+                same = finding.severity == finding.suggested_severity
+                agreed += int(same)
+                repo["audit"].append(
+                    actor="ai", owner=people.name(finding.owner_identity),
+                    action="finding_severity_suggested",
+                    entity_type="Finding", entity_id=finding.id,
+                    detail={
+                        "suggested_severity": finding.suggested_severity,
+                        "assigned_severity": finding.severity,
+                        "agrees_with_auditor": same,
+                        "gap_category": finding.gap_category,
+                        "confidence": answer.get("confidence"),
+                        "rationale": answer.get("rationale", ""),
+                        "audit_id": audit_id,
+                        "model": response.model,
+                        "note": (
+                            "advisory only; the auditor's assignment is "
+                            "authoritative and is not changed here"
+                        ),
+                    },
+                )
+
+        repo["audit"].append(
+            actor="ai", owner=people.name(audit.auditor_identity),
+            action="audit_severities_suggested",
+            entity_type="ScheduledAudit", entity_id=audit_id,
+            detail={
+                "findings": len(out),
+                "agreed_with_auditor": agreed,
+                "differed": len(out) - agreed,
+                "note": "suggestions stored beside the assignments, never over them",
+            },
+            actor_identity=audit.auditor_identity,
+        )
+    return out
 
 
 def raise_finding(
@@ -262,7 +369,8 @@ def uncited_claims(summary: str, known_ids: set[str]) -> list[str]:
 
 
 def generate_report(
-    conn, audit_id: str, *, client=None, as_of: date | None = None
+    conn, audit_id: str, *, client=None, as_of: date | None = None,
+    suggest_severity: bool = True,
 ) -> AuditReport:
     """Assemble the report. One model call, for the summary paragraph only.
 
@@ -284,6 +392,18 @@ def generate_report(
             f"{audit_id} is {audit.status}; a report is generated at audit "
             "completion, not before"
         )
+
+    # Section 1: severity is finalised after the audit completes and
+    # communicated in the report. So the suggestion is produced here, beside the
+    # auditor's own assignment, immediately before the report that carries it.
+    if suggest_severity:
+        try:
+            suggest_severities(conn, audit_id, client=client, as_of=as_of)
+        except ValueError:
+            # No taxonomy derived yet. The report is deterministic without the
+            # suggestion and withholding the whole report over an advisory
+            # extra would be the wrong trade.
+            pass
 
     as_of = as_of or audit.conducted_date or audit.planned_date
     findings = _structured(repo, people, audit)

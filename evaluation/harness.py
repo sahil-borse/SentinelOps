@@ -94,12 +94,15 @@ def _require_matching_truth(corpus, truth: dict[str, Any]) -> None:
 def _section_eight(conn) -> dict[str, Any]:
     """Section 8's figures over the finished run. Deterministic, no model."""
     from sentinelops import analytics
-    from sentinelops.stages import intelligence
+    from sentinelops.stages import intelligence, taxonomy
 
     as_of = CYCLE_DATES[-1]
     # Classification and recurrence are what make "by gap category" and
     # "recurring findings" answerable at all, so they run before the analytics
-    # rather than being reported as empty.
+    # rather than being reported as empty. The taxonomy has to come first: it is
+    # read off the findings this run produced, and classification has no
+    # fallback list to fall back to.
+    taxonomy.derive(conn, as_of)
     intelligence.classify(conn, as_of)
     intelligence.detect_recurrence(conn, as_of)
     return analytics.portfolio(

@@ -22,7 +22,7 @@ from ..repositories import repositories, simulated_clock
 from ..stages.assess import run as assess
 from ..stages.flag import run as flag_stage
 from ..stages.followup import run as followup_stage
-from ..stages import intelligence
+from ..stages import intelligence, taxonomy
 from ..stages.prescreen import run as prescreen
 from ..stages.remediation import reassess as reassess_instance
 from ..stages.remediation import reassess_all
@@ -135,6 +135,10 @@ def tick(conn, as_of: date, *, client=None) -> TickResult:
     # Both are idempotent: a finding already classified is skipped, and one
     # already linked is not re-examined, so a second tick on the same day
     # spends nothing on either.
+    # The taxonomy is derived from the corpus, not hardcoded, so it has to
+    # exist before anything can be classified against it. Idempotent: a second
+    # press of the button spends nothing.
+    taxonomy.derive(conn, as_of, client=client)
     triage = intelligence.classify(conn, as_of, client=client)
     result.classified = len(triage.classified)
     result.model_calls += triage.model_calls

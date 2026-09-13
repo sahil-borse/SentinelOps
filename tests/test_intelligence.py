@@ -14,9 +14,9 @@ from sentinelops.synth.calendar import SIMULATED_TODAY
 from sentinelops.authority import AuthorityError
 from sentinelops.directory import load as load_directory
 from sentinelops.entities import Finding
-from sentinelops.llm.prompts.triage import GAP_CATEGORIES, SEVERITIES
+from sentinelops.llm.prompts.triage import SEVERITIES
 from sentinelops.repositories import repositories, simulated_clock
-from sentinelops.stages import intelligence
+from sentinelops.stages import intelligence, taxonomy
 from sentinelops.synth import generate_corpus, seed_database
 
 AS_OF = SIMULATED_TODAY
@@ -30,7 +30,40 @@ def corpus():
 @pytest.fixture
 def seeded(conn, corpus):
     seed_database(conn, corpus)
+    # The taxonomy is read off the corpus now rather than written into the
+    # prompt package, and classification has no fallback list, so deriving it
+    # is part of getting a usable database rather than a separate test concern.
+    taxonomy.derive(conn, AS_OF)
     return conn
+
+
+@pytest.fixture
+def categories(seeded):
+    return taxonomy.names(seeded)
+
+
+def _batch_reply(entries):
+    """One batched triage response, in the shape the caller validates."""
+    import json
+
+    from sentinelops.llm.protocol import LlmResponse
+
+    payload = {"findings": entries}
+    return LlmResponse(
+        text=json.dumps(payload), parsed_json=payload, input_tokens=1,
+        output_tokens=1, cached_tokens=0, model="inventive", latency_ms=1,
+        raw={},
+    )
+
+
+def _ids_in(request):
+    """The finding ids a triage request actually asked about."""
+    body = "".join(m["content"] for m in request.messages)
+    block = body.split("<<<FINDINGS", 1)[-1].split("FINDINGS>>>", 1)[0]
+    return [
+        line.split("id: ", 1)[1].strip()
+        for line in block.splitlines() if line.startswith("id: ")
+    ]
 
 
 @pytest.fixture
@@ -44,56 +77,84 @@ def classified(seeded):
 def test_every_finding_gets_a_category_from_the_closed_set(classified):
     conn, report = classified
     repo = repositories(conn)
+    known = taxonomy.names(conn)
     assert report.classified
     for finding in repo["findings"].list():
-        assert finding.gap_category in GAP_CATEGORIES
+        assert finding.gap_category in known
 
 
 def test_the_taxonomy_is_closed_and_a_stray_label_is_refused(seeded):
     """A free-form label would make recurrence measure the model's vocabulary."""
     class Inventive:
         def complete(self, request):
-            import json
-
-            from sentinelops.llm.protocol import LlmResponse
-            payload = {
+            return _batch_reply([{
+                "id": finding_id,
                 "category": "access control-ish",
                 "suggested_severity": "Major",
                 "confidence": 0.9,
                 "rationale": "made up",
-            }
-            return LlmResponse(
-                text=json.dumps(payload), parsed_json=payload, input_tokens=1,
-                output_tokens=1, cached_tokens=0, model="inventive",
-                latency_ms=1, raw={},
-            )
+            } for finding_id in _ids_in(request)])
 
     with pytest.raises(ValueError) as refused:
         intelligence.classify(seeded, AS_OF, client=Inventive(), limit=1)
-    assert "outside the taxonomy" in str(refused.value)
+    assert "outside the derived taxonomy" in str(refused.value)
 
 
-def test_a_stray_severity_is_refused_too(seeded):
+def test_a_stray_severity_is_refused_too(seeded, categories):
     class Inventive:
         def complete(self, request):
-            import json
-
-            from sentinelops.llm.protocol import LlmResponse
-            payload = {
-                "category": GAP_CATEGORIES[0],
+            return _batch_reply([{
+                "id": finding_id,
+                "category": categories[0],
                 "suggested_severity": "Catastrophic",
                 "confidence": 0.9,
                 "rationale": "made up",
-            }
-            return LlmResponse(
-                text=json.dumps(payload), parsed_json=payload, input_tokens=1,
-                output_tokens=1, cached_tokens=0, model="inventive",
-                latency_ms=1, raw={},
-            )
+            } for finding_id in _ids_in(request)])
 
     with pytest.raises(ValueError) as refused:
         intelligence.classify(seeded, AS_OF, client=Inventive(), limit=1)
     assert "outside the enum" in str(refused.value)
+
+
+def test_a_batch_that_drops_a_finding_is_refused(seeded, categories):
+    """The failure batching introduces, and the reason the caller checks ids.
+
+    A model that answers six of eight leaves two findings looking
+    unclassifiable when they are only unanswered — and they would sit
+    uncategorised forever, because classify only revisits findings with no
+    category.
+    """
+    class Forgetful:
+        def complete(self, request):
+            asked = _ids_in(request)
+            return _batch_reply([{
+                "id": finding_id,
+                "category": categories[0],
+                "suggested_severity": "Minor",
+                "confidence": 0.9,
+                "rationale": "partial batch",
+            } for finding_id in asked[:-1]])
+
+    with pytest.raises(ValueError) as refused:
+        intelligence.classify(seeded, AS_OF, client=Forgetful())
+    assert "no answer for" in str(refused.value)
+
+
+def test_an_answer_about_a_finding_we_never_sent_is_refused(seeded, categories):
+    """Otherwise a stray id would be filed against whichever finding it matched."""
+    class Confused:
+        def complete(self, request):
+            return _batch_reply([{
+                "id": "FND-NOT-IN-THIS-BATCH",
+                "category": categories[0],
+                "suggested_severity": "Minor",
+                "confidence": 0.9,
+                "rationale": "wrong finding",
+            }])
+
+    with pytest.raises(ValueError) as refused:
+        intelligence.classify(seeded, AS_OF, client=Confused(), limit=1)
+    assert "not in the batch" in str(refused.value)
 
 
 def test_classification_never_touches_the_assigned_severity(classified):
@@ -149,7 +210,7 @@ def test_the_auditor_can_override_the_category(classified):
     auditor = people.by_role("pa_infosec")[0]
     finding = repo["findings"].list()[0]
     was = finding.gap_category
-    replacement = next(c for c in GAP_CATEGORIES if c != was)
+    replacement = next(c for c in taxonomy.names(conn) if c != was)
 
     intelligence.override_category(
         conn, finding.id, replacement, by=auditor.id
@@ -171,7 +232,7 @@ def test_an_owner_cannot_override_a_category(classified):
     finding = repo["findings"].list()[0]
     with pytest.raises(AuthorityError):
         intelligence.override_category(
-            conn, finding.id, GAP_CATEGORIES[0], by=finding.owner_identity
+            conn, finding.id, taxonomy.names(conn)[0], by=finding.owner_identity
         )
 
 

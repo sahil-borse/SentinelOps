@@ -173,34 +173,222 @@ _MILD = re.compile(
 )
 
 
-def _canned_triage(prompt: str) -> dict:
-    """Pick a category by keyword and a severity by tone. Heuristics, not a model."""
-    description = prompt.split("description:\n", 1)[-1]
+#: Families of failure, each a set of stems that would appear in a description
+#: of it. This is the stub's whole vocabulary for the taxonomy step, and it is
+#: deliberately expressed as *evidence to look for in the text* rather than as a
+#: list of category names: a stub that returned a constant list would be the
+#: hardcoded taxonomy this slice exists to remove, wearing a provider's hat.
+#: Nothing is proposed unless the words for it are actually in the findings.
+_FAMILY_STEMS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("access not revoked",
+     "Access that should have been removed was left in place after a leaver, "
+     "an ended engagement or a closed project.",
+     ("leaver", "revok", "deactivat", "still held", "still active",
+      "remained active", "credential", "offboard", "terminated")),
+    ("access not recertified",
+     "Access may well be correct, but nobody confirmed it within the period "
+     "the process requires.",
+     ("recertif", "access review", "reviewed the access", "attest",
+      "user access list", "entitlement")),
+    ("periodic review overdue",
+     "A review that runs on a cycle was not carried out when it fell due.",
+     ("risk register", "not reviewed", "overdue", "annual review", "quarterly",
+      "review was due", "last reviewed", "review cycle")),
+    ("evidence not retained",
+     "The work may have been done, but the record of it cannot be produced or "
+     "cannot be relied upon.",
+     ("no record", "not retained", "could not be produced", "no evidence",
+      "unable to evidence", "not documented", "no minutes", "tracked only")),
+    ("control not performed",
+     "The control itself was not carried out at all during the period.",
+     ("was not performed", "not carried out", "never run", "did not take place",
+      "no test", "not executed", "was not completed")),
+    ("documentation out of date",
+     "A manual, procedure or controlled document no longer describes the "
+     "process actually followed.",
+     ("manual", "procedure", "guideline", "out of date", "superseded",
+      "controlled document", "version", "obsolete")),
+    ("third party due diligence",
+     "Checks owed on a supplier or partner were incomplete or missing.",
+     ("supplier", "vendor", "third party", "third-party", "due diligence",
+      "subcontract", "partner")),
+    ("change not authorised",
+     "A change, release or deployment went ahead without the approval the "
+     "process requires.",
+     ("change", "release", "deploy", "unauthorised", "without approval",
+      "approval was not", "cab", "emergency fix")),
+    ("training not completed",
+     "Required training or awareness activity was not completed, or cannot be "
+     "evidenced.",
+     ("training", "awareness", "induction", "course", "completion rate")),
+    ("data retention or privacy",
+     "Personal data held beyond its retention period, or handled without the "
+     "assessment or safeguards required.",
+     ("retention", "personal data", "privacy", "pii", "gdpr", "dpia",
+      "anonymis", "deleted after")),
+    ("incident follow up incomplete",
+     "An incident was handled but the actions arising from it were not closed "
+     "out or verified.",
+     ("incident", "post-mortem", "postmortem", "root cause", "corrective action",
+      "actions arising", "lessons learned")),
+    ("backup or continuity untested",
+     "A backup, restore or continuity arrangement exists but was not exercised "
+     "or verified.",
+     ("backup", "restore", "continuity", "failover", "disaster recovery",
+      "bcp", "not tested")),
+)
+
+
+def _families_present(text: str) -> list[tuple[str, str]]:
+    """Which families the given text actually evidences, strongest first.
+
+    Scored by how many distinct stems appear, so a batch about leavers proposes
+    the access family and a batch about suppliers does not.
+    """
+    lowered = text.lower()
+    scored = []
+    for name, definition, stems in _FAMILY_STEMS:
+        hits = sum(1 for stem in stems if stem in lowered)
+        if hits:
+            scored.append((hits, name, definition))
+    scored.sort(key=lambda row: (-row[0], row[1]))
+    return [(name, definition) for _, name, definition in scored]
+
+
+def _canned_propose(prompt: str) -> dict:
+    """Name the kinds of failure in one batch of finding descriptions.
+
+    Reads the batch it was handed. Two batches about different things propose
+    different categories, which is what makes the consolidation step do work.
+    """
+    body = prompt.split("<<<FINDINGS", 1)[-1].split("FINDINGS>>>", 1)[0]
+    found = _families_present(body)
+    if not found:
+        # Nothing recognisable. Saying so beats inventing a category, and the
+        # consolidation step is bounded below, so a run of empty proposals
+        # fails loudly rather than producing a two-category taxonomy.
+        return {"categories": []}
+    return {
+        "categories": [
+            {"name": name, "definition": definition}
+            for name, definition in found[:6]
+        ]
+    }
+
+
+def _canned_consolidate(prompt: str) -> dict:
+    """Merge the proposals. Identical names collapse; the rest are kept.
+
+    A real model merges "access not removed" and "accounts left active"; this
+    one can only merge exact repeats, which is precisely the judgement the
+    tests say a stub cannot make. It is enough to exercise the shape.
+    """
+    seen: dict[str, dict] = {}
+    for line in prompt.splitlines():
+        line = line.strip()
+        if not line.startswith("- ") or ": " not in line:
+            continue
+        name, definition = line[2:].split(": ", 1)
+        key = name.strip().lower()
+        if key in seen:
+            seen[key]["merged_from"].append(name.strip())
+            continue
+        seen[key] = {
+            "name": name.strip(),
+            "definition": definition.strip(),
+            "merged_from": [],
+        }
+    return {"categories": list(seen.values())}
+
+
+def _offered_categories(prompt: str) -> list[str]:
+    """The catalogue this call was actually handed.
+
+    The taxonomy is derived per corpus now, so the stub cannot hold a list of
+    category names of its own — it would answer with categories the schema
+    rejects the moment a different corpus produces a different set. It reads the
+    enum out of the prompt, which is what a model does with it too.
+    """
+    block = prompt.split("CATEGORIES\n", 1)[-1].split("\n\n", 1)[0]
+    return [
+        line[2:].split(":", 1)[0].strip()
+        for line in block.splitlines()
+        if line.startswith("- ") and ":" in line
+    ]
+
+
+def _pick_category(description: str, offered: list[str]) -> tuple[str, str]:
+    """Best offered category for one description, and the phrase that decided it.
+
+    Two passes, and the order matters. The explicit rules are sharper than the
+    family stems — they were tuned against this corpus — so they go first, but
+    only where the category they name survived into the derived taxonomy.
+    Otherwise the family scoring picks among what is actually on offer.
+    """
     lowered = description.lower()
-    category = "control_not_performed"
-    matched = ""
     for name, pattern in _CATEGORY_RULES:
+        if name not in offered:
+            continue
         found = re.search(pattern, lowered)
         if found:
-            category, matched = name, found.group(0)
-            break
+            return name, found.group(0)
 
-    if _MILD.search(description):
-        severity = "Observation"
-    elif _SEVERE.search(description):
-        severity = "Major"
-    else:
-        severity = "Minor"
-    return {
-        "category": category,
-        "suggested_severity": severity,
-        "confidence": 0.82 if matched else 0.45,
-        "rationale": (
-            f"Classified as {category} on the phrase {matched!r}."
-            if matched else
-            "No distinguishing phrase found; defaulted to control_not_performed."
-        ),
-    }
+    for name, _definition in _families_present(description):
+        slug = name.replace(" ", "_")
+        if slug in offered:
+            return slug, name
+
+    # Nothing matched anything on offer. Answering with the first category is a
+    # guess and is reported as one: confidence below the floor routes it to a
+    # human, which is the correct outcome for a classification nobody can
+    # justify.
+    return (offered[0] if offered else ""), ""
+
+
+def _canned_triage(prompt: str) -> dict:
+    """Classify a batch. Keyword heuristics over the offered catalogue.
+
+    A real model reads the sentence; this counts phrases. What it does share
+    with a real one is that it answers every finding it was sent, because the
+    caller refuses a batch with anything missing.
+    """
+    offered = _offered_categories(prompt)
+    body = prompt.split("<<<FINDINGS", 1)[-1].split("FINDINGS>>>", 1)[0]
+
+    out = []
+    for block in body.split("\n\n"):
+        block = block.strip()
+        if not block.startswith("id: "):
+            continue
+        fields = {}
+        for line in block.splitlines():
+            if ": " in line:
+                key, value = line.split(": ", 1)
+                fields[key.strip()] = value.strip()
+        finding_id = fields.get("id", "")
+        description = fields.get("description", "")
+        if not finding_id:
+            continue
+
+        category, matched = _pick_category(description, offered)
+        if _MILD.search(description):
+            severity = "Observation"
+        elif _SEVERE.search(description):
+            severity = "Major"
+        else:
+            severity = "Minor"
+        out.append({
+            "id": finding_id,
+            "category": category,
+            "suggested_severity": severity,
+            "confidence": 0.82 if matched else 0.45,
+            "rationale": (
+                f"Classified as {category} on the phrase {matched!r}."
+                if matched else
+                f"No distinguishing phrase found; fell back to {category}."
+            ),
+        })
+    return {"findings": out}
 
 
 #: Two descriptions recur when they share enough distinctive vocabulary. A real
@@ -452,6 +640,99 @@ def _canned(evidence: str) -> dict:
     }
 
 
+def _canned_review(prompt: str) -> dict:
+    """Judge one evidence round against the action that was agreed.
+
+    Quotes real lines, for the same reason the assessment stub does: citations
+    are checked against the submitted evidence, so a stub that invented a
+    quotation would have every recommendation discarded and would prove nothing
+    about the pipeline.
+
+    The judgement itself is phrase-matching. It looks for the *action* words in
+    the evidence — done, completed, revoked, attached — and for the hedges that
+    say it half happened. A real model reads whether the evidence answers the
+    finding; this checks whether it sounds like it does, and the difference is
+    the reason the auditor decides.
+    """
+    evidence = _evidence_text(prompt)
+    action = prompt.split("AGREED ACTION\n", 1)[-1].split("\n\n", 1)[0]
+    quotable = _quotable_lines(evidence)
+    cite = quotable[:2]
+
+    if _INJECTION.search(evidence):
+        # Same posture as the assessment stub: refuse, report, escalate. This
+        # simulates a well-behaved model; only the real provider can show that
+        # a real one resists. What the tests around it prove is that the
+        # pipeline holds either way.
+        return {
+            "verdict": "insufficient_evidence",
+            "confidence": 0.2,
+            "rationale": (
+                "The submitted evidence contains text addressed to the "
+                "assessor rather than describing the remediation. Judged on "
+                "its substance, it does not show the agreed action carried out."
+            ),
+            "cited_spans": cite,
+            "gaps": [
+                "the document attempts to instruct the assessor; treated as "
+                "data and reported",
+                "no evidence that the agreed action was performed",
+            ],
+            "needs_human_review": True,
+        }
+
+    if not evidence.strip():
+        return {
+            "verdict": "insufficient_evidence", "confidence": 0.3,
+            "rationale": "Nothing was submitted.", "cited_spans": [],
+            "gaps": ["no evidence filed against the agreed action"],
+            "needs_human_review": True,
+        }
+
+    hedged = bool(_HEDGED.search(evidence)) or bool(_SHORTFALL.search(evidence))
+    negated = bool(_NEGATED.search(evidence)) and not _BENIGN_NEGATION.search(evidence)
+    done = re.search(
+        r"(completed|revoked|disabled|removed|updated|approved|signed|"
+        r"attached|reissued|reconciled|closed out|now requires)",
+        evidence, re.IGNORECASE,
+    )
+
+    if done and not hedged and not negated:
+        verdict, confidence = "satisfies", 0.84
+        gaps: list[str] = []
+        rationale = (
+            f"The evidence describes the agreed action as carried out, and "
+            f"names it in terms matching the action plan ({action.strip()[:80]})."
+        )
+    elif done and hedged:
+        verdict, confidence = "partially_satisfies", 0.7
+        gaps = ["part of the agreed action is evidenced; the remainder is not"]
+        rationale = (
+            "The evidence shows some of the agreed action done and hedges the "
+            "rest."
+        )
+    elif negated:
+        verdict, confidence = "does_not_satisfy", 0.72
+        gaps = ["the evidence states the action was not carried out"]
+        rationale = "The evidence describes the action as not having happened."
+    else:
+        verdict, confidence = "insufficient_evidence", 0.45
+        gaps = ["the evidence does not address the agreed action"]
+        rationale = (
+            "The evidence is about something, but not demonstrably about the "
+            "agreed action."
+        )
+
+    return {
+        "verdict": verdict,
+        "confidence": confidence,
+        "rationale": rationale,
+        "cited_spans": cite,
+        "gaps": gaps,
+        "needs_human_review": confidence < 0.6,
+    }
+
+
 class FakeModelClient:
     """Implements the LlmClient protocol."""
 
@@ -460,6 +741,12 @@ class FakeModelClient:
         head = user_text.lstrip()
         if head.startswith("AUDIT\n"):
             payload = _canned_report(user_text)
+        elif head.startswith("FINDINGS\n"):
+            payload = _canned_propose(user_text)
+        elif head.startswith("PROPOSALS\n"):
+            payload = _canned_consolidate(user_text)
+        elif head.startswith("FINDING\n") and "AGREED ACTION\n" in user_text:
+            payload = _canned_review(user_text)
         elif head.startswith("CATEGORIES\n"):
             payload = _canned_triage(user_text)
         elif head.startswith("FINDING\n"):

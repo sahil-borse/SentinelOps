@@ -214,6 +214,36 @@ NotificationKind = Literal[
 
 
 @dataclass
+class GapCategory:
+    """One category of the gap taxonomy, derived from the corpus rather than
+    written down in advance.
+
+    Section 1 says no standard taxonomy exists and that each auditor describes a
+    gap in their own words. An earlier slice met that by hardcoding ten
+    categories and stating plainly that they were ours; this replaces them with
+    a set induced from the findings actually on the record.
+
+    **Frozen once derived.** `taxonomy_version` stamps the run that produced the
+    set, and every classification records the version it was made against. A
+    taxonomy that moved between findings would make `gap_category` incomparable
+    across the corpus — and recurrence detection reads that field, so drifting
+    vocabulary would surface as recurring gaps.
+
+    `merged_from` keeps the proposals the consolidation step folded together, so
+    a human can see what was collapsed and object to it.
+    """
+
+    id: str
+    label: str
+    definition: str
+    taxonomy_version: str
+    derived_at: datetime
+    derived_from_count: int = 0
+    merged_from: list[str] = field(default_factory=list)
+    prompt_version: str = ""
+
+
+@dataclass
 class Notification:
     """Something somebody needs to know, kept rather than logged.
 
@@ -273,6 +303,11 @@ class EvidenceSubmission:
     submitted_by: str
     submitted_at: datetime
     evidence_ref: str
+    #: The evidence itself, not just a pointer to it. A round cannot be assessed
+    #: against a filename, and a citation cannot be resolved against one either:
+    #: checking that a quoted span really appears in the evidence needs the
+    #: evidence. Write-once in practice — a round is never edited once answered.
+    evidence_text: str = ""
     owner_note: str = ""
     auditor_response: AuditorResponse = "pending"
     auditor_remarks: str = ""
@@ -288,10 +323,17 @@ class EvidenceSubmission:
 @dataclass
 class Assessment:
     id: str
-    check_instance_id: str
-    verdict: Verdict
-    confidence: float
-    rationale: str
+    #: Exactly one of these is set. An assessment judges either a periodic
+    #: check's evidence (the activity track) or one evidence round on a finding
+    #: (the audit track). Section 3 names `submission_id`; slice 6 built the
+    #: check-instance side first, and both are first-class now rather than one
+    #: being squeezed into the other's column — the same two-parents shape
+    #: Finding already has, with the same test saying never both, never neither.
+    check_instance_id: str = ""
+    submission_id: str = ""
+    verdict: Verdict = "insufficient_evidence"
+    confidence: float = 0.0
+    rationale: str = ""
     cited_spans: list[str] = field(default_factory=list)
     gaps: list[str] = field(default_factory=list)
     recommended_action: str = ""

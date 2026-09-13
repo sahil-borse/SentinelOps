@@ -366,11 +366,30 @@ def _code_only(path: Path) -> str:
 #: They are in one module rather than three because they share a shape: they
 #: read *findings* rather than evidence, and none of them may change a status.
 #:
+#: Slice 14 adds two more, and both are deliberate.
+#:
+#: `taxonomy.py` induces the gap categories from the corpus. Section 1 says no
+#: standard taxonomy exists and that each auditor writes a gap in their own
+#: words; naming the kinds of failure in eighteen months of free text is
+#: language work and there is no rule that does it. What it must never do is
+#: decide anything, and it does not: it produces a vocabulary, frozen and
+#: versioned, which a human can read and argue with.
+#:
+#: `review.py` is section 2 use 3, assessing one evidence round against the
+#: finding and the agreed action plan. It is separated from `assess.py` because
+#: they judge different things — criteria we wrote versus an auditor's own
+#: sentences — and kept out of `rounds.py` for a stronger reason: `rounds.py`
+#: is where a round is *answered*, and a module that may spend must never be the
+#: module that may decide. `tests/test_review.py` asserts review.py cannot
+#: close a finding or answer a round.
+#:
 #: The list stops here. Scheduling, applicability, due dates, reminder and
 #: escalation timing, status transitions, closure decisions, permission checks
 #: and analytics are named in section 2 as never-AI, and every one of them lives
 #: in a module this test still guards.
-SPENDING_STAGES = {"assess.py", "audits.py", "intelligence.py"}
+SPENDING_STAGES = {
+    "assess.py", "audits.py", "intelligence.py", "taxonomy.py", "review.py",
+}
 
 
 def test_only_the_spending_stages_can_reach_a_model():
@@ -402,10 +421,13 @@ def test_the_spending_stages_do_reach_a_model():
 
 def test_the_allow_list_is_small_and_named():
     """A list that grows silently stops being a control."""
-    assert SPENDING_STAGES == {"assess.py", "audits.py", "intelligence.py"}, (
+    assert SPENDING_STAGES == {
+        "assess.py", "audits.py", "intelligence.py", "taxonomy.py", "review.py",
+    }, (
         "adding a stage that spends is a decision; record it in the comment "
         "above SPENDING_STAGES and update this test on purpose"
     )
+    assert len(SPENDING_STAGES) == 5
 
 
 def test_the_never_ai_stages_are_still_guarded():
@@ -421,7 +443,7 @@ def test_the_never_ai_stages_are_still_guarded():
         "followup.py",        # reminder and escalation timing, closure
         "flag.py",            # status transitions, routing
         "prescreen.py",       # the rules tier
-        "rounds.py",          # the review loop
+        "rounds.py",          # the review loop: who answers, and when
     }
     for name in never:
         assert name not in SPENDING_STAGES, name

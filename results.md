@@ -1,6 +1,6 @@
 # SentinelOps — evaluation results
 
-Generated 2026-09-14 01:59 · corpus seed `20260831` ·
+Generated 2026-09-14 03:36 · corpus seed `20260831` ·
 fingerprint `ce0804377f276bf1` · 16 scheduled cycles
 
 > **These runs used `FakeModelClient`, not a language model.** The stub is a
@@ -220,7 +220,7 @@ rigging `get_client` to raise and computing the whole portfolio anyway.
 | Severity mix | Major 33, Minor 43, Observation 21 |
 | Overdue, aged | 0-30: 1, 31-60: 2, 61-90: 0, 90+: 14 |
 | Oldest overdue | 428 days |
-| Recurrence links | 116 across 68 findings, 96 of them between different units |
+| Recurrence links | 117 across 71 findings, 96 of them between different units |
 | Needing more than one evidence round | 18 |
 | Most rounds on one finding | 3 |
 | Needing more than one reminder | 29 |
@@ -260,20 +260,23 @@ and marking it right would credit a model for arithmetic.
 
 | category | links | units | furthest apart |
 |---|---|---|---|
-| control not performed | 78 | 9 | 11 months |
+| change not authorised | 42 | 8 | 11 months |
+| access not revoked | 22 | 7 | 9 months |
 | documentation out of date | 15 | 6 | 12 months |
-| periodic review overdue | 9 | 6 | 7 months |
-| access not recertified | 7 | 4 | 9 months |
+| incident follow up incomplete | 14 | 4 | 11 months |
+| periodic review overdue | 10 | 7 | 7 months |
+| backup or continuity untested | 7 | 4 | 7 months |
 | training not completed | 5 | 4 | 7 months |
-| access not revoked | 2 | 3 | 7 months |
+| data retention or privacy | 2 | 2 | 6 months |
 
 **On the link counts.** `control_not_performed` is over-represented, and the reason is the stub rather than the corpus: `FakeModelClient` compares descriptions by shared vocabulary, so two findings naming the same control in different units look alike to it whether or not the same thing went wrong. A real model reads the sentence. Treat the *shape* — recurrence exists, it crosses units, it spans months — as the durable claim, and the per-category counts as a stub artefact until the real provider has run.
 
 The chains that read as one continuing problem:
 
-- **control not performed** — FND-CHANGED-PROCESS-HR-2026-01 → FND-CHANGED-PROCESS-PRJ-DELTA-2026-03 → FND-BCP-TEST-PRJ-ATLAS-2026 across HR, Project Atlas, Project Delta, spanning 11 months
-- **control not performed** — FND-CHANGED-PROCESS-HR-2026-01 → FND-CHANGED-PROCESS-FACILITIES-2026-03 → FND-INTERNAL-AUDIT-READY-FACILITIES-2026 across Facilities, HR, spanning 11 months
+- **access not revoked** — FND-FINDING-CLOSURE-PRJ-CORAL-2026-Q2 → FND-FINDING-CLOSURE-HR-2026-Q3 → FND-EXTERNAL-AUDIT-READY-HR-2026 across HR, Project Coral, spanning 9 months
 - **access not revoked** — FND-IA-2026-H1-01 → FND-IA-2026-H2-01 → FND-QA-2027-Q1-01 across Admin, HR, IT, spanning 11 months
+- **training not completed** — FND-IA-2026-H1-03 → FND-TRAINING-IT-2026-Q2 → FND-TRAINING-PRJ-ATLAS-2026-Q3 across HR, IT, Project Atlas, spanning 7 months
+- **training not completed** — FND-IA-2026-H1-03 → FND-TRAINING-IT-2026-Q2 → FND-TRAINING-PRJ-DELTA-2026-Q3 across HR, IT, Project Delta, spanning 7 months
 
 ---
 
@@ -333,5 +336,5 @@ simulation seed (4242). The corpus fingerprint
 `ce0804377f276bf1` pins the exact evidence these numbers were
 measured on; if it changes, they were measured on something else.
 
-Audit chain over the whole run: **OK - 5158 entries, chain intact**
-(5,158 events).
+Audit chain over the whole run: **OK - 5164 entries, chain intact**
+(5,164 events).

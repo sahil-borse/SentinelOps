@@ -9,7 +9,7 @@ import pytest
 from sentinelops import analytics
 from sentinelops.synth.calendar import SIMULATED_TODAY
 from sentinelops.repositories import repositories
-from sentinelops.stages import intelligence
+from sentinelops.stages import intelligence, taxonomy
 from sentinelops.stages.assess import run as assess
 from sentinelops.stages.flag import run as flag_stage
 from sentinelops.stages.followup import run as followup
@@ -43,6 +43,10 @@ def run(conn, corpus):
         flag_stage(conn, as_of)
         followup(conn, as_of)
         reassess_all(conn, as_of)
+    # The taxonomy is read off the corpus rather than written into the prompt
+    # package, and classification has no fallback list, so it has to exist
+    # before anything can be classified against it.
+    taxonomy.derive(conn, AS_OF)
     intelligence.classify(conn, AS_OF)
     intelligence.detect_recurrence(conn, AS_OF)
     return conn
