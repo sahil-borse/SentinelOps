@@ -34,14 +34,15 @@ def _recurrence_lines(analytics: dict) -> str:
     if recurring["longest_chains"]:
         lines.append("")
         lines.append(
-            "**On the link counts.** `control_not_performed` is "
-            "over-represented, and the reason is the stub rather than the "
-            "corpus: `FakeModelClient` compares descriptions by shared "
-            "vocabulary, so two findings naming the same control in different "
-            "units look alike to it whether or not the same thing went wrong. "
-            "A real model reads the sentence. Treat the *shape* — recurrence "
-            "exists, it crosses units, it spans months — as the durable claim, "
-            "and the per-category counts as a stub artefact until the real "
+            "**On the link counts.** These are the detector's links, not the "
+            "section 8 figure, and per-category counts lean towards whichever "
+            "categories hold the most generated activity-track descriptions: "
+            "`FakeModelClient` compares descriptions by shared vocabulary, so "
+            "two findings naming the same control in different units look "
+            "alike to it whether or not the same thing went wrong. A real model "
+            "reads the sentence. Treat the *shape* — recurrence exists, it "
+            "crosses units, it spans months — as the durable claim, and the "
+            "per-category link counts as a stub artefact until the real "
             "provider has run."
         )
         lines.append("")
@@ -342,10 +343,19 @@ rigging `get_client` to raise and computing the whole portfolio anyway.
     ("Overdue, aged",
      ", ".join(f"{k}: {v}" for k, v in a['overdue_ageing']['buckets'].items())),
     ("Oldest overdue", f"{a['overdue_ageing']['oldest_days']} days"),
-    ("Recurrence links",
+    ("Recurring gap categories (section 8)",
+     f"{a['recurring']['by_gap_category']['count']} holding "
+     f"{a['recurring']['by_gap_category']['findings_involved']} findings; "
+     f"audit track {a['recurring']['audit_track']['count']} holding "
+     f"{a['recurring']['audit_track']['findings_involved']}"),
+    ("Recurrence links (the detector's, advisory)",
      f"{a['recurring']['count']} across "
      f"{a['recurring']['findings_involved']} findings, "
      f"{a['recurring']['spanning_units']} of them between different units"),
+    ("Open findings by month",
+     f"{a['trend_verdict']['direction']} across the window "
+     f"({a['trend_verdict']['slope_per_month']:+.2f} a month); "
+     f"{a['trend_verdict']['recent']['direction']} over the last quarter"),
     ("Needing more than one evidence round", str(a['effort']['multi_round'])),
     ("Most rounds on one finding", str(a['effort']['worst_rounds'])),
     ("Needing more than one reminder", str(a['effort']['multi_reminder'])),

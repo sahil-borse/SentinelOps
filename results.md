@@ -1,6 +1,6 @@
 # SentinelOps — evaluation results
 
-Generated 2026-09-14 03:36 · corpus seed `20260831` ·
+Generated 2026-09-15 19:41 · corpus seed `20260831` ·
 fingerprint `ce0804377f276bf1` · 16 scheduled cycles
 
 > **These runs used `FakeModelClient`, not a language model.** The stub is a
@@ -220,7 +220,9 @@ rigging `get_client` to raise and computing the whole portfolio anyway.
 | Severity mix | Major 33, Minor 43, Observation 21 |
 | Overdue, aged | 0-30: 1, 31-60: 2, 61-90: 0, 90+: 14 |
 | Oldest overdue | 428 days |
-| Recurrence links | 117 across 71 findings, 96 of them between different units |
+| Recurring gap categories (section 8) | 9 holding 97 findings; audit track 6 holding 24 |
+| Recurrence links (the detector's, advisory) | 117 across 71 findings, 96 of them between different units |
+| Open findings by month | rising across the window (+1.19 a month); falling over the last quarter |
 | Needing more than one evidence round | 18 |
 | Most rounds on one finding | 3 |
 | Needing more than one reminder | 29 |
@@ -269,7 +271,7 @@ and marking it right would credit a model for arithmetic.
 | training not completed | 5 | 4 | 7 months |
 | data retention or privacy | 2 | 2 | 6 months |
 
-**On the link counts.** `control_not_performed` is over-represented, and the reason is the stub rather than the corpus: `FakeModelClient` compares descriptions by shared vocabulary, so two findings naming the same control in different units look alike to it whether or not the same thing went wrong. A real model reads the sentence. Treat the *shape* — recurrence exists, it crosses units, it spans months — as the durable claim, and the per-category counts as a stub artefact until the real provider has run.
+**On the link counts.** These are the detector's links, not the section 8 figure, and per-category counts lean towards whichever categories hold the most generated activity-track descriptions: `FakeModelClient` compares descriptions by shared vocabulary, so two findings naming the same control in different units look alike to it whether or not the same thing went wrong. A real model reads the sentence. Treat the *shape* — recurrence exists, it crosses units, it spans months — as the durable claim, and the per-category link counts as a stub artefact until the real provider has run.
 
 The chains that read as one continuing problem:
 

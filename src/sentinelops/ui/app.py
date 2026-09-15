@@ -630,9 +630,17 @@ with st.expander("Portfolio analytics — section 8, all deterministic", expande
             [{"month": p["month"], "open": p["open"]} for p in trend],
             x="month", y="open", height=200,
         )
+        verdict = stats["trend_verdict"]
+        recent = verdict.get("recent", {})
         st.caption(
             f"{trend[0]['month']} to {trend[-1]['month']}, replayed from raise "
-            f"and closure dates rather than sampled from today's state."
+            f"and closure dates rather than sampled from today's state. "
+            f"**{verdict['direction'].capitalize()}** across the window"
+            + (f" ({verdict['slope_per_month']:+.2f} a month)"
+               if "slope_per_month" in verdict else "")
+            + (f", **{recent['direction']}** over the last quarter."
+               if recent.get("direction") not in (None, "insufficient_history")
+               else ".")
         )
         st.markdown("**By gap category**")
         st.dataframe(
