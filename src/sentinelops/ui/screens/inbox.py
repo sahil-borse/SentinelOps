@@ -5,7 +5,7 @@ import streamlit as st
 from sentinelops.ui import service, shell, view
 
 conn, today, actor = shell.context()
-rows = view.inbox_rows(conn, actor["id"])
+rows = view.inbox_rows(conn, actor["id"], as_of=today)
 
 shell.html(view.page_header(
     "Inbox",

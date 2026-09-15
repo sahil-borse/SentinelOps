@@ -530,8 +530,8 @@ _CSS = Template("""
 .stButton button, .stFormSubmitButton button, .stDownloadButton button { border-radius: 8px; font-weight: 600; min-height: 2.25rem; }
 [data-testid="stSidebar"] [data-testid="stColumn"] .stButton button { padding-left: 2px; padding-right: 2px; font-size: 13px; white-space: nowrap; }
 [data-testid="stPageLink"] a p { font-size: 13px; font-weight: 600; color: $accent; }
-div[class*="st-key-card"] { background: $n0; border: 1px solid $n200; border-radius: 12px; padding: 14px 16px 12px; box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04); }
-div[class*="st-key-alert"] { background: $n0; border: 1px solid $n200; border-left: 4px solid $n900; border-radius: 12px; padding: 14px 16px 12px; }
+div[class*="st-key-card"] { background: $n0; border: 1px solid $n200; border-radius: 12px; padding: 14px 16px 22px; box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04); }
+div[class*="st-key-alert"] { background: $n0; border: 1px solid $n200; border-left: 4px solid $n900; border-radius: 12px; padding: 14px 16px 22px; }
 [data-testid="stDataFrame"] { border: 1px solid $n200; border-radius: 8px; }
 [data-testid="stExpander"] details { border-radius: 10px; border-color: $n200; background: $n0; }
 
@@ -562,7 +562,7 @@ div[class*="st-key-alert"] { background: $n0; border: 1px solid $n200; border-le
 .so-outline { background: $n0; }
 .so-ink { color: $n0; background: $n900; border-color: $n900; }
 
-.so-empty { border: 1px dashed $n300; border-radius: 10px; padding: 11px 14px; background: $n50; }
+.so-empty { border: 1px dashed $n300; border-radius: 10px; padding: 11px 14px; background: $n50; margin: 8px 0 4px; }
 .so-empty-title { font-weight: 650; color: $n700; margin-bottom: 2px; font-size: 13.5px; }
 .so-empty-why { color: $n500; font-size: 13px; line-height: 1.5; }
 
@@ -1279,7 +1279,14 @@ INBOX_FILTERS: dict[str, Any] = {
 }
 
 
-def inbox_rows(conn, identity_id: str) -> list[dict[str, Any]]:
+def inbox_rows(conn, identity_id: str, as_of: date | None = None) -> list[dict[str, Any]]:
+    """One identity's notifications, newest first.
+
+    With `as_of`, nothing sent after it. The seeded audit programme writes its
+    closures — and the notifications about them — ahead of the calendar, so at
+    the demo's start date an inbox would otherwise open on messages from next
+    year.
+    """
     from .. import notify
 
     return [
@@ -1290,6 +1297,7 @@ def inbox_rows(conn, identity_id: str) -> list[dict[str, Any]]:
             "level": note.escalation_level,
         }
         for note in notify.inbox(conn, identity_id)
+        if as_of is None or note.sent_at.date() <= as_of
     ]
 
 

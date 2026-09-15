@@ -1239,3 +1239,20 @@ def test_only_the_recipient_marks_a_notification_read(live):
     assert service.mark_read(live, note["id"], by=auditor)[0]
     assert not next(r for r in view.inbox_rows(live, auditor)
                     if r["id"] == note["id"])["unread"]
+
+
+def test_the_inbox_shows_nothing_sent_after_the_simulated_date(conn, corpus):
+    """At the demo's start date the seeded audit programme has already written
+    closure notices dated next year. A morning screen must not open on them."""
+    seed_database(conn, corpus)
+    start = service.current_date(conn)
+    auditor = service.default_identity(conn)
+
+    everything = view.inbox_rows(conn, auditor)
+    shown = view.inbox_rows(conn, auditor, as_of=start)
+
+    assert any(row["sent"].date() > start for row in everything), (
+        "the seeded programme writes ahead of the calendar; without that this "
+        "test checks nothing"
+    )
+    assert all(row["sent"].date() <= start for row in shown)

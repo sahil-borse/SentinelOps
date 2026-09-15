@@ -156,7 +156,7 @@ with rail:
         with head:
             st.subheader("Latest notifications")
         link.page_link("screens/inbox.py", label="Inbox", icon=":material/arrow_forward:")
-        notes = view.inbox_rows(conn, actor["id"])
+        notes = view.inbox_rows(conn, actor["id"], as_of=today)
         if notes:
             shell.html(view.inbox_preview(notes, limit=4))
         else:
