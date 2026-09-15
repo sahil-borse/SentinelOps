@@ -678,8 +678,9 @@ if audit[0].button("Verify audit chain", use_container_width=True):
     st.session_state["chain"] = service.verify_chain(conn)
 if audit[1].button("Generate audit pack", use_container_width=True):
     with st.spinner("Replaying the log…"):
+        period_start, period_end = service.pack_period(conn)
         pack, markdown, page = service.generate_pack(
-            conn, period_start=date(2026, 1, 1), period_end=date(2026, 12, 31),
+            conn, period_start=period_start, period_end=period_end,
             scope="All process areas, all applicable controls",
         )
     st.session_state["pack"] = (pack.totals["events"], markdown, page)
@@ -699,12 +700,15 @@ if st.session_state.get("pack"):
     st.success(f"Pack built from {events:,} audit events — no current-state table "
                "was read.")
     downloads = st.columns(2)
+    # Named for the span the pack covers. These were `audit_pack_2026.*` whatever
+    # the calendar said.
+    pack_name = service.pack_file_name(conn)
     downloads[0].download_button(
-        "Download pack (HTML)", page, file_name="audit_pack_2026.html",
+        "Download pack (HTML)", page, file_name=f"{pack_name}.html",
         mime="text/html", use_container_width=True,
     )
     downloads[1].download_button(
-        "Download pack (Markdown)", markdown, file_name="audit_pack_2026.md",
+        "Download pack (Markdown)", markdown, file_name=f"{pack_name}.md",
         mime="text/markdown", use_container_width=True,
     )
 

@@ -65,9 +65,20 @@ def _planted_series(truth):
 
 
 def _finding_for(repo, row):
-    """The activity-track finding raised on the check a truth row describes."""
+    """The activity-track finding raised on a check that was due by the vantage point.
+
+    Returns (finding, ripe). A check is ripe when it was scheduled and its due
+    date passed before the vantage point. Unripe checks are set aside by the
+    callers and counted, never silently dropped.
+
+    Ripeness matters since slice 15z scheduled 2027. A 2027-Q2 check exists from
+    1 April and has seen one cycle by 15 April; the remediation loop takes one
+    round per cycle, so a two-attempt series on it has had time for one round.
+    That is the calendar, not the analytics failing to see a pattern.
+    """
     wanted = instance_id(row["control_id"], row["auditable_unit_id"], row["period"])
-    if repo["instances"].get(wanted) is None:
+    instance = repo["instances"].get(wanted)
+    if instance is None or instance.due_date >= SIMULATED_TODAY:
         return None, False
     matches = [f for f in repo["findings"].list() if f.check_instance_id == wanted]
     return (matches[0] if matches else None), True

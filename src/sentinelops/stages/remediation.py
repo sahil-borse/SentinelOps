@@ -126,13 +126,12 @@ def reassess(
     as_of: date,
     *,
     client=None,
-    year: int = 2026,
 ) -> ReassessmentResult:
     """Re-check one instance against its remediation evidence, on demand."""
     from ..repositories import simulated_clock
 
     with simulated_clock(datetime.combine(as_of, datetime.min.time().replace(hour=6))):
-        return _reassess(conn, check_instance_id, as_of, client=client, year=year)
+        return _reassess(conn, check_instance_id, as_of, client=client)
 
 
 def _reassess(
@@ -141,7 +140,6 @@ def _reassess(
     as_of: date,
     *,
     client=None,
-    year: int = 2026,
 ) -> ReassessmentResult:
     from ..repositories import repositories
     from .prescreen import _write_finding as write_rule_finding
@@ -218,8 +216,13 @@ def _reassess(
         result.round_number = round_record.round_number
 
     # --- S2 first, then S3 only if the rules cannot decide ----------------
-    period_end = next(
-        p.end for p in periods_for(control.frequency, year) if p.label == instance.period
+    from .. import window as schedule_window
+    from ..periods import end_of, period_ends as build_period_ends
+
+    schedule = schedule_window.load(conn)
+    period_end = end_of(
+        build_period_ends({control.id: control.frequency}, schedule),
+        control.id, instance.period, schedule,
     )
     decided = _prescreen_remediation(control, evidence, period_end)
     if decided is not None:

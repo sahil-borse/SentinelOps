@@ -108,6 +108,9 @@ class ManualReview:
 class ManualOutcome:
     reviews: list[ManualReview] = field(default_factory=list)
     assumptions: ManualAssumptions = field(default_factory=ManualAssumptions)
+    #: Obligations in the corpus window not yet due at the vantage point. Counted
+    #: and set aside: nobody can have missed a check that had not fallen due.
+    not_yet_due: int = 0
 
     @property
     def due(self) -> int:
@@ -148,10 +151,17 @@ def simulate(
     corpus,
     *,
     seed: int = 4242,
-    year: int = 2026,
+    as_of: date,
     assumptions: ManualAssumptions | None = None,
 ) -> ManualOutcome:
-    """Run the modelled manual programme over the same corpus, deterministically."""
+    """Run the modelled manual programme over the same corpus, deterministically.
+
+    Only obligations due by `as_of` are reviewed. This used to walk every truth
+    row in the eighteen-month window, so 138 obligations that had not fallen due
+    at the vantage point sat in the manual missed-check denominator while the
+    automated side counted only what its scheduler had raised. The two halves of
+    the headline comparison were measured over different sets.
+    """
     assumptions = assumptions or ManualAssumptions()
     rng = Random(seed)
     controls = {c.id: c for c in corpus.controls}
@@ -173,6 +183,11 @@ def simulate(
         control = controls[control_id]
         period = period_from_label(period_label)
         deadline = due_date(period, control.grace_days)
+        if deadline >= as_of:
+            # Same boundary as S1 and the missed-check metric: a check is not
+            # missed on the day it falls due.
+            outcome.not_yet_due += 1
+            continue
         expected = row["expected_verdict"] or "insufficient_evidence"
         kind = row["defect_kind"]
 
@@ -285,7 +300,7 @@ VARIANTS: list[tuple[str, ManualAssumptions]] = [
 ]
 
 
-def sensitivity(corpus, *, seed: int = 4242, year: int = 2026) -> list[dict]:
+def sensitivity(corpus, *, as_of: date, seed: int = 4242) -> list[dict]:
     """Re-run the manual model under other assumptions and report the spread.
 
     The automated figures do not move: they are a property of the run, not of
@@ -293,7 +308,7 @@ def sensitivity(corpus, *, seed: int = 4242, year: int = 2026) -> list[dict]:
     """
     rows = []
     for label, assumptions in VARIANTS:
-        outcome = simulate(corpus, seed=seed, year=year, assumptions=assumptions)
+        outcome = simulate(corpus, seed=seed, as_of=as_of, assumptions=assumptions)
         detected = outcome.days_to_detection()
         rows.append(
             {

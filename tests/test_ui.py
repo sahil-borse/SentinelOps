@@ -241,7 +241,10 @@ def test_advancing_the_calendar_moves_the_simulated_date(conn, corpus):
 
 def test_the_calendar_starts_somewhere_sensible_before_any_cycle(conn, corpus):
     seed_database(conn, corpus)
-    assert service.current_date(conn) == service.START_DATE
+    from sentinelops.synth.calendar import CORPUS_WINDOW
+
+    assert service.current_date(conn) == service.start_date(conn)
+    assert service.start_date(conn) == CORPUS_WINDOW.start.replace(day=28)
 
 
 def test_uploaded_evidence_goes_through_the_normal_path(live):
@@ -321,13 +324,16 @@ def test_the_wrong_document_type_can_be_chosen_on_purpose(live):
 
 def test_generating_the_pack_writes_both_renderings(live, tmp_path, monkeypatch):
     monkeypatch.setattr(service, "PACK_DIR", tmp_path)
+    from sentinelops.pack import pack_filename
+
+    start, end = service.pack_period(live)
     pack, markdown, page = service.generate_pack(
-        live, period_start=date(2026, 1, 1), period_end=date(2026, 12, 31),
-        scope="test scope",
+        live, period_start=start, period_end=end, scope="test scope",
     )
     assert pack.totals["events"] > 100
-    assert (tmp_path / "audit_pack_2026.md").exists()
-    assert (tmp_path / "audit_pack_2026.html").exists()
+    name = pack_filename(start, end)
+    assert (tmp_path / f"{name}.md").exists()
+    assert (tmp_path / f"{name}.html").exists()
     assert page.startswith("<!doctype html>")
     assert "test scope" in markdown
 
@@ -589,7 +595,9 @@ def test_step_six_verifies_and_builds(live, tmp_path, monkeypatch):
     outcome = story.run(live, "prove")
     assert "verified" in outcome.headline
     assert outcome.warning is None
-    assert (tmp_path / "audit_pack_2026.html").exists()
+    from sentinelops.pack import pack_filename
+
+    assert (tmp_path / f"{pack_filename(*service.pack_period(live))}.html").exists()
 
 
 def test_step_six_reports_a_tampered_record(live, tmp_path, monkeypatch):

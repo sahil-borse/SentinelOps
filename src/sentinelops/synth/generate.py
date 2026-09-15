@@ -39,19 +39,24 @@ from .programme import (
     AUDIT_CLOSURES, AUDIT_FINDINGS, AUDIT_PROGRAMME, RECURRENCE_GROUPS,
 )
 from .truth import write_truth_file
+from .calendar import CORPUS_WINDOW
+from ..periods import period_from_label, periods_in
 
 DEFAULT_SEED = 20260831
-DEFAULT_YEAR = 2026
-
-#: Section 10 asks for eighteen months. The window runs from January 2026 to the
-#: end of June 2027, and `SIMULATED_TODAY` sits after it with the grace windows
-#: expired, so anything still unmet at "today" is genuinely overdue rather than
-#: not-yet-due. Eighteen months is not decoration: recurrence detection is the
-#: use that needs the same gap category to reappear in a different unit a long
-#: way from the first one, and twelve months does not leave room for that to be
+#: Section 10 asks for eighteen months: January 2026 to the end of June 2027,
+#: stated once as `calendar.CORPUS_WINDOW` and derived here rather than written
+#: out a second time. `SIMULATED_TODAY` (15 April 2027) sits *inside* the window,
+#: not after it. This comment used to say "after it, with the grace windows
+#: expired", which stopped being true when slice 11 moved today -- and a vantage
+#: point of 30 September 2027 went on being quoted from it.
+#:
+#: Eighteen months is not decoration: recurrence detection is the use that needs
+#: the same gap category to reappear in a different unit a long way from the
+#: first one, and twelve months does not leave room for that to be
 #: distinguishable from coincidence.
-DEFAULT_THROUGH = 2027
-DEFAULT_LAST_MONTH = 6
+DEFAULT_YEAR = CORPUS_WINDOW.start.year
+DEFAULT_THROUGH = CORPUS_WINDOW.end.year
+DEFAULT_LAST_MONTH = CORPUS_WINDOW.end.month
 
 #: How the unremarkable majority of submissions are drawn.
 #:
@@ -199,6 +204,19 @@ class Corpus:
     audit_findings: list[Any] = field(default_factory=list)
     audit_closures: list[tuple[str, int, int]] = field(default_factory=list)
 
+    @property
+    def window(self):
+        """The corpus's span as an explicit range, first day to last day."""
+        from calendar import monthrange
+        from datetime import date as _date
+
+        from ..periods import Window
+
+        last = monthrange(self.through, self.last_month)[1]
+        return Window(
+            _date(self.year, 1, 1), _date(self.through, self.last_month, last)
+        )
+
     def fingerprint(self) -> str:
         """A hash of everything that must not drift between runs."""
         parts = [f"{s.id}|{s.content_hash}|{s.submitted_at.isoformat()}"
@@ -293,10 +311,9 @@ def generate_corpus(
 
     # The shared retention report, rendered once and filed against two areas.
     pair_spec = next(s for s in CONTROL_SPECS if s.id == CONSISTENCY_PAIR["control_id"])
-    pair_period = next(
-        p for p in periods_for(pair_spec.frequency, year)
-        if p.label == CONSISTENCY_PAIR["period"]
-    )
+    # Rebuilt from its own label: the pair's period needs no year to be looked
+    # up in, and a single-year lookup is exactly the assumption being removed.
+    pair_period = period_from_label(CONSISTENCY_PAIR["period"])
     pair_rng = Random(seed + 1)
     pair_context = build_context(
         pair_spec, areas_by_id[CONSISTENCY_PAIR["area_ids"][0]], pair_period, pair_rng
@@ -577,7 +594,7 @@ def _exception_truth(
     suppressed = (
         [
             period.label
-            for period in periods_for(spec.frequency, corpus.year)
+            for period in periods_in(spec.frequency, corpus.window)
             if suppresses(exception, exception.control_id, exception.auditable_unit_id,
                           period.end)
         ]
@@ -663,9 +680,14 @@ def seed_database(conn, corpus: Corpus) -> None:
 
     from ..repositories import repositories, simulated_clock
 
+    from .. import window as schedule_window
+
     repo = repositories(conn)
-    # The register exists from the first day of the year under audit.
-    with simulated_clock(datetime.combine(_date(corpus.year, 1, 1), time(0, 0))):
+    # The schedule window goes in first. S1, S2 and remediation read it back
+    # rather than assuming a year, and refuse to run on a database without one.
+    schedule_window.record(conn, corpus.window, source=f"corpus seed {corpus.seed}")
+    # The register exists from the first day of the window.
+    with simulated_clock(datetime.combine(corpus.window.start, time(0, 0))):
         _seed(repo, corpus)
     _seed_programme(conn, repo, corpus)
 

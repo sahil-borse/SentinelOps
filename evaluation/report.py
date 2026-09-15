@@ -166,13 +166,29 @@ due across {evaluation.cycles} cycles and {p['missed']['examined']} were examine
 It is {_pct(p['missed']['rate'])} because applicability and scheduling are
 deterministic — a check cannot fail to be raised because nobody remembered it.
 
+**Due means the due date had passed by the vantage point, counted from the truth
+file.** A check falling due on the vantage point itself is not yet missed, the
+same boundary S1 uses to mark an instance overdue. Until slice
+15z this denominator came from the instances the scheduler had created, and the
+scheduler stopped at 2026 — so the 2027 obligations it never raised were not
+counted as missed, they were not counted at all, and the figure read 0.0% over
+446. Now every obligation in the truth file is placed: {p['missed']['due']} due
+({p['missed']['waived']} of them waived and set aside),
+{p['missed']['not_yet_due']} opened but not yet due, and
+{p['missed']['not_yet_open']} whose period had not started. Of the due ones,
+{p['missed']['unscheduled']} were never scheduled and
+{p['missed']['scheduled_unexamined']} were scheduled but never examined. The
+harness refuses to score a run where the first of those is above zero.
+
 **Note what is *not* counted as missed.** {counts.get('missing', 0)} instances had
 no evidence filed at all. Those are not missed checks: the system raised them,
 chased them, escalated them and recorded the absence. Being told "nothing was
 submitted" is the opposite of missing something.
 
 The manual figure is **simulated** — see the assumptions section. It is not a
-measurement of any real team.
+measurement of any real team. Its denominator is taken at the same vantage point:
+{m['outcome'].not_yet_due} obligations not yet due are set aside, where until
+slice 15z the model reviewed every row in the eighteen-month window.
 
 ### 2. Verdict consistency — {_pct(p['consistency']['disagreement_rate'])} disagreement
 
@@ -213,6 +229,10 @@ quarterly and it rises.
 Scored against the truth file on {gap.total} instances:
 TP {gap.true_positive}, FP {gap.false_positive},
 TN {gap.true_negative}, FN {gap.false_negative} (F1 {gap.f1:.3f}).
+{gap.unjudged} truth obligation(s) received no verdict from this path and are
+counted here rather than dropped: their periods were not yet due or not yet open
+at the vantage point. A verdict for an instance the truth file does not describe
+is refused outright rather than skipped, which is what it used to be.
 
 **Scope, which matters more than the number.** This is measured against a
 *synthetic corpus with constructed failure modes*. The generator decided what

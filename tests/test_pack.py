@@ -160,7 +160,10 @@ def test_a_pack_builds_from_a_database_holding_only_the_log(pack, log_only):
     assert pack.totals["events"] > 2000
     assert pack.totals["units"] == 10
     assert pack.totals["controls"] == 14
-    assert pack.totals["due"] == 447
+    # Reconstructed from the log, so it must equal the check instances the log
+    # recorded being created. It was pinned at 447: the 2026 periods, only.
+    created = [e for e in pack.events if e.action == "check_instance_created"]
+    assert pack.totals["due"] == len(created) > 0
     assert pack.coverage and pack.exceptions and pack.findings and pack.actions
 
 
@@ -242,7 +245,9 @@ def test_findings_carry_verdict_confidence_and_review_flag(pack):
 
 def test_superseded_findings_are_shown_as_superseded(pack):
     superseded = [f for f in pack.findings if f["superseded_by"]]
-    assert len(superseded) == pack.totals["superseded_findings"] == 91
+    # The register and the totals must agree. Also pinned at 91, a count from the
+    # 2026-only schedule; the agreement is the claim.
+    assert len(superseded) == pack.totals["superseded_findings"] > 0
     for finding in superseded:
         assert finding["is_current"] is False
     # A superseded assessment is not necessarily a failed one any more: a

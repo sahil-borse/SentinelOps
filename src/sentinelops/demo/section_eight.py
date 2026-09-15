@@ -29,16 +29,12 @@ from ..stages.prescreen import run as prescreen
 from ..stages.remediation import reassess_all
 from ..stages.trigger import run_cycle
 from ..synth import generate_corpus, seed_database
-from ..synth.calendar import SIMULATED_TODAY
+from ..periods import monthly_cycles
+from ..synth.calendar import CORPUS_WINDOW, SIMULATED_TODAY
 
-#: The harness's cycle dates: the 28th of every month up to today, then today.
-CYCLES = [
-    d for d in (
-        [date(2026, month, 28) for month in range(1, 13)]
-        + [date(2027, month, 28) for month in range(1, 13)]
-    )
-    if d <= SIMULATED_TODAY
-] + [SIMULATED_TODAY]
+#: The harness's cycle dates: the 28th of every month in the corpus window up to
+#: today, then today.
+CYCLES = monthly_cycles(CORPUS_WINDOW, SIMULATED_TODAY) + [SIMULATED_TODAY]
 
 
 def replay(conn) -> None:

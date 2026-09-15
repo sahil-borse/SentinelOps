@@ -438,7 +438,9 @@ def test_only_the_instances_s2_could_not_decide_are_assessed(screened):
     conn, prescreen_report = screened
     report = assess(conn, prescreen_report.to_assess, END_OF_STORY)
     assert set(report.assessed) == set(prescreen_report.to_assess)
-    assert len(report.assessed) == 302
+    # Was also pinned at 302. The set equality above is the claim; the count was
+    # a 2026-only number that moved when S1 started scheduling the whole window.
+    assert report.assessed
 
 
 def test_token_usage_rows_carry_the_instance_label(assessed):

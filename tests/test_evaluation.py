@@ -14,6 +14,7 @@ from evaluation.harness import (
 )
 from sentinelops.db import connect
 from sentinelops.synth import generate_corpus
+from sentinelops.synth.calendar import SIMULATED_TODAY
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -155,21 +156,21 @@ def test_a_missing_cache_returns_none(corpus):
 # --- the manual model is a model -------------------------------------------
 
 def test_the_manual_simulation_is_deterministic(corpus):
-    first = manual_module.simulate(corpus, seed=7)
-    second = manual_module.simulate(corpus, seed=7)
+    first = manual_module.simulate(corpus, as_of=SIMULATED_TODAY, seed=7)
+    second = manual_module.simulate(corpus, as_of=SIMULATED_TODAY, seed=7)
     assert first.missed_rate == second.missed_rate
     assert [r.verdict for r in first.reviews] == [r.verdict for r in second.reviews]
 
 
 def test_a_different_seed_gives_a_different_manual_outcome(corpus):
     assert (
-        manual_module.simulate(corpus, seed=1).missed_rate
-        != manual_module.simulate(corpus, seed=2).missed_rate
+        manual_module.simulate(corpus, as_of=SIMULATED_TODAY, seed=1).missed_rate
+        != manual_module.simulate(corpus, as_of=SIMULATED_TODAY, seed=2).missed_rate
     )
 
 
 def test_the_manual_model_forgets_infrequent_checks_more(corpus):
-    outcome = manual_module.simulate(corpus, seed=4242)
+    outcome = manual_module.simulate(corpus, as_of=SIMULATED_TODAY, seed=4242)
     controls = {c.id: c for c in corpus.controls}
     by_frequency: dict[str, list[bool]] = {}
     for review in outcome.reviews:
@@ -182,16 +183,34 @@ def test_the_manual_model_forgets_infrequent_checks_more(corpus):
     assert rates["monthly"] > rates["quarterly"] > rates["annual"]
 
 
-def test_the_manual_model_disagrees_on_identical_evidence(corpus):
-    """Without this the consistency comparison would be vacuous."""
-    outcome = manual_module.simulate(corpus, seed=4242)
-    result = manual_module.disagreement_on_identical_evidence(corpus, outcome)
-    assert result["identical_evidence_groups"] >= 1
-    assert result["disagreement_rate"] > 0
+def test_the_manual_model_can_disagree_on_identical_evidence(corpus):
+    """Without this the consistency comparison would be vacuous.
+
+    Asserted across seeds, not at one. This used to require disagreement at seed
+    4242 specifically, which held by luck: the corpus has one identical-evidence
+    group, so whether that group disagrees is a draw. Slice 15z set aside the
+    obligations not yet due at the vantage point, the draws shifted, and seed
+    4242 stopped disagreeing — while twelve of twenty neighbouring seeds still
+    do. The property worth pinning is that the model *can* disagree and does not
+    always; the figure at any single seed is a coin flip and results.md must not
+    be read as more than that.
+    """
+    outcomes = [
+        manual_module.disagreement_on_identical_evidence(
+            corpus, manual_module.simulate(corpus, as_of=SIMULATED_TODAY, seed=seed)
+        )
+        for seed in range(4240, 4260)
+    ]
+    assert all(o["identical_evidence_groups"] >= 1 for o in outcomes)
+    disagreeing = sum(1 for o in outcomes if o["groups_with_disagreement"])
+    assert 0 < disagreeing < len(outcomes), (
+        f"{disagreeing} of {len(outcomes)} seeds disagree; the model should be "
+        f"able to disagree without always doing so"
+    )
 
 
 def test_reviewers_disagree_most_on_borderline_documents(corpus):
-    outcome = manual_module.simulate(corpus, seed=4242)
+    outcome = manual_module.simulate(corpus, as_of=SIMULATED_TODAY, seed=4242)
     wrong: dict[str, list[bool]] = {}
     for review in outcome.reviews:
         if not review.performed:
@@ -205,7 +224,7 @@ def test_reviewers_disagree_most_on_borderline_documents(corpus):
 
 
 def test_the_sensitivity_table_moves_the_headline(corpus):
-    rows = manual_module.sensitivity(corpus)
+    rows = manual_module.sensitivity(corpus, as_of=SIMULATED_TODAY)
     assert len(rows) >= 3
     rates = [r["missed_rate"] for r in rows]
     assert max(rates) > min(rates), "if nothing moves the table is decoration"
@@ -233,12 +252,88 @@ def test_an_empty_confusion_does_not_divide_by_zero():
     assert confusion.false_positive_rate == 0.0
 
 
-def test_scoring_ignores_instances_the_truth_file_does_not_cover():
+def test_a_verdict_the_truth_file_does_not_describe_is_refused_not_skipped():
+    """This test used to assert the opposite — that the unknown key was ignored.
+
+    A scorer that discards what it cannot place is the same defect class as the
+    stale truth file: the number keeps coming out, computed over a set that has
+    quietly shrunk. It raises now.
+    """
     truth_rows = {"CHK-A": {"expected_verdict": "gap"}}
-    confusion = metrics_module.score_gap_detection(
-        {"CHK-A": "gap", "CHK-UNKNOWN": "gap"}, truth_rows
-    )
+    with pytest.raises(metrics_module.UnscorableRows) as refused:
+        metrics_module.score_gap_detection(
+            {"CHK-A": "gap", "CHK-UNKNOWN": "gap"}, truth_rows
+        )
+    assert "CHK-UNKNOWN" in str(refused.value)
+
+
+def test_truth_rows_without_a_verdict_are_counted_not_hidden():
+    truth_rows = {
+        "CHK-A": {"expected_verdict": "gap"},
+        "CHK-B": {"expected_verdict": "compliant"},
+        "CHK-C": {"expected_verdict": "gap"},
+    }
+    confusion = metrics_module.score_gap_detection({"CHK-A": "gap"}, truth_rows)
     assert confusion.total == 1
+    assert confusion.unjudged == 2
+
+
+def test_a_truth_row_with_no_expected_verdict_is_refused():
+    with pytest.raises(metrics_module.UnscorableRows):
+        metrics_module.score_gap_detection(
+            {"CHK-A": "gap"}, {"CHK-A": {"expected_verdict": None}}
+        )
+
+
+def test_two_truth_rows_for_one_obligation_are_refused():
+    row = {
+        "is_remediation": False, "defect_kind": "near_miss",
+        "control_id": "CTRL-A", "auditable_unit_id": "AREA-B",
+        "period": "2026-Q1", "expected_verdict": "gap",
+    }
+    with pytest.raises(metrics_module.UnscorableRows):
+        metrics_module.truth_by_instance({"rows": [row, dict(row)]})
+
+
+def test_an_obligation_the_scheduler_never_raised_is_missed_and_refused(corpus):
+    """The defect that hid 2027, reproduced: a register with no cycle ever run.
+
+    Every due obligation is unscheduled. The old metric, which took its
+    denominator from the instances that existed, would have reported 0 of 0.
+    """
+    from sentinelops.synth import seed_database
+
+    conn = connect(":memory:")
+    seed_database(conn, corpus)
+    truth_rows = metrics_module.truth_by_instance(
+        metrics_module.load_ground_truth(corpus.year)
+    )
+    missed = metrics_module.missed_checks(conn, truth_rows, as_of=SIMULATED_TODAY)
+    assert missed["due"] > 0
+    assert missed["unscheduled"] == missed["due"]
+    assert missed["rate"] == 1.0
+    with pytest.raises(metrics_module.UnscheduledObligations):
+        metrics_module.require_scheduled(missed)
+
+
+def test_a_planted_recurrence_member_the_run_never_raised_is_refused(corpus):
+    from sentinelops.synth import seed_database
+
+    conn = connect(":memory:")
+    seed_database(conn, corpus)
+    truth = {"recurrence_groups": [
+        {"id": "REC-X", "finding_ids": ["FND-IA-2026-H1-01", "FND-NEVER-RAISED"]},
+    ]}
+    with pytest.raises(metrics_module.UnscorableRows) as refused:
+        metrics_module.score_recurrence(conn, truth)
+    assert "FND-NEVER-RAISED" in str(refused.value)
+
+
+def test_the_manual_model_counts_only_what_was_due_by_the_vantage_point(corpus):
+    outcome = manual_module.simulate(corpus, seed=4242, as_of=SIMULATED_TODAY)
+    assert outcome.not_yet_due > 0
+    # Strictly before: a check is not missed on the day it falls due.
+    assert all(review.due_date < SIMULATED_TODAY for review in outcome.reviews)
 
 
 def test_superseded_findings_are_excluded_from_every_metric(evaluation):
@@ -253,6 +348,7 @@ def test_superseded_findings_are_excluded_from_every_metric(evaluation):
 def test_no_evidence_is_not_counted_as_a_missed_check(evaluation):
     """The system raised, chased and recorded them. That is not missing them."""
     assert evaluation.pipeline["missed"]["rate"] == 0.0
+    assert evaluation.pipeline["missed"]["unscheduled"] == 0
     # The threshold was tuned to a corpus where a tenth of everything was never
     # filed. The reshaped one is realistic instead: unfiled evidence is the
     # rarest defect, because a finding raised from it can never be closed by

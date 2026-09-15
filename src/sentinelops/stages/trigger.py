@@ -35,7 +35,11 @@ from typing import Any
 from ..entities import CheckInstance, ComplianceException, ControlDefinition, AuditableUnit
 from .. import directory
 from ..directory import Directory
-from ..periods import due_date, periods_for
+from .. import window as schedule_window
+from ..periods import (
+    PeriodOutsideWindow, Window, due_date, periods_in,
+    period_ends as build_period_ends,
+)
 from .applicability import applicability_matrix, validate_expressions
 
 #: What a cycle can be started by. Recorded on the cycle audit event so the
@@ -49,7 +53,9 @@ SETTLED = ("assessed", "waived")
 
 @dataclass(frozen=True)
 class SchedulePolicy:
-    year: int = 2026
+    # No `year`. It defaulted to 2026 with no end year, so S1 scheduled twelve
+    # months of an eighteen-month programme. The span is the schedule window
+    # recorded with the corpus; see `sentinelops.window`.
     due_soon_days: int = 7
     escalate_after_days: int = 14
     max_escalation_level: int = 2
@@ -307,13 +313,28 @@ def _expire_exceptions(
         _log(repo, notification)
 
 
-def _open_periods(control: ControlDefinition, policy: SchedulePolicy, as_of: date):
-    """Periods that have started by `as_of`. A period generates when it opens."""
+def _open_periods(control: ControlDefinition, window: Window, as_of: date):
+    """Periods inside the schedule window that have started by `as_of`.
+
+    A period generates when it opens. The window bounds it on both sides: nothing
+    before the programme started and nothing after it ends, whatever `as_of` is.
+    """
     return [
         period
-        for period in periods_for(control.frequency, policy.year)
+        for period in periods_in(control.frequency, window)
         if period.start <= as_of
     ]
+
+
+def _period_end(table: dict[tuple[str, str], date], instance: CheckInstance) -> date:
+    """An instance's period end, or a refusal that names the instance."""
+    try:
+        return table[(instance.control_id, instance.period)]
+    except KeyError:
+        raise PeriodOutsideWindow(
+            f"{instance.id} is for {instance.control_id} {instance.period}, which "
+            f"is not a period in the schedule window"
+        ) from None
 
 
 def _generate(
@@ -321,6 +342,7 @@ def _generate(
     people: Directory,
     as_of: date,
     policy: SchedulePolicy,
+    window: Window,
     result: CycleResult,
     controls: dict[str, ControlDefinition],
     areas: dict[str, AuditableUnit],
@@ -332,7 +354,7 @@ def _generate(
         area = areas[area_id]
         for control_id in control_ids:
             control = controls[control_id]
-            for period in _open_periods(control, policy, as_of):
+            for period in _open_periods(control, window, as_of):
                 excuse = next(
                     (e for e in exceptions if covers(e, control_id, area_id, period.end)),
                     None,
@@ -465,7 +487,7 @@ def _advance_states(
             finding = current_findings.get(instance.id)
             if finding is None or finding.verdict == "compliant":
                 continue
-            period_end = period_ends[(instance.control_id, instance.period)]
+            period_end = _period_end(period_ends, instance)
             excuse = next(
                 (
                     e
@@ -516,7 +538,7 @@ def _advance_states(
 
         area = areas[instance.auditable_unit_id]
         key = (instance.control_id, instance.auditable_unit_id, instance.period)
-        period_end = period_ends[(instance.control_id, instance.period)]
+        period_end = _period_end(period_ends, instance)
 
         if instance.status in ("pending", "overdue"):
             excuse = next(
@@ -724,14 +746,13 @@ def _run_cycle(
     exceptions = repo["exceptions"].list()
     existing = {i.id: i for i in repo["instances"].list()}
 
-    _generate(repo, people, as_of, policy, result, controls, areas, exceptions,
-              existing)
+    window = schedule_window.load(conn)
+    _generate(repo, people, as_of, policy, window, result, controls, areas,
+              exceptions, existing)
 
-    period_ends = {
-        (control.id, period.label): period.end
-        for control in controls.values()
-        for period in periods_for(control.frequency, policy.year)
-    }
+    period_ends = build_period_ends(
+        {control.id: control.frequency for control in controls.values()}, window
+    )
     instances = {i.id: i for i in repo["instances"].list()}
     _advance_states(repo, people, as_of, policy, result, areas, exceptions,
                     instances, period_ends)

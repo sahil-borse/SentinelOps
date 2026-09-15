@@ -78,10 +78,18 @@ def test_the_stub_is_measured_not_assumed(outcomes):
     assert _agreement(outcomes) > 0.90
 
 
-def test_the_stub_almost_never_misses_a_near_miss(outcomes):
-    """The case the whole precision story rests on — and where it loses three.
+#: The one clause the stub is known to pass as compliant. Named, so a second
+#: clause passing clean fails the test instead of being absorbed into a count.
+UNREADABLE_CLAUSE = (
+    "Actions arising are tracked somewhere that survives the incident ticket "
+    "being closed."
+)
 
-    Measured, not assumed. All three are the same clause of the same control:
+
+def test_the_stub_almost_never_misses_a_near_miss(outcomes_with_clauses):
+    """The case the whole precision story rests on — and where it loses four.
+
+    Measured, not assumed. Three of them are the same clause of the same control:
 
         "Actions arising are tracked only inside the closed tickets."
 
@@ -89,6 +97,14 @@ def test_the_stub_almost_never_misses_a_near_miss(outcomes):
     closed — and a reader sees it instantly. Seeing it requires understanding
     what the clause asked for, because the sentence contains no negation, no
     shortfall and no hedge. There is nothing for a keyword rule to catch.
+
+    The fourth arrived with slice 15z. Until then S1 scheduled only 2026, so no
+    2027 near-miss was ever judged; `CHK-ACCESS-REVIEW-PRJ-CORAL-2027-Q1` is, and
+    the stub reads its failure on the leavers clause as `partial`. It is not a
+    pass: the check still surfaces as a problem, just not as a gap. This test
+    used to pin the count at three; a count moves when the population does, so
+    the pin is now on kind — only the named clause may pass as compliant, and
+    anything else that slips must not.
 
     The corpus is not wrong here and neither is the rendering: this is precisely
     the judgement the model tier exists for, and the stub standing in for one
@@ -101,14 +117,47 @@ def test_the_stub_almost_never_misses_a_near_miss(outcomes):
     library landed, because comparing two numbers is a mechanical job a rule can
     legitimately do and it was missing six. What is left after that is language.
     """
-    near = [(k, v) for k, v in outcomes if k == "near_miss"]
+    near = [(k, v, c) for k, v, c in outcomes_with_clauses if k == "near_miss"]
     assert near
-    missed = [v for _, v in near if v != "gap"]
-    assert len(missed) <= 3, (
-        f"{len(missed)} near-misses slipped past; the stub has got worse, "
-        f"or the corpus now hides its failures in prose"
+    missed = [(v, c) for _, v, c in near if v != "gap"]
+    passed_clean = [c for v, c in missed if v == "compliant"]
+    assert all(c == UNREADABLE_CLAUSE for c in passed_clean), (
+        f"a near-miss on a new clause passed as compliant: "
+        f"{sorted({c for c in passed_clean if c != UNREADABLE_CLAUSE})}"
     )
-    assert len(missed) / len(near) < 0.25
+    assert len(missed) / len(near) < 0.25, (
+        f"{len(missed)} of {len(near)} near-misses slipped past; the stub has got "
+        f"worse, or the corpus now hides its failures in prose"
+    )
+
+
+@pytest.fixture()
+def outcomes_with_clauses(conn, corpus):
+    """The same pairing as `outcomes`, carrying the failing clause as well."""
+    seed_database(conn, corpus)
+    for month in range(1, 13):
+        run_cycle(conn, date(2026, month, 28))
+    run_cycle(conn, END_OF_STORY)
+    screen = prescreen(conn, END_OF_STORY)
+    assess(conn, screen.to_assess, END_OF_STORY)
+
+    truth = {}
+    for row in corpus.truth_rows:
+        if not row["submission_id"] or row["is_remediation"]:
+            continue
+        key = (
+            f"CHK-{row['control_id'].removeprefix('CTRL-')}-"
+            f"{row['auditable_unit_id'].removeprefix('AREA-')}-{row['period']}"
+        )
+        truth[key] = row
+    return [
+        (truth[a.check_instance_id]["defect_kind"], a.verdict,
+         truth[a.check_instance_id]["failing_clause_text"])
+        for a in repositories(conn)["assessments"].list()
+        if a.decided_by == "s3_model"
+        and a.check_instance_id in truth
+        and truth[a.check_instance_id]["defect_kind"] in EXPECTED
+    ]
 
 
 def test_the_stubs_false_negative_rate_is_measured(outcomes):

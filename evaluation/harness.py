@@ -23,7 +23,8 @@ from sentinelops.stages.prescreen import run as prescreen
 from sentinelops.stages.remediation import reassess_all
 from sentinelops.stages.trigger import run_cycle
 from sentinelops.synth import generate_corpus
-from sentinelops.synth.calendar import SIMULATED_TODAY
+from sentinelops.periods import monthly_cycles
+from sentinelops.synth.calendar import CORPUS_WINDOW, SIMULATED_TODAY
 
 from . import baseline as baseline_module
 from . import manual as manual_module
@@ -32,24 +33,13 @@ from .report import write_results
 
 RESULTS_PATH = Path(__file__).resolve().parents[1] / "results.md"
 
-#: The month-ends a scheduled programme would actually run on, plus a final
-#: sweep the following spring once every 2026 period has closed and its grace
-#: window with it.
-#: One cycle a month across the corpus's eighteen-month window, then the
-#: vantage point itself. Month by month rather than all at the end, because
-#: time-to-detection measured over a single catch-up run measures the harness.
-#: One cycle a month across the corpus's history, ending at the vantage point.
+#: One cycle a month across the corpus window, ending at the vantage point.
 #: Month by month rather than all at the end, because time-to-detection measured
-#: over a single catch-up run measures the harness. Stops at SIMULATED_TODAY —
+#: over a single catch-up run measures the harness. Stops at SIMULATED_TODAY:
 #: running cycles past "today" would detect things before they were due and turn
-#: the detection latency negative.
-CYCLE_DATES = [
-    d for d in (
-        [date(2026, month, 28) for month in range(1, 13)]
-        + [date(2027, month, 28) for month in range(1, 13)]
-    )
-    if d <= SIMULATED_TODAY
-] + [SIMULATED_TODAY]
+#: the detection latency negative. Derived from the window rather than written
+#: out as two lists of years.
+CYCLE_DATES = monthly_cycles(CORPUS_WINDOW, SIMULATED_TODAY) + [SIMULATED_TODAY]
 
 
 @dataclass
@@ -158,7 +148,7 @@ def evaluate(
     verdicts = metrics_module.first_verdicts(conn)
     pipeline = {
         **run_stats,
-        "missed": metrics_module.missed_checks(conn, truth_rows),
+        "missed": metrics_module.missed_checks(conn, truth_rows, as_of=SIMULATED_TODAY),
         "detection": metrics_module.time_to_detection(conn),
         "consistency": metrics_module.verdict_consistency(conn),
         "zero_model": metrics_module.zero_model_share(conn),
@@ -170,6 +160,8 @@ def evaluate(
         "chain": repositories(conn)["audit"].verify_chain(),
         "audit_events": len(repositories(conn)["audit"].read_all()),
     }
+    # Refuse, rather than score, a run that left due obligations unscheduled.
+    metrics_module.require_scheduled(pipeline["missed"])
 
     baseline_result, was_cached = baseline_module.run(
         corpus, client=client, force=force_baseline
@@ -182,8 +174,8 @@ def evaluate(
         ),
     }
 
-    outcome = manual_module.simulate(corpus, seed=4242)
-    sensitivity = manual_module.sensitivity(corpus)
+    outcome = manual_module.simulate(corpus, seed=4242, as_of=SIMULATED_TODAY)
+    sensitivity = manual_module.sensitivity(corpus, as_of=SIMULATED_TODAY)
     manual_verdicts = {
         r.instance_key: r.verdict for r in outcome.reviews if r.verdict
     }

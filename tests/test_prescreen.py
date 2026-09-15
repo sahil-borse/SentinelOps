@@ -420,8 +420,12 @@ def test_binding_the_same_submission_twice_is_idempotent(conn):
 def test_the_report_accounts_for_every_considered_instance(screened):
     conn, report = screened
     assert report.resolved + len(report.to_assess) == report.considered
-    # 447 instances over the eighteen months, one waived before judgement.
-    assert report.considered == 446
+    # Every instance is either considered, still pending, or waived. This was
+    # pinned at 446 under a comment about eighteen months; it was one year.
+    instances = repositories(conn)["instances"].list()
+    waived = [i for i in instances if i.status == "waived"]
+    assert report.considered == len(instances) - report.skipped_not_due - len(waived)
+    assert report.considered > 0
 
 
 def test_the_zero_model_share_is_real(screened):
@@ -547,7 +551,16 @@ def _submission(identifier, content, submitted, is_remediation=False,
 
 
 def _seed_minimal(repo, freshness_days=100, control_id="CTRL-X"):
+    from sentinelops import window as schedule_window
     from sentinelops.entities import AuditableUnit
+    from sentinelops.periods import Window
+
+    # S2 reads the schedule window rather than assuming a year, so a hand-built
+    # database has to say what span it covers, exactly as a seeded one does.
+    schedule_window.record(
+        repo["units"].conn, Window(date(2026, 1, 1), date(2026, 12, 31)),
+        source="hand-built test fixture",
+    )
 
     if repo["units"].get("AREA-A") is None:
         repo["units"].add(

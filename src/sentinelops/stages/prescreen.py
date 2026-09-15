@@ -306,7 +306,7 @@ def _remember(carried: dict, instance: CheckInstance, evidence: Evidence, findin
         carried[key] = (instance.period, finding)
 
 
-def run(conn, as_of: date, *, year: int = 2026) -> PrescreenReport:
+def run(conn, as_of: date) -> PrescreenReport:
     """Pre-screen every instance that is due a decision.
 
     Returns the report; the instances named in `to_assess` are the only ones
@@ -315,10 +315,10 @@ def run(conn, as_of: date, *, year: int = 2026) -> PrescreenReport:
     from ..repositories import simulated_clock
 
     with simulated_clock(datetime.combine(as_of, datetime.min.time().replace(hour=3))):
-        return _run(conn, as_of, year=year)
+        return _run(conn, as_of)
 
 
-def _run(conn, as_of: date, *, year: int = 2026) -> PrescreenReport:
+def _run(conn, as_of: date) -> PrescreenReport:
     from .. import directory
     from ..repositories import repositories
 
@@ -328,11 +328,16 @@ def _run(conn, as_of: date, *, year: int = 2026) -> PrescreenReport:
     instances = {i.id: i for i in repo["instances"].list()}
     report = PrescreenReport(as_of=as_of)
 
-    period_ends = {
-        (control.id, period.label): period.end
-        for control in controls.values()
-        for period in periods_for(control.frequency, year)
-    }
+    # Built from the schedule window the corpus recorded, not from a `year`
+    # parameter that defaulted to 2026. With the year, the first 2027 instance
+    # S1 raised crashed this stage with a bare KeyError.
+    from .. import window as schedule_window
+    from ..periods import end_of, period_ends as build_period_ends
+
+    window = schedule_window.load(conn)
+    period_ends = build_period_ends(
+        {control.id: control.frequency for control in controls.values()}, window
+    )
 
     submissions: dict[tuple[str, str, str], list] = {}
     for submission in repo["inbound"].list():
@@ -354,7 +359,7 @@ def _run(conn, as_of: date, *, year: int = 2026) -> PrescreenReport:
             continue
         report.considered += 1
         control = controls[instance.control_id]
-        period_end = period_ends[(instance.control_id, instance.period)]
+        period_end = end_of(period_ends, instance.control_id, instance.period, window)
         key = (instance.control_id, instance.auditable_unit_id, instance.period)
         filings = submissions.get(key, [])
 

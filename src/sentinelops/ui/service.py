@@ -33,8 +33,9 @@ ROOT = Path(__file__).resolve().parents[3]
 DB_PATH = ROOT / "data" / "demo" / "sentinelops.db"
 PACK_DIR = ROOT / "data" / "packs"
 
-#: Where the simulated calendar starts when the demo is first opened.
-START_DATE = date(2026, 1, 28)
+#: Where the simulated calendar starts when the demo is first opened is now
+#: `start_date(conn)`, read from the schedule window. It used to be
+#: `START_DATE = date(2026, 1, 28)`, a year written into the dashboard.
 
 
 @dataclass
@@ -90,11 +91,20 @@ def seed(conn) -> None:
         seed_database(conn, generate_corpus())
 
 
+def start_date(conn) -> date:
+    """The first monthly cycle in the schedule window the corpus recorded."""
+    from .. import window as schedule_window
+    from ..periods import monthly_cycles
+
+    window = schedule_window.load(conn)
+    return monthly_cycles(window, window.end)[0]
+
+
 def current_date(conn) -> date:
     """Where the simulated calendar stands, read off the trail."""
     from ..stages.trigger import last_cycle_date
 
-    return last_cycle_date(conn) or START_DATE
+    return last_cycle_date(conn) or start_date(conn)
 
 
 def tick(conn, as_of: date, *, client=None) -> TickResult:
@@ -236,16 +246,37 @@ def doc_types_for(conn, instance_id: str) -> list[str]:
     return list(accepted) + others
 
 
+def pack_period(conn) -> tuple[date, date]:
+    """From the start of the schedule window to where the calendar stands.
+
+    Replaces `date(2026, 1, 1)` to `date(2026, 12, 31)`, which the dashboard and
+    the walkthrough both passed whatever the calendar said.
+    """
+    from .. import window as schedule_window
+
+    return schedule_window.load(conn).start, current_date(conn)
+
+
+def pack_file_name(conn) -> str:
+    """The download name for the pack the dashboard offers, without an extension."""
+    from ..pack import pack_filename
+
+    return pack_filename(*pack_period(conn))
+
+
 def generate_pack(conn, *, period_start: date, period_end: date, scope: str):
     """Build the auditor-ready pack from the audit log and write both formats."""
+    from ..pack import pack_filename
+
     events = load_events(conn)
     pack = build_pack(
         events, period_start=period_start, period_end=period_end, scope=scope
     )
     PACK_DIR.mkdir(parents=True, exist_ok=True)
     markdown, page = render_markdown(pack), render_html(pack)
-    (PACK_DIR / "audit_pack_2026.md").write_text(markdown, encoding="utf-8")
-    (PACK_DIR / "audit_pack_2026.html").write_text(page, encoding="utf-8")
+    name = pack_filename(period_start, period_end)
+    (PACK_DIR / f"{name}.md").write_text(markdown, encoding="utf-8")
+    (PACK_DIR / f"{name}.html").write_text(page, encoding="utf-8")
     return pack, markdown, page
 
 
@@ -383,13 +414,12 @@ def recurrence_links(conn) -> list[dict[str, Any]]:
 
 def portfolio_analytics(conn) -> dict[str, Any]:
     """Section 8 in one call. Deterministic — no model is involved."""
-    from datetime import date as _date
-
     from .. import analytics
+    from .. import window as schedule_window
 
     as_of = current_date(conn)
     return analytics.portfolio(
-        conn, as_of, window=(_date(START_DATE.year, 1, 1), as_of)
+        conn, as_of, window=(schedule_window.load(conn).start, as_of)
     )
 
 

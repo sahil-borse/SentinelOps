@@ -78,7 +78,7 @@ def _has_overdue(conn) -> bool:
     *finding* raised from it, on the severity clock. Progress here is measured
     by the calendar, which is what the step is actually about.
     """
-    return service.current_date(conn) >= service.START_DATE + timedelta(days=60)
+    return service.current_date(conn) >= service.start_date(conn) + timedelta(days=60)
 
 
 def _has_model_finding(conn) -> bool:
@@ -405,10 +405,11 @@ def run(conn, key: str) -> Outcome:
 
     if key == "prove":
         chain = service.verify_chain(conn)
+        period_start, period_end = service.pack_period(conn)
         pack, markdown, page = service.generate_pack(
             conn,
-            period_start=date(2026, 1, 1),
-            period_end=date(2026, 12, 31),
+            period_start=period_start,
+            period_end=period_end,
             scope="All auditable units, all applicable controls",
         )
         if not chain.ok:

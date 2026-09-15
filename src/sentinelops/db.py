@@ -118,6 +118,11 @@ CREATE TABLE IF NOT EXISTS compliance_exceptions (
     auditable_unit_id TEXT NOT NULL REFERENCES auditable_units(id),
     rationale TEXT NOT NULL, approved_by TEXT NOT NULL, granted_at TEXT NOT NULL,
     expires_at TEXT NOT NULL, status TEXT NOT NULL);
+-- The span the programme is scheduled over. One row. S1 and S2 read it rather
+-- than assuming a year, which is what they did until slice 15z.
+CREATE TABLE IF NOT EXISTS schedule_window (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    start_date TEXT NOT NULL, end_date TEXT NOT NULL, source TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS audit_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL,
     actor_kind TEXT NOT NULL, actor_identity TEXT NOT NULL, owner TEXT NOT NULL, action TEXT NOT NULL, entity_type TEXT NOT NULL,

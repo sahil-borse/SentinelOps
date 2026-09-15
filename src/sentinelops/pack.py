@@ -87,6 +87,15 @@ KNOWN_ACTIONS = (
 )
 
 
+def pack_filename(period_start: date, period_end: date) -> str:
+    """A pack is named for the span it covers.
+
+    It used to be `audit_pack_2026` whatever it covered, which is how a pack
+    replayed into March 2027 went out labelled as calendar year 2026.
+    """
+    return f"audit_pack_{period_start:%Y%m%d}_{period_end:%Y%m%d}"
+
+
 def load_events(
     conn: sqlite3.Connection,
     *,

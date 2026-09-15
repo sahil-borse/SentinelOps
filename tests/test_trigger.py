@@ -18,7 +18,10 @@ from sentinelops.stages.trigger import (
     owner_chain,
     run_cycle,
 )
+from sentinelops import window as schedule_window
+from sentinelops.periods import period_from_label, periods_in
 from sentinelops.synth import generate_corpus, seed_database
+from sentinelops.window import WindowNotRecorded
 
 END_OF_STORY = SIMULATED_TODAY
 
@@ -36,15 +39,28 @@ def seeded(conn, corpus):
 
 # --- generation ------------------------------------------------------------
 
-def test_a_full_year_generates_an_instance_per_open_period(seeded, corpus):
-    result = run_cycle(seeded, END_OF_STORY)
-    instances = repositories(seeded)["instances"].list()
+def test_generation_raises_an_instance_for_every_open_period(seeded, corpus):
+    """Coverage, not a count.
 
-    # 64 applicable pairs across their frequencies, less the 3 periods that
-    # approved exceptions excuse.
-    assert len(instances) == 447
-    assert len(result.created) == 447
+    This asserted 447 under a comment about eighteen months. 447 is exactly the
+    2026 periods: S1 was scheduling one year of the window, and a number nobody
+    re-derived sat under a sentence describing something else. The expectation is
+    now built from the applicable pairs and the recorded window, so it cannot
+    drift away from what the window says.
+    """
+    window = schedule_window.load(seeded)
+    result = run_cycle(seeded, END_OF_STORY)
+    scheduled = {i.id for i in repositories(seeded)["instances"].list()}
+
+    assert scheduled == set(result.created)
+    assert scheduled | set(result.suppressed) == _expected_instance_ids(
+        corpus, window, END_OF_STORY
+    )
     assert len(result.suppressed) == 3
+    assert any(
+        period_from_label(instance.period).start.year == window.end.year
+        for instance in repositories(seeded)["instances"].list()
+    ), "the final year of the window is scheduled, not only the first"
 
 
 def test_nothing_generates_before_its_period_opens(seeded):
@@ -97,7 +113,7 @@ def test_running_the_same_cycle_twice_creates_nothing_new(seeded):
     second = run_cycle(seeded, END_OF_STORY)
     assert second.created == []
     assert len(repositories(seeded)["instances"].list()) == count
-    assert len(first.created) == 447
+    assert len(first.created) == count
 
 
 def test_five_cycles_over_the_year_produce_the_same_instances_as_one(conn, corpus):
@@ -358,7 +374,7 @@ def test_every_new_instance_is_routed_to_its_owning_team(seeded, corpus):
     result = run_cycle(seeded, END_OF_STORY)
     assigned = [n for n in result.notifications if n.kind == "assigned"]
     teams = {a.id: a.name for a in corpus.areas}
-    assert len(assigned) == 447
+    assert len(assigned) == len(result.created)
     for notification in assigned:
         instance = repositories(seeded)["instances"].get(notification.entity_id)
         assert notification.to_team == teams[instance.auditable_unit_id]
@@ -530,7 +546,8 @@ def exploding_llm(monkeypatch):
 
 def test_a_full_cycle_runs_with_every_provider_rigged_to_explode(seeded, exploding_llm):
     result = run_cycle(seeded, END_OF_STORY)
-    assert len(result.created) == 447
+    assert result.created
+    assert len(result.created) == len(repositories(seeded)["instances"].list())
 
 
 def test_a_full_cycle_records_no_token_usage(seeded, exploding_llm):
@@ -642,7 +659,9 @@ def test_the_fourth_exception_suppresses_no_generation(seeded):
     ids = {i.id for i in repositories(seeded)["instances"].list()}
     for quarter in ("Q1", "Q2", "Q3", "Q4"):
         assert f"CHK-ACCESS-REVIEW-ADMIN-2026-{quarter}" in ids
-    assert len(ids) == 447
+    assert "CHK-ACCESS-REVIEW-ADMIN-2027-Q1" in ids, (
+        "the fourth exception suppresses nothing in the final year either"
+    )
 
 
 def test_waives_and_covers_are_complementary():
@@ -662,3 +681,65 @@ def test_waives_and_covers_are_complementary():
 
     assert not covers(exception, "C", "A", q2_end)   # Q2 outlives the waiver
     assert not waives(exception, "C", "A", q2_end, as_of)
+
+
+# --- the schedule window -----------------------------------------------------
+
+def _expected_instance_ids(corpus, window, as_of):
+    """Every applicable pair, every period inside the window that has opened."""
+    frequency = {c.id: c.frequency for c in corpus.controls}
+    return {
+        instance_id(control_id, area_id, period.label)
+        for control_id, area_id in corpus.applicable_pairs
+        for period in periods_in(frequency[control_id], window)
+        if period.start <= as_of
+    }
+
+
+def test_the_period_range_covers_the_whole_corpus_window(seeded, corpus):
+    """Run to the last day of the window: first period starts on its first day,
+    last period ends on its last, and every applicable obligation in between is
+    raised or excused."""
+    window = schedule_window.load(seeded)
+    assert window == corpus.window, "the window is read back, not assumed"
+
+    result = run_cycle(seeded, window.end)
+    instances = repositories(seeded)["instances"].list()
+    periods = [period_from_label(i.period) for i in instances]
+
+    assert {i.id for i in instances} | set(result.suppressed) == (
+        _expected_instance_ids(corpus, window, window.end)
+    )
+    assert min(p.start for p in periods) == window.start
+    assert max(p.end for p in periods) == window.end
+
+
+def test_no_scheduled_period_falls_outside_the_corpus_window(seeded):
+    """Not at the vantage point, not at the window's end, not long after it."""
+    window = schedule_window.load(seeded)
+    for as_of in (END_OF_STORY, window.end, window.end + timedelta(days=200)):
+        run_cycle(seeded, as_of)
+    outside = [
+        i.id for i in repositories(seeded)["instances"].list()
+        if not window.contains(period_from_label(i.period))
+    ]
+    assert outside == []
+
+
+def test_the_last_due_date_falls_in_the_final_period_not_the_first_year(seeded):
+    """The latest due date anywhere used to be 15 January 2027 — the grace
+    window on December 2026. It must belong to the window's final period."""
+    window = schedule_window.load(seeded)
+    run_cycle(seeded, window.end)
+    latest = max(
+        repositories(seeded)["instances"].list(), key=lambda i: (i.due_date, i.id)
+    )
+    assert period_from_label(latest.period).end == window.end
+    assert latest.due_date > window.end
+    assert latest.due_date.year == window.end.year
+
+
+def test_a_database_with_no_window_refuses_to_schedule(conn):
+    """No window recorded means stop, not a guessed year."""
+    with pytest.raises(WindowNotRecorded):
+        run_cycle(conn, END_OF_STORY)

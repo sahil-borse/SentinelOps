@@ -4,6 +4,19 @@ Nothing here re-derives a verdict or re-runs a stage. Every figure is read out
 of the database the pipeline wrote, or out of the truth file, and the two are
 joined on the instance key. If a number cannot be computed from the record, it
 is not reported.
+
+**Nothing is dropped because it did not match.** Until slice 15z every scorer
+here joined on whatever the *run* produced and skipped what it could not place:
+a verdict for an instance the truth file did not describe was ignored, a truth
+obligation the run never scheduled was invisible, and `missed_checks` accepted
+the truth rows and never read them. That is how a scheduler that stopped at
+2026 reported a 0.0% missed-check rate over 446 instances while 104 obligations
+due in 2027 had never been raised. It is the same defect class as the stale
+truth file: a plausible number computed over a quietly smaller set.
+
+So each scorer now does one of two things with every row. It refuses — raises
+`UnscorableRows` — when it meets something it cannot place. Or it counts the
+row under a named exclusion that the report prints. There is no third option.
 """
 
 from __future__ import annotations
@@ -15,6 +28,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from sentinelops.periods import due_date, period_from_label
 from sentinelops.repositories import repositories
 
 TRUTH_DIR = Path(__file__).resolve().parents[1] / "data" / "truth"
@@ -23,22 +37,96 @@ TRUTH_DIR = Path(__file__).resolve().parents[1] / "data" / "truth"
 POSITIVE = ("gap",)
 
 
-def load_ground_truth(year: int = 2026) -> dict[str, Any]:
-    """The only read of the truth file in the entire project."""
+class UnscorableRows(ValueError):
+    """A scorer met rows it could not place. Raised, never skipped."""
+
+
+class UnscheduledObligations(RuntimeError):
+    """The run left obligations that were due unscheduled; the harness will not score it.
+
+    Not a missed check in the product's sense. The automated path claims a
+    check cannot fail to be raised, because scheduling is deterministic; if one
+    was not raised, what is broken is the scheduler, and scoring the run would
+    report a property of the bug as a property of the system.
+    """
+
+
+def load_ground_truth(year: int) -> dict[str, Any]:
+    """The only read of the truth file in the entire project.
+
+    `year` is the corpus's first year, which names the file. No default: the
+    default used to be 2026, one of the years this slice removed.
+    """
     return json.loads((TRUTH_DIR / f"truth_{year}.json").read_text(encoding="utf-8"))
 
 
+def instance_key(control_id: str, auditable_unit_id: str, period: str) -> str:
+    """The pipeline's own instance id scheme, so run and truth join row for row."""
+    return (
+        f"CHK-{control_id.removeprefix('CTRL-')}-"
+        f"{auditable_unit_id.removeprefix('AREA-')}-{period}"
+    )
+
+
 def truth_by_instance(truth: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    rows = {}
+    """Truth rows keyed by instance. Two exclusions, both named, and no collisions.
+
+    Remediation rows are excluded because a fix is judged through the finding it
+    answers, not as an obligation of its own. Exception-suppressed rows are
+    excluded because an excused period never raises a check. Anything else that
+    would land on an existing key is refused: a second row for one obligation
+    would silently replace the first.
+    """
+    rows: dict[str, dict[str, Any]] = {}
     for row in truth["rows"]:
         if row["is_remediation"] or row["defect_kind"] == "exception_suppressed":
             continue
-        key = (
-            f"CHK-{row['control_id'].removeprefix('CTRL-')}-"
-            f"{row['auditable_unit_id'].removeprefix('AREA-')}-{row['period']}"
-        )
+        key = instance_key(row["control_id"], row["auditable_unit_id"], row["period"])
+        if key in rows:
+            raise UnscorableRows(
+                f"two truth rows describe {key}; scoring would keep one and "
+                f"silently discard the other"
+            )
         rows[key] = row
     return rows
+
+
+def obligations_by_vantage(
+    conn, truth_rows: dict[str, dict[str, Any]], as_of: date,
+) -> dict[str, set[str]]:
+    """Every truth obligation, placed relative to the vantage point.
+
+      due       its due date is before the vantage point; the run must have
+                scheduled and examined it
+      not_due   its period has opened and it falls due on or after the vantage
+                point
+      not_open  its period starts after the vantage point
+
+    **On its due date a check is not yet missed.** S1 marks an instance overdue
+    only when `as_of > due_date`, and this uses the same boundary. The first
+    version counted a check due *on* the vantage point as due, and reported one
+    missed check — an unfiled obligation falling due that very day, which S1
+    would pick up as overdue on the next.
+
+    Grace days come from the controls in the run's own database. A truth row for
+    a control the run does not have is refused rather than guessed at.
+    """
+    grace = {c.id: c.grace_days for c in repositories(conn)["controls"].list()}
+    placed: dict[str, set[str]] = {"due": set(), "not_due": set(), "not_open": set()}
+    unknown = sorted({row["control_id"] for row in truth_rows.values()} - set(grace))
+    if unknown:
+        raise UnscorableRows(
+            f"the truth file describes controls this run does not have: {unknown}"
+        )
+    for key, row in truth_rows.items():
+        period = period_from_label(row["period"])
+        if period.start > as_of:
+            placed["not_open"].add(key)
+        elif due_date(period, grace[row["control_id"]]) >= as_of:
+            placed["not_due"].add(key)
+        else:
+            placed["due"].add(key)
+    return placed
 
 
 @dataclass
@@ -47,6 +135,9 @@ class Confusion:
     false_positive: int = 0
     true_negative: int = 0
     false_negative: int = 0
+    #: Truth obligations this path gave no verdict for. Reported, not hidden: a
+    #: path that judges less is not thereby more accurate.
+    unjudged: int = 0
 
     @property
     def total(self) -> int:
@@ -81,15 +172,27 @@ def score_gap_detection(
 ) -> Confusion:
     """Did we call the failing documents failing, and leave the good ones alone?
 
-    Positive class is `gap`. Only instances present in both the run and the
-    truth file are scored, so a pipeline is never credited or blamed for
-    something it was never shown.
+    Positive class is `gap`. Every verdict is scored against its truth row, and
+    a verdict for an instance the truth file does not describe is **refused**:
+    it used to be skipped, which is how a join that had drifted would have gone
+    on producing a number. Truth rows with no verdict are counted as `unjudged`
+    and printed — whether they *should* have had one is the missed-check metric's
+    question, which now answers it from the truth file too.
     """
+    unknown = sorted(key for key in verdicts if key not in truth_rows)
+    if unknown:
+        raise UnscorableRows(
+            f"{len(unknown)} verdict(s) for instances the truth file does not "
+            f"describe, e.g. {unknown[:5]}"
+        )
     confusion = Confusion()
     for key, verdict in verdicts.items():
-        row = truth_rows.get(key)
-        if row is None or row["expected_verdict"] is None:
-            continue
+        row = truth_rows[key]
+        if row["expected_verdict"] is None:
+            raise UnscorableRows(
+                f"{key}: the truth row has no expected verdict, so the verdict "
+                f"{verdict!r} cannot be marked right or wrong"
+            )
         predicted = verdict in POSITIVE
         actual = row["expected_verdict"] in POSITIVE
         if predicted and actual:
@@ -100,28 +203,70 @@ def score_gap_detection(
             confusion.false_negative += 1
         else:
             confusion.true_negative += 1
+    confusion.unjudged = len(set(truth_rows) - set(verdicts))
     return confusion
 
 
-def missed_checks(conn, truth_rows: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def missed_checks(
+    conn, truth_rows: dict[str, dict[str, Any]], *, as_of: date,
+) -> dict[str, Any]:
     """A check is missed when it was due and nothing ever looked at it.
 
-    For the automated path this is answerable from the record: every due
-    instance either has a finding or does not. Note that "no evidence was
-    filed" is *not* a missed check — the system raised it, chased it and
-    recorded the absence, which is the opposite of missing it.
+    **The denominator comes from the truth file, not from the scheduler.** It
+    used to be the instances S1 had created, so an obligation S1 never raised
+    was not missed — it was not counted at all. Now every truth obligation due
+    by the vantage point is either examined, waived, scheduled-but-unexamined,
+    or unscheduled, and the last two are both missed.
+
+    Note that "no evidence was filed" is still *not* a missed check: the system
+    raised it, chased it and recorded the absence, which is the opposite of
+    missing it. And an instance the truth file does not describe is refused.
     """
     repo = repositories(conn)
-    instances = repo["instances"].list()
-    findings = {f.check_instance_id for f in repo["assessments"].list()}
-    due = [i for i in instances if i.status != "waived"]
-    unexamined = [i for i in due if i.id not in findings]
-    return {
-        "due": len(due),
-        "examined": len(due) - len(unexamined),
-        "missed": len(unexamined),
-        "rate": len(unexamined) / len(due) if due else 0.0,
+    instances = {i.id: i for i in repo["instances"].list()}
+    strangers = sorted(set(instances) - set(truth_rows))
+    if strangers:
+        raise UnscorableRows(
+            f"{len(strangers)} scheduled instance(s) the truth file does not "
+            f"describe, e.g. {strangers[:5]}"
+        )
+
+    placed = obligations_by_vantage(conn, truth_rows, as_of)
+    examined_ids = {
+        a.check_instance_id for a in repo["assessments"].list() if a.check_instance_id
     }
+    waived = {key for key in placed["due"] if key in instances
+              and instances[key].status == "waived"}
+    unscheduled = sorted(placed["due"] - set(instances))
+    unexamined = sorted(
+        key for key in placed["due"]
+        if key in instances and key not in waived and key not in examined_ids
+    )
+    due = len(placed["due"]) - len(waived)
+    missed = len(unscheduled) + len(unexamined)
+    return {
+        "due": due,
+        "examined": due - missed,
+        "missed": missed,
+        "rate": missed / due if due else 0.0,
+        "waived": len(waived),
+        "unscheduled": len(unscheduled),
+        "unscheduled_examples": unscheduled[:10],
+        "scheduled_unexamined": len(unexamined),
+        "not_yet_due": len(placed["not_due"]),
+        "not_yet_open": len(placed["not_open"]),
+        "truth_obligations": len(truth_rows),
+    }
+
+
+def require_scheduled(missed: dict[str, Any]) -> None:
+    """Refuse to score a run that left due obligations unscheduled."""
+    if missed["unscheduled"]:
+        raise UnscheduledObligations(
+            f"{missed['unscheduled']} obligation(s) due by the vantage point were "
+            f"never scheduled, e.g. {missed['unscheduled_examples']}. Scoring this "
+            f"run would report the scheduler's gap as a property of the system"
+        )
 
 
 def time_to_detection(conn) -> dict[str, Any]:
@@ -135,11 +280,21 @@ def time_to_detection(conn) -> dict[str, Any]:
     }
     gaps = []
     for finding in repo["assessments"].list():
+        if not finding.check_instance_id:
+            # A round assessment judges a finding's evidence and has no due date
+            # to measure from. Excluded by kind, not by failing to match.
+            continue
         if finding.verdict == "compliant" or finding.id in superseded:
             continue
         instance = instances.get(finding.check_instance_id)
-        if instance is None or finding.assessed_at is None:
-            continue
+        if instance is None:
+            raise UnscorableRows(
+                f"{finding.id} judges {finding.check_instance_id}, which does not exist"
+            )
+        if finding.assessed_at is None:
+            raise UnscorableRows(
+                f"{finding.id} has no assessment date, so its detection time is unknown"
+            )
         gaps.append((finding.assessed_at.date() - instance.due_date).days)
     spread = _spread(gaps)
     # Negative is not an error. With "today" inside the window and cycles run
@@ -174,6 +329,8 @@ def verdict_consistency(conn) -> dict[str, Any]:
         if f.supersedes_assessment_id
     }
     for finding in repo["assessments"].list():
+        if not finding.check_instance_id:
+            continue  # round assessments: not periodic evidence, not comparable here
         if finding.id not in superseded:
             findings[finding.check_instance_id] = finding
 
@@ -184,7 +341,10 @@ def verdict_consistency(conn) -> dict[str, Any]:
             continue
         instance = instances.get(evidence.check_instance_id)
         if instance is None:
-            continue
+            raise UnscorableRows(
+                f"evidence {evidence.id} is bound to {evidence.check_instance_id}, "
+                f"which does not exist"
+            )
         groups.setdefault(
             (instance.control_id, evidence.content_hash), []
         ).append(instance.id)
@@ -263,11 +423,13 @@ def action_closure(conn) -> dict[str, Any]:
         if e.action == "finding_escalated"
     }
     closed = [f for f in findings if f.status == "closed"]
-    durations = [
-        (f.closed_at - raised_at[f.id]).days
-        for f in closed
-        if f.id in raised_at and f.closed_at
-    ]
+    unrecorded = sorted(f.id for f in closed if f.id not in raised_at)
+    if unrecorded:
+        raise UnscorableRows(
+            f"closed finding(s) with no finding_raised event on the trail, so no "
+            f"duration can be computed: {unrecorded[:5]}"
+        )
+    durations = [(f.closed_at - raised_at[f.id]).days for f in closed if f.closed_at]
     return {
         "raised": len(findings),
         "resolved": len(closed),
@@ -298,10 +460,15 @@ def first_verdicts(conn) -> dict[str, str]:
     That is exactly what happened when the corpus went from six remediations to
     seventy-odd: recall read 12.8% against a pipeline that had in fact caught
     almost everything and then watched it get fixed.
+
+    Round assessments (slice 14) carry no check instance. They used to fall into
+    one key, `""`, which the scorer then skipped; they are excluded here by kind.
     """
     repo = repositories(conn)
     first: dict[str, Any] = {}
     for assessment in sorted(repo["assessments"].list(), key=lambda a: a.id):
+        if not assessment.check_instance_id:
+            continue
         if assessment.supersedes_assessment_id:
             continue  # a re-assessment of a fix, not the original judgement
         first.setdefault(assessment.check_instance_id, assessment.verdict)
@@ -343,6 +510,9 @@ def score_recurrence(conn, truth: dict[str, Any]) -> dict[str, Any]:
     against a definition the stakeholder did not give, and scoring it right
     would be crediting a model for arithmetic. Neither is a measurement, so the
     activity track is excluded and the exclusion is stated rather than hidden.
+
+    A planted member the run never raised is refused. It used to be filtered out
+    of its group silently, shrinking the set the recall was computed over.
     """
     from itertools import combinations
 
@@ -351,10 +521,21 @@ def score_recurrence(conn, truth: dict[str, Any]) -> dict[str, Any]:
         f.id: f for f in repo["findings"].list() if f.source == "audit"
     }
 
+    unknown = sorted({
+        finding_id
+        for group in truth.get("recurrence_groups", [])
+        for finding_id in group["finding_ids"]
+        if finding_id not in findings
+    })
+    if unknown:
+        raise UnscorableRows(
+            f"the truth file plants recurrence members this run never raised as "
+            f"audit findings: {unknown}"
+        )
+
     expected: set[frozenset[str]] = set()
     for group in truth.get("recurrence_groups", []):
-        members = [i for i in group["finding_ids"] if i in findings]
-        expected |= {frozenset(pair) for pair in combinations(members, 2)}
+        expected |= {frozenset(pair) for pair in combinations(group["finding_ids"], 2)}
 
     # union-find over the detected links, then every pair inside a component
     parent: dict[str, str] = {}
@@ -370,7 +551,7 @@ def score_recurrence(conn, truth: dict[str, Any]) -> dict[str, Any]:
     for finding in findings.values():
         for prior in finding.recurrence_of:
             if prior not in findings:
-                continue
+                continue  # a link to an activity-track finding: out of scope by kind
             links += 1
             a, b = root(finding.id), root(prior)
             if a != b:
@@ -406,5 +587,7 @@ def current_verdicts(conn) -> dict[str, str]:
     findings = repo["assessments"].list()
     superseded = {f.supersedes_assessment_id for f in findings if f.supersedes_assessment_id}
     return {
-        f.check_instance_id: f.verdict for f in findings if f.id not in superseded
+        f.check_instance_id: f.verdict
+        for f in findings
+        if f.id not in superseded and f.check_instance_id
     }

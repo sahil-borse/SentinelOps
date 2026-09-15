@@ -11,8 +11,14 @@ from __future__ import annotations
 from datetime import date
 
 from ..periods import (
-    Period, all_periods, due_date, period_from_label, periods_for,
+    Period, Window, all_periods, due_date, period_from_label, periods_for,
 )
+
+#: The eighteen months the corpus covers, January 2026 to the end of June 2027.
+#: The one place the corpus states its span. Everything that schedules, replays
+#: or reports over "the corpus window" derives from this, and the pipeline reads
+#: it back out of the database rather than importing it.
+CORPUS_WINDOW = Window(date(2026, 1, 1), date(2027, 6, 30))
 
 #: The simulated "today", and it sits **inside** the eighteen-month window
 #: rather than after it.
