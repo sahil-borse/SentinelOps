@@ -19,6 +19,17 @@ named metrics it rests on, validated against the ranked list and the metric
 catalogue the call was given. One claim that does not check out withholds the
 whole brief.
 
+**Every figure carries its scope.** Version 2 handed over the top of the
+ranking and a catalogue of portfolio-wide figures, and nothing else. Asked for
+a pattern among the rows it could see, the brief counted four of them in one
+category and cited the only category figure it had — which counted twenty-four
+findings across the whole window. The citation resolved and the claim was still
+wrong, and a real model given the same inputs would make the same pairing,
+because the right figure was not there to cite. Version 3 passes counts over
+exactly the rows supplied, named `listed_*`, beside the portfolio figures, with
+each block's scope stated, and the system prompt says a number must be cited
+from a metric of its own scope.
+
 **Advisory; changes no state.** Nothing in the pipeline reads a brief back.
 """
 
@@ -27,7 +38,7 @@ from __future__ import annotations
 from typing import Any
 
 #: Travels onto the brief.
-PROMPT_VERSION = "brief_v2"
+PROMPT_VERSION = "brief_v3"
 
 #: Three short sections for somebody with fifteen minutes. A ceiling on the
 #: generation is cost discipline that costs nothing.
@@ -40,11 +51,14 @@ TOP_N = 12
 #: A top priority's reason is one line, not a paragraph.
 REASON_MAX = 160
 
-BRIEF_SYSTEM_V2 = (
+#: The prefix that marks a metric counted over the supplied rows only.
+LISTED_PREFIX = "listed_"
+
+BRIEF_SYSTEM_V3 = (
     "You write a short prioritisation brief for a compliance team. You are given "
-    "a METRICS catalogue of named portfolio figures, and a list of open findings "
-    "already RANKED by a deterministic priority score. The ranking is not yours "
-    "to change.\n"
+    "METRICS in two scopes, and a list of open findings already RANKED by a "
+    "deterministic priority order: severity band first, then points. The ranking "
+    "is not yours to change.\n"
     "\n"
     "Return three sections.\n"
     "\n"
@@ -64,12 +78,20 @@ BRIEF_SYSTEM_V2 = (
     "\n"
     "CITATIONS. Every entry in emerging_patterns and recommended_focus carries "
     "finding_ids and metrics: the ids of findings it rests on, and the names of "
-    "metrics it rests on, copied exactly from the METRICS catalogue. At least "
-    "one of the two must be non-empty. A statement may mention a finding id in "
-    "square brackets, like [FND-3], only if that id is also in its finding_ids. "
-    "Never cite an id that is not in the ranked list or a metric that is not in "
-    "the catalogue. An uncited or unresolvable claim causes the whole brief to "
-    "be rejected.\n"
+    "metrics it rests on, copied exactly from the METRICS. At least one of the "
+    "two must be non-empty. A statement may mention a finding id in square "
+    "brackets, like [FND-3], only if that id is also in its finding_ids. Never "
+    "cite an id that is not in the ranked list or a metric that is not given. "
+    "An uncited or unresolvable claim causes the whole brief to be rejected.\n"
+    "\n"
+    "SCOPE OF A FIGURE. PORTFOLIO metrics describe every open finding, or the "
+    "whole corpus window where their description says so. LISTED metrics, whose "
+    f"names begin {LISTED_PREFIX}, count only the ranked findings you are shown. "
+    "A number in a statement must be the value of a metric that statement cites, "
+    "in the same scope: a count among the listed findings cites a "
+    f"{LISTED_PREFIX} metric, and a figure about the whole portfolio cites a "
+    "portfolio metric. Never state a count over the listed findings and cite a "
+    "portfolio metric for it, or the reverse.\n"
     "\n"
     "LIMITS. This brief is advisory. Do not assign or revise severities, set or "
     "move dates, change owners, or rewrite agreed action plans. If the portfolio "
@@ -93,6 +115,7 @@ def _claim_schema() -> dict[str, Any]:
 
 
 def brief_schema_v2() -> dict[str, Any]:
+    """Unchanged in version 3: the fix is to what the brief is given."""
     return {
         "type": "object",
         "additionalProperties": False,
@@ -123,33 +146,49 @@ def brief_schema_v2() -> dict[str, Any]:
 
 def _row_line(row: dict[str, Any]) -> str:
     return (
-        f"- {row['id']} | rank {row['rank']} | score {row['score']:g} | "
+        f"- {row['id']} | rank {row['rank']} | band {row['band_label']}, "
+        f"{row['score']:g} points | "
         f"{row['unit']} | {row['criticality']} | {row['severity']} | "
         f"{row['category']} | {row['timing_label']} | "
         f"{row['recurrence_links']} recurrence link(s) | chased {row['follow_ups']}x"
-        f"\n  why the score: {row['explain']}"
+        f"\n  why this position: {row['explain']}"
         f"\n  {row['description']}"
     )
 
 
-def brief_user_v2(
+def brief_user_v3(
     as_of: str,
-    metrics: dict[str, Any],
+    portfolio: dict[str, Any],
+    listed: dict[str, Any],
     ranked: list[dict[str, Any]],
     *,
     total_open: int,
 ) -> str:
-    """The catalogue, then the ranked list. Facts only; nothing to echo back."""
+    """Both metric scopes, each labelled, then the ranked list. Facts only."""
     lines = [
         "PORTFOLIO",
         f"as of: {as_of}",
         "",
-        "METRICS (cite by name, exactly as written)",
+        f"METRICS: PORTFOLIO (all {total_open} open findings, or the whole corpus "
+        f"window where noted; cite by name, exactly as written)",
+        "  open_in_unit:<unit> counts open findings in that unit, portfolio-wide",
+        "  recurring_category:<category> counts every finding ever raised in that "
+        "category, open or closed, across the whole window",
+        "  recurrence_links and the trend, closure and upcoming figures cover the "
+        "whole window",
     ]
-    lines += [f"{name} = {value}" for name, value in sorted(metrics.items())]
+    lines += [f"{name} = {value}" for name, value in sorted(portfolio.items())]
     lines += [
         "",
-        f"RANKED OPEN FINDINGS (deterministic priority score; top {len(ranked)} "
+        f"METRICS: LISTED (only the {len(ranked)} ranked findings below; cite by "
+        f"name, exactly as written)",
+        f"  {LISTED_PREFIX}in_unit:<unit>, {LISTED_PREFIX}category:<category> and "
+        f"{LISTED_PREFIX}band:<band> count those findings and no others",
+    ]
+    lines += [f"{name} = {value}" for name, value in sorted(listed.items())]
+    lines += [
+        "",
+        f"RANKED OPEN FINDINGS (deterministic priority order; top {len(ranked)} "
         f"of {total_open})",
     ]
     lines += [_row_line(row) for row in ranked] or ["(none open)"]

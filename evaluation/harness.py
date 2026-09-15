@@ -133,7 +133,8 @@ def run_pipeline(conn, corpus, *, client=None) -> dict[str, Any]:
 
 
 def evaluate(
-    *, seed: int | None = None, client=None, force_baseline: bool = False
+    *, seed: int | None = None, client=None, force_baseline: bool = False,
+    results_path: Path = RESULTS_PATH,
 ) -> tuple[Evaluation, str]:
     corpus = generate_corpus() if seed is None else generate_corpus(seed=seed)
     truth = metrics_module.load_ground_truth(corpus.year)
@@ -155,6 +156,8 @@ def evaluate(
         "tokens": metrics_module.token_usage(conn),
         "actions": metrics_module.action_closure(conn),
         "gap_detection": metrics_module.score_gap_detection(verdicts, truth_rows),
+        # Kept so two runs can be compared verdict by verdict, not only in total.
+        "first_verdicts": dict(sorted(verdicts.items())),
         "analytics": _section_eight(conn),
         "recurrence": metrics_module.score_recurrence(conn, truth),
         "chain": repositories(conn)["audit"].verify_chain(),
@@ -220,6 +223,6 @@ def evaluate(
         manual=manual,
         comparison=comparison,
     )
-    markdown = write_results(evaluation, corpus, truth, RESULTS_PATH)
+    markdown = write_results(evaluation, corpus, truth, results_path)
     conn.close()
     return evaluation, markdown

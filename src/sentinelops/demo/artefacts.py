@@ -114,12 +114,13 @@ def main(out_dir: Path | None = None) -> None:
 
     print(f"ARTEFACTS AT {today}  ({len(history)} cycles replayed, then today's on its own)")
 
-    _rule("PRIORITY SCORE - HOW THE RANKING IS BUILT")
+    _rule("PRIORITY ORDER - HOW THE RANKING IS BUILT")
     print(priority.formula_table())
 
-    _rule(f"RANKED OPEN FINDINGS AT {today} (top 8 of {len(brief.ranked)})")
-    for row in brief.ranked[:8]:
-        print(f"  {row['rank']:>2}. {row['id']:<40} {row['unit']:<16} {row['score']:>6g}")
+    _rule(f"RANKED OPEN FINDINGS AT {today} (top 10 of {len(brief.ranked)})")
+    for row in brief.ranked[:10]:
+        print(f"  {row['rank']:>2}. {row['id']:<40} {row['unit']:<12} "
+              f"{row['band_label']:<22} {row['score']:>4g} pts")
         print(f"      {row['explain']}")
 
     _rule("PRIORITISATION BRIEF")

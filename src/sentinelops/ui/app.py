@@ -560,8 +560,9 @@ with pattern[1]:
             st.markdown("**Top priorities**")
             for item in written.top_priorities:
                 st.markdown(
-                    f"- `{item['finding_id']}` · rank {item['rank']} · score "
-                    f"{item['score']:g} — {view.rich(item['reason'])}",
+                    f"- `{item['finding_id']}` · rank {item['rank']} · "
+                    f"{item['band']}, {item['score']:g} points — "
+                    f"{view.rich(item['reason'])}",
                     unsafe_allow_html=True,
                 )
             for title, claims in (("Emerging patterns", written.emerging_patterns),
@@ -591,14 +592,14 @@ with pattern[1]:
         st.markdown("**The ranking**")
         st.dataframe(
             [
-                {"Rank": r["rank"], "Finding": r["id"], "Score": r["score"],
-                 "Unit": r["unit"], "Severity": r["severity"],
+                {"Rank": r["rank"], "Finding": r["id"], "Band": r["band_label"],
+                 "Points": r["score"], "Unit": r["unit"],
                  "Timing": r["timing_label"]}
                 for r in written.ranked[:10]
             ],
             use_container_width=True, hide_index=True, height=240,
         )
-        with st.expander("How the score is built"):
+        with st.expander("How the order is built"):
             st.code(service.priority_formula(), language="text")
 
 st.divider()

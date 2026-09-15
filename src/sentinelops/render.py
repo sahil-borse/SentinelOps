@@ -92,14 +92,22 @@ def _cites_text(claim: dict[str, Any], metrics: dict[str, Any]) -> str:
     return "; ".join(parts)
 
 
+def _metrics_given(brief) -> str:
+    listed = sum(1 for name in brief.metrics if name.startswith("listed_"))
+    return (
+        f"{len(brief.metrics) - listed} section 8 metrics and {listed} counts over "
+        f"the listed rows"
+    )
+
+
 def brief_markdown(brief) -> str:
     rows = _rows_by_id(brief)
     out = [
         f"# Prioritisation brief — {brief.as_of}",
         "",
         f"Advisory; changes no state. {brief.model_calls} model call over the top "
-        f"{min(len(brief.ranked), 12)} of {len(brief.ranked)} open findings and "
-        f"{len(brief.metrics)} named section 8 metrics ({brief.prompt_version}).",
+        f"{min(len(brief.ranked), 12)} of {len(brief.ranked)} open findings, "
+        f"{_metrics_given(brief)} ({brief.prompt_version}).",
         "",
     ]
     if brief.withheld:
@@ -115,7 +123,7 @@ def brief_markdown(brief) -> str:
             row = rows[item["finding_id"]]
             out.append(
                 f"{item['rank']}. **{item['finding_id']}** — {row['unit']}, "
-                f"{row['severity']}, {row['timing_label']} (score {item['score']:g})"
+                f"{row['band_label']}, {row['timing_label']} ({item['score']:g} points)"
             )
             out.append(f"   {item['reason']}")
             out.append("")
@@ -131,14 +139,14 @@ def brief_markdown(brief) -> str:
             out.append("")
 
     out += ["## The ranking", "",
-            "| rank | finding | unit | severity | timing | score |",
+            "| rank | finding | unit | band | timing | points |",
             "|---:|---|---|---|---|---:|"]
     for row in brief.ranked[:10]:
         out.append(
-            f"| {row['rank']} | {row['id']} | {row['unit']} | {row['severity']} | "
+            f"| {row['rank']} | {row['id']} | {row['unit']} | {row['band_label']} | "
             f"{row['timing_label']} | {row['score']:g} |"
         )
-    out += ["", "## How the score is built", "", "```text",
+    out += ["", "## How the order is built", "", "```text",
             priority.formula_table(), "```", ""]
     return "\n".join(out)
 
@@ -150,8 +158,8 @@ def brief_html(brief) -> str:
         "<h1>Prioritisation brief</h1>",
         f"<div class=\"meta\">As of {_e(brief.as_of)} · advisory, changes no "
         f"state · {brief.model_calls} model call over the top "
-        f"{min(len(brief.ranked), 12)} of {len(brief.ranked)} open findings and "
-        f"{len(brief.metrics)} named metrics · {_e(brief.prompt_version)}</div>",
+        f"{min(len(brief.ranked), 12)} of {len(brief.ranked)} open findings, "
+        f"{_e(_metrics_given(brief))} · {_e(brief.prompt_version)}</div>",
         "</header>",
     ]
     if brief.withheld:
@@ -167,8 +175,8 @@ def brief_html(brief) -> str:
             body.append(
                 f"<li value=\"{item['rank']}\"><span class=\"chip\">"
                 f"{_e(item['finding_id'])}</span> {_e(row['unit'])} · "
-                f"{_e(row['severity'])} · {_e(row['timing_label'])} · score "
-                f"{item['score']:g}<span class=\"reason\">{_e(item['reason'])}</span>"
+                f"{_e(row['band_label'])} · {_e(row['timing_label'])} · "
+                f"{item['score']:g} points<span class=\"reason\">{_e(item['reason'])}</span>"
                 f"<span class=\"cites\">{_e(row['explain'])}</span></li>"
             )
         body.append("</ol>")
@@ -193,17 +201,17 @@ def brief_html(brief) -> str:
             body.append("</ul>")
 
     body.append("<h2>The ranking</h2><div class=\"table-wrap\"><table><tr><th>Rank</th>"
-                "<th>Finding</th><th>Unit</th><th>Severity</th><th>Timing</th>"
-                "<th>Score</th></tr>")
+                "<th>Finding</th><th>Unit</th><th>Band</th><th>Timing</th>"
+                "<th>Points</th></tr>")
     for row in brief.ranked[:10]:
         body.append(
             f"<tr><td class=\"num\">{row['rank']}</td><td><span class=\"chip\">"
             f"{_e(row['id'])}</span></td><td>{_e(row['unit'])}</td>"
-            f"<td>{_e(row['severity'])}</td><td>{_e(row['timing_label'])}</td>"
+            f"<td>{_e(row['band_label'])}</td><td>{_e(row['timing_label'])}</td>"
             f"<td class=\"num\">{row['score']:g}</td></tr>"
         )
     body.append("</table></div>")
-    body.append(f"<h2>How the score is built</h2><pre>{_e(priority.formula_table())}</pre>")
+    body.append(f"<h2>How the order is built</h2><pre>{_e(priority.formula_table())}</pre>")
     return page(f"Prioritisation brief {brief.as_of}", "\n".join(body))
 
 

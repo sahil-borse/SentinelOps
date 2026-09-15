@@ -25,9 +25,13 @@ def corpus():
 
 
 @pytest.fixture(scope="module")
-def evaluation():
-    result, _ = evaluate()
-    return result
+def evaluation_run():
+    return evaluate()
+
+
+@pytest.fixture(scope="module")
+def evaluation(evaluation_run):
+    return evaluation_run[0]
 
 
 # --- the harness is outside the package on purpose -------------------------
@@ -419,6 +423,58 @@ def test_results_md_names_the_corpus_it_was_measured_on(evaluation):
     text = (ROOT / "results.md").read_text(encoding="utf-8")
     assert evaluation.corpus_fingerprint[:16] in text
     assert str(evaluation.seed) in text
+
+
+def test_two_runs_on_the_same_seed_produce_byte_identical_results(
+    evaluation_run, tmp_path
+):
+    """Every figure in results.md is exact, or none of them is.
+
+    Slice 15z's date fix moved recall from 94.0% to 93.8%, and the first account
+    of it said recall was unchanged. A movement nobody can explain is either a
+    consequence or non-determinism, and the difference matters more than the
+    0.2 points: if two runs on one seed can differ, every figure is approximate.
+    Slice 16z diffed the runs instance by instance — three stale originals had
+    left the scored set — and this pins the other half.
+
+    The second run is a separate interpreter with its own string-hash seed, so
+    an order that depends on iterating a set of strings cannot agree by
+    accident, and nothing cached in this process can carry over. Compared
+    verdict by verdict as well as byte for byte.
+    """
+    import json
+    import os
+    import subprocess
+    import sys
+
+    result, markdown = evaluation_run
+    written, verdicts = tmp_path / "results.md", tmp_path / "verdicts.json"
+    script = (
+        "import json, sys\n"
+        "from pathlib import Path\n"
+        "from evaluation.harness import evaluate\n"
+        "result, _ = evaluate(results_path=Path(sys.argv[1]))\n"
+        "Path(sys.argv[2]).write_text(\n"
+        "    json.dumps(result.pipeline['first_verdicts']), encoding='utf-8')\n"
+    )
+    env = {
+        **os.environ,
+        "PYTHONHASHSEED": "12345",
+        "PYTHONPATH": os.pathsep.join(
+            filter(None, [str(ROOT), os.environ.get("PYTHONPATH")])
+        ),
+    }
+    subprocess.run(
+        [sys.executable, "-c", script, str(written), str(verdicts)],
+        cwd=ROOT, env=env, check=True, timeout=1800,
+    )
+
+    assert result.pipeline["first_verdicts"], "nothing to compare"
+    assert json.loads(verdicts.read_text(encoding="utf-8")) == (
+        result.pipeline["first_verdicts"]
+    )
+    assert written.read_text(encoding="utf-8") == markdown
+    assert written.read_bytes() == (ROOT / "results.md").read_bytes()
 
 
 # --- the guard that stops a plausible wrong answer ---------------------------

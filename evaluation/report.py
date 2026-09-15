@@ -10,11 +10,11 @@ somebody who was not in the room.
 
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from sentinelops.llm.providers.fake import MODEL as FAKE_MODEL
+from sentinelops.synth.calendar import SIMULATED_TODAY
 
 
 
@@ -142,10 +142,12 @@ def write_results(evaluation, corpus, truth: dict[str, Any], path: Path) -> str:
         f"> Runs used model `{result.model}`.\n"
     )
 
+    # No wall-clock stamp. Two runs on one seed must produce the same bytes, and
+    # the time of writing was the only thing in this file that would differ.
     document = f"""# SentinelOps — evaluation results
 
-Generated {datetime.now():%Y-%m-%d %H:%M} · corpus seed `{evaluation.seed}` ·
-fingerprint `{evaluation.corpus_fingerprint[:16]}` · {evaluation.cycles} scheduled cycles
+Corpus seed `{evaluation.seed}` · fingerprint `{evaluation.corpus_fingerprint[:16]}` ·
+{evaluation.cycles} scheduled cycles to the vantage point {SIMULATED_TODAY}
 
 {model_warning}
 ## Headline

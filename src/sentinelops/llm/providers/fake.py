@@ -469,8 +469,9 @@ def _canned_brief(facts: str) -> dict:
     if not rows:
         return empty
 
-    # id | rank | score | unit | criticality | severity | category | timing |
-    # recurrence | chased
+    # id | rank | band and points | unit | criticality | severity | category |
+    # timing | recurrence | chased. Its counts are over these rows, so it cites
+    # the listed_* figures that count the same rows.
     top = [
         {
             "finding_id": row[0],
@@ -489,7 +490,7 @@ def _canned_brief(facts: str) -> dict:
         by_category.setdefault(row[6], []).append(row[0])
     unit, unit_ids = max(by_unit.items(), key=lambda kv: (len(kv[1]), kv[0]))
     if len(unit_ids) > 1:
-        name = f"open_in_unit:{unit}"
+        name = f"listed_in_unit:{unit}"
         patterns.append({
             "statement": f"{unit} holds {len(unit_ids)} of the most urgent findings.",
             "finding_ids": unit_ids[:5],
@@ -498,7 +499,7 @@ def _canned_brief(facts: str) -> dict:
     repeated = {c: ids for c, ids in by_category.items() if len(ids) > 1}
     if repeated:
         category, category_ids = max(repeated.items(), key=lambda kv: (len(kv[1]), kv[0]))
-        name = f"recurring_category:{category}"
+        name = f"listed_category:{category}"
         patterns.append({
             "statement": (
                 f"The {category.replace('_', ' ')} category appears "

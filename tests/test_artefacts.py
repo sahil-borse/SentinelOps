@@ -17,7 +17,7 @@ def test_the_demo_shows_a_cited_brief_an_issued_report_and_one_cycles_cost(
     out = capsys.readouterr().out
 
     for heading in (
-        "PRIORITY SCORE - HOW THE RANKING IS BUILT",
+        "PRIORITY ORDER - HOW THE RANKING IS BUILT",
         "PRIORITISATION BRIEF",
         "AUDIT REPORT - ",
         "TOKEN COST OF ONE CYCLE",
@@ -27,7 +27,7 @@ def test_the_demo_shows_a_cited_brief_an_issued_report_and_one_cycles_cost(
 
     assert "brief: published" in out
     assert "## Top priorities" in out and "_cites:" in out
-    assert "priority score = severity x criticality" in out
+    assert "Findings are ordered by severity band" in out
 
     assert "report status: issued" in out
     # In order, not adjacent: severity suggestion (slice 14) is also on the trail.

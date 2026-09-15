@@ -38,12 +38,12 @@ from ..llm import TokenMeter, get_client
 from .. import analytics, priority
 from ..llm.parsing import validate
 from ..llm.prompts.brief import (
-    BRIEF_SYSTEM_V2,
+    BRIEF_SYSTEM_V3,
     MAX_TOKENS as BRIEF_MAX_TOKENS,
     REASON_MAX,
     TOP_N,
     brief_schema_v2,
-    brief_user_v2,
+    brief_user_v3,
 )
 from ..llm.prompts.brief import PROMPT_VERSION as BRIEF_PROMPT_VERSION
 from ..llm.prompts.recurrence import (
@@ -638,18 +638,23 @@ def prioritisation_brief(conn, as_of: date, *, client=None) -> Brief:
     repo = repositories(conn)
     people = directory.load(conn)
     ranked = priority.rank(repo, people, as_of)
-    metrics = analytics.named_metrics(analytics.portfolio(conn, as_of))
+    top = ranked[:TOP_N]
+    # Two scopes, kept apart in the prompt and together for validation and
+    # rendering: portfolio figures from section 8, and counts over exactly the
+    # rows the call is shown. A claim about those rows needs the second kind.
+    portfolio = analytics.named_metrics(analytics.portfolio(conn, as_of))
+    listed = priority.listed_metrics(top)
+    metrics = {**portfolio, **listed}
     brief = Brief(as_of=as_of, ranked=ranked, metrics=metrics)
     if not ranked:
         return brief
 
-    top = ranked[:TOP_N]
     request = LlmRequest(
-        system=BRIEF_SYSTEM_V2,
+        system=BRIEF_SYSTEM_V3,
         messages=[{
             "role": "user",
-            "content": brief_user_v2(
-                as_of.isoformat(), metrics, top, total_open=len(ranked)
+            "content": brief_user_v3(
+                as_of.isoformat(), portfolio, listed, top, total_open=len(ranked)
             ),
         }],
         response_schema=brief_schema_v2(),
@@ -680,6 +685,7 @@ def prioritisation_brief(conn, as_of: date, *, client=None) -> Brief:
                         "finding_id": entry["finding_id"],
                         "reason": str(entry["reason"]).strip(),
                         "rank": by_id[entry["finding_id"]]["rank"],
+                        "band": by_id[entry["finding_id"]]["band_label"],
                         "score": by_id[entry["finding_id"]]["score"],
                     }
                     for entry in payload["top_priorities"]

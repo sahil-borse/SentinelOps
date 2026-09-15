@@ -130,6 +130,63 @@ def test_top_priorities_keep_the_deterministic_order(ready):
     assert [item["finding_id"] for item in brief.top_priorities] == ids[:3]
 
 
+# --- every figure it is given carries its scope ---------------------------------------
+
+def test_the_brief_is_given_counts_over_exactly_the_rows_it_sees(ready):
+    """The defect: "appears 4 times among them", citing a figure that counted 24.
+
+    The brief saw twelve rows and a catalogue of portfolio-wide figures; the only
+    category figure it could cite counted every finding in the category across
+    the window. The fix is to the input: counts over the supplied rows, named so
+    their scope is in the name, beside the portfolio figures.
+    """
+    from collections import Counter
+
+    from sentinelops.llm.providers.fake import FakeModelClient
+
+    seen = {}
+
+    class Watcher:
+        def complete(self, request):
+            seen["system"] = request.system
+            seen["user"] = request.messages[0]["content"]
+            return FakeModelClient().complete(request)
+
+    brief = intelligence.prioritisation_brief(ready, AS_OF, client=Watcher())
+    top = brief.ranked[:TOP_N]
+    listed = {n: v for n, v in brief.metrics.items() if n.startswith("listed_")}
+
+    assert listed["listed_findings"] == len(top)
+    for key, prefix in (("unit", "listed_in_unit"), ("category", "listed_category"),
+                        ("band", "listed_band")):
+        expected = {f"{prefix}:{value}": count
+                    for value, count in Counter(row[key] for row in top).items()}
+        assert {n: v for n, v in listed.items() if n.startswith(prefix + ":")} == expected
+
+    portfolio = analytics.named_metrics(analytics.portfolio(ready, AS_OF))
+    assert {n: v for n, v in brief.metrics.items() if not n.startswith("listed_")} == (
+        portfolio
+    )
+    assert "METRICS: PORTFOLIO" in seen["user"] and "METRICS: LISTED" in seen["user"]
+    assert seen["user"].index("METRICS: LISTED") < seen["user"].index("listed_findings = ")
+    assert "SCOPE OF A FIGURE" in seen["system"]
+
+
+def test_a_number_in_a_statement_is_the_value_of_a_metric_it_cites(ready):
+    """With both scopes on offer, the count and its citation agree."""
+    import re
+
+    brief = intelligence.prioritisation_brief(ready, AS_OF)
+    assert brief.published, brief.withheld
+    counted = [c for c in brief.emerging_patterns + brief.recommended_focus
+               if re.search(r"\b\d+\b", c["statement"])]
+    assert counted, "the stub states counts; without one this checks nothing"
+    for claim in counted:
+        cited = {str(brief.metrics[name]) for name in claim["metrics"]}
+        for number in re.findall(r"\b\d+\b", claim["statement"]):
+            assert number in cited, (claim["statement"], claim["metrics"])
+
+
 # --- an unattributable claim is rejected -------------------------------------------
 
 def test_an_uncited_claim_is_rejected(ready):
@@ -242,7 +299,7 @@ def test_both_renderings_carry_every_citation_and_the_formula(ready):
             assert finding_id in text
         for name in brief.cited_metrics:
             assert name in text
-        assert "priority score = severity x criticality" in text
+        assert "Findings are ordered by severity band" in text
 
 
 def test_a_withheld_brief_says_so_without_quoting_what_was_rejected(ready):

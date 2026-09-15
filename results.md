@@ -1,7 +1,7 @@
 # SentinelOps — evaluation results
 
-Generated 2026-09-15 21:08 · corpus seed `20260831` ·
-fingerprint `d180c3f6c453433d` · 16 scheduled cycles
+Corpus seed `20260831` · fingerprint `d180c3f6c453433d` ·
+16 scheduled cycles to the vantage point 2027-04-15
 
 > **These runs used `FakeModelClient`, not a language model.** The stub is a
 > deterministic keyword heuristic; `tests/test_fake_accuracy.py` measures it at

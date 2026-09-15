@@ -1,4 +1,4 @@
-"""The priority score. Deterministic, documented, and printable.
+"""The priority order. Deterministic, documented, and printable in one sentence.
 
 The prioritisation brief (section 2, use 5) is advisory, and the order it reads
 must not come from the model: a model that ranked the queue would be making the
@@ -9,15 +9,30 @@ reminder policy is printable. A weight nobody can read is a weight nobody can
 challenge, and a formula written up in a slide deck drifts from the one that
 runs.
 
-    score = severity points x unit criticality
-          + timing points
-          + recurrence points
-          + follow-up points
+    Findings are ordered by severity band (Major, then Minor, then Observation;
+    a finding more than 365 days past its target counts one band higher), and
+    within a band by points = criticality + timing + recurrence + follow-ups.
 
-**Why severity is multiplied by criticality.** A Major against a
-business-critical unit is not a Major plus a little criticality; it is a larger
-exposure. The other three terms add, because they are evidence that a finding is
-not being dealt with rather than a measure of how bad it is.
+**Why severity gates rather than weighs.** Severity is the organising concept of
+audit practice: the auditor assigns it and the report is written around it. The
+first version multiplied severity by criticality and *added* timing, and timing
+ran to 120 points while severity x criticality spanned 7.5 to 60 — so lateness
+swamped severity, and a long-overdue Observation in Facilities outranked a Major
+in HR that was 48 days late. Retuning the weights would only move the crossover.
+A band removes it: no amount of lateness, recurrence or chasing lifts a finding
+past one of higher severity.
+
+**The one cross-band adjustment, and its bound.** A finding more than
+`AGEING_PROMOTION_DAYS` past its target ranks in the band one above its own —
+one band only, never above Major, and inside that band it competes on points
+like everything else. The threshold is a year because a year is a full annual
+audit cycle: the finding has outlived the audit that raised it and will meet the
+next one still open. Nothing near section 5's range comes close — escalation is
+a week past target — so in the normal course no finding crosses a band.
+
+**Criticality is points within a band.** Critical 30, high 20, medium 10, low 0:
+the spread the first version gave within the Major band, so findings raised as
+Major keep the order they had.
 
 **Nothing is guessed.** A finding with neither an assigned nor a suggested
 severity, a unit with no recognised criticality, or a recurrence link pointing at
@@ -34,15 +49,19 @@ from collections import Counter
 from datetime import date
 from typing import Any
 
-#: Auditor-assigned severity, or the model's suggestion where none is assigned.
-SEVERITY_POINTS: dict[str, int] = {"Major": 40, "Minor": 20, "Observation": 10}
+#: Highest first. Auditor-assigned severity, or the model's suggestion where
+#: none is assigned — labelled as such on the row.
+SEVERITY_BANDS: tuple[str, ...] = ("Major", "Minor", "Observation")
 
-#: The unit's criticality attribute scales the severity term.
-CRITICALITY_MULTIPLIER: dict[str, float] = {
-    "critical": 1.5,
-    "high": 1.25,
-    "medium": 1.0,
-    "low": 0.75,
+#: More than this many days past target: ranked one band higher, never more.
+AGEING_PROMOTION_DAYS = 365
+
+#: The unit's criticality, as points within a band.
+CRITICALITY_POINTS: dict[str, int] = {
+    "critical": 30,
+    "high": 20,
+    "medium": 10,
+    "low": 0,
 }
 
 #: Thirty points on the target date. One more for each day past it, up to ninety
@@ -60,6 +79,13 @@ RECURRENCE_LINK_CAP = 3
 #: section 5 increments on both.
 FOLLOW_UP_POINTS = 3
 FOLLOW_UP_CAP = 10
+
+FORMULA = (
+    f"Findings are ordered by severity band ({', then '.join(SEVERITY_BANDS)}; a "
+    f"finding more than {AGEING_PROMOTION_DAYS} days past its target counts one "
+    f"band higher), and within a band by points = criticality + timing + "
+    f"recurrence + follow-ups."
+)
 
 
 class UnscorableFinding(ValueError):
@@ -79,48 +105,71 @@ def timing_label(days_past_target: int) -> str:
     return "due today"
 
 
+def band_for(severity: str, days_past_target: int) -> str:
+    """The severity's own band, or one higher once it is more than a year late."""
+    position = SEVERITY_BANDS.index(severity)
+    if days_past_target > AGEING_PROMOTION_DAYS and position > 0:
+        position -= 1
+    return SEVERITY_BANDS[position]
+
+
+def order_key(row: dict[str, Any]) -> tuple:
+    """Band first, then points, then the earlier target date, then the id."""
+    return (SEVERITY_BANDS.index(row["band"]), -row["score"], row["target_date"],
+            row["id"])
+
+
 def score(
     finding, *, criticality: str | None, recurrence_links: int, as_of: date,
 ) -> dict[str, Any]:
-    """The five inputs, the four components and the total, for one finding."""
+    """The five inputs, the band, the four point components and their total."""
     severity = finding.severity or finding.suggested_severity
     identifier = getattr(finding, "id", "?")
-    if severity not in SEVERITY_POINTS:
+    if severity not in SEVERITY_BANDS:
         raise UnscorableFinding(
             f"{identifier} has no assigned or suggested severity to score"
         )
-    if criticality not in CRITICALITY_MULTIPLIER:
+    if criticality not in CRITICALITY_POINTS:
         raise UnscorableFinding(
             f"{identifier}: unit criticality {criticality!r} is not one of "
-            f"{sorted(CRITICALITY_MULTIPLIER)}"
+            f"{sorted(CRITICALITY_POINTS)}"
         )
     days = (as_of - finding.target_date).days
+    band = band_for(severity, days)
     components = {
-        "impact": round(
-            SEVERITY_POINTS[severity] * CRITICALITY_MULTIPLIER[criticality], 1
-        ),
+        "criticality": CRITICALITY_POINTS[criticality],
         "timing": timing_points(days),
         "recurrence": min(recurrence_links, RECURRENCE_LINK_CAP) * RECURRENCE_POINTS,
         "follow_ups": min(finding.follow_up_count, FOLLOW_UP_CAP) * FOLLOW_UP_POINTS,
     }
+    aged_up = band != severity
     return {
         "severity": severity,
         "severity_source": "assigned" if finding.severity else "suggested",
+        "band": band,
+        "aged_up": aged_up,
+        "band_label": f"{band} (raised {severity})" if aged_up else band,
         "criticality": criticality,
         "days_past_target": days,
         "timing_label": timing_label(days),
         "recurrence_links": recurrence_links,
         "follow_ups": finding.follow_up_count,
         "components": components,
-        "score": round(sum(components.values()), 1),
+        "score": sum(components.values()),
     }
 
 
 def explain(row: dict[str, Any]) -> str:
-    """The arithmetic behind one score, in one line."""
+    """The band and the arithmetic behind the points, in one line."""
     components = row["components"]
+    head = f"{row['band']} band"
+    if row["aged_up"]:
+        head += (
+            f" (raised {row['severity']}; more than {AGEING_PROMOTION_DAYS}d past "
+            f"target)"
+        )
     parts = [
-        f"{row['severity']} x {row['criticality']} {components['impact']:g}",
+        f"{row['criticality']} {components['criticality']}",
         f"{row['timing_label']} {components['timing']}",
     ]
     if components["recurrence"]:
@@ -129,11 +178,11 @@ def explain(row: dict[str, Any]) -> str:
         )
     if components["follow_ups"]:
         parts.append(f"chased {row['follow_ups']}x {components['follow_ups']}")
-    return " + ".join(parts) + f" = {row['score']:g}"
+    return f"{head}: " + " + ".join(parts) + f" = {row['score']:g}"
 
 
 def rank(repo, people, as_of: date) -> list[dict[str, Any]]:
-    """Every open finding, scored and ordered. Ties: earlier target date, then id."""
+    """Every open finding, banded, scored and ordered."""
     units = {u.id: u for u in repo["units"].list()}
     findings = repo["findings"].list()
     known = {f.id for f in findings}
@@ -176,28 +225,48 @@ def rank(repo, people, as_of: date) -> list[dict[str, Any]]:
         row["explain"] = explain(row)
         rows.append(row)
 
-    rows.sort(key=lambda r: (-r["score"], r["target_date"], r["id"]))
+    rows.sort(key=order_key)
     for position, row in enumerate(rows, start=1):
         row["rank"] = position
     return rows
 
 
+def listed_metrics(rows: list[dict[str, Any]]) -> dict[str, int]:
+    """Counts over exactly the ranked rows a brief is given, and nothing else.
+
+    The brief sees the top of the ranking, not all of it. A statement about
+    those rows — "four of them share a category" — needs a figure of the same
+    scope to cite, or it ends up resting on a portfolio-wide figure that counts
+    something else. Named `listed_*` so the scope is in the name.
+    """
+    metrics: dict[str, int] = {"listed_findings": len(rows)}
+    for prefix, key in (("listed_in_unit", "unit"), ("listed_category", "category"),
+                        ("listed_band", "band")):
+        for value, count in sorted(Counter(row[key] for row in rows).items()):
+            metrics[f"{prefix}:{value}"] = count
+    metrics["listed_past_target"] = sum(1 for r in rows if r["days_past_target"] > 0)
+    metrics["listed_with_recurrence_links"] = sum(
+        1 for r in rows if r["recurrence_links"]
+    )
+    return metrics
+
+
 def formula_table() -> str:
-    """The formula and every weight, printable. Read from the constants above."""
-    lowest = min(SEVERITY_POINTS.values()) * min(CRITICALITY_MULTIPLIER.values())
+    """The sentence and every weight, printable. Read from the constants above."""
     highest = (
-        max(SEVERITY_POINTS.values()) * max(CRITICALITY_MULTIPLIER.values())
-        + TIMING_AT_TARGET + TIMING_DAYS_PAST_CAP
-        + RECURRENCE_LINK_CAP * RECURRENCE_POINTS
-        + FOLLOW_UP_CAP * FOLLOW_UP_POINTS
+        max(CRITICALITY_POINTS.values()) + TIMING_AT_TARGET + TIMING_DAYS_PAST_CAP
+        + RECURRENCE_LINK_CAP * RECURRENCE_POINTS + FOLLOW_UP_CAP * FOLLOW_UP_POINTS
     )
     return "\n".join([
-        "priority score = severity x criticality + timing + recurrence + follow-ups",
+        FORMULA,
         "",
-        "  severity      "
-        + " / ".join(f"{name} {points}" for name, points in SEVERITY_POINTS.items()),
+        f"  bands         {' > '.join(SEVERITY_BANDS)}; points never lift a finding "
+        f"past a higher band",
+        f"  aged up       more than {AGEING_PROMOTION_DAYS} days past target (a full "
+        f"annual audit cycle): one band higher, never more, never above "
+        f"{SEVERITY_BANDS[0]}",
         "  criticality   "
-        + " / ".join(f"{name} x{m:g}" for name, m in CRITICALITY_MULTIPLIER.items()),
+        + " / ".join(f"{name} {points}" for name, points in CRITICALITY_POINTS.items()),
         f"  timing        {TIMING_AT_TARGET} on the target date; +1 a day past it, "
         f"up to {TIMING_DAYS_PAST_CAP} days; -1 a day before it, 0 from "
         f"{TIMING_AT_TARGET} days out",
@@ -206,6 +275,6 @@ def formula_table() -> str:
         f"  follow-ups    +{FOLLOW_UP_POINTS} per reminder or insufficient round, "
         f"up to {FOLLOW_UP_CAP}",
         "",
-        f"  range {lowest:g} to {highest:g}; ties go to the earlier target date, "
-        f"then the id",
+        f"  points within a band run 0 to {highest}; ties go to the earlier target "
+        f"date, then the id",
     ])
