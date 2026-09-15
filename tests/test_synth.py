@@ -288,7 +288,8 @@ def test_stale_evidence_predates_its_freshness_window(corpus):
             )
             if p.label == row["period"]
         )
-        age = (period.end - by_id[row["submission_id"]].submitted_at.date()).days
+        # The document is what is too old; since slice 15z it is filed on time.
+        age = (period.end - by_id[row["submission_id"]].document_date).days
         assert age > spec.freshness_days
 
 
@@ -379,8 +380,11 @@ def test_the_fourth_exception_leaves_the_corpus_untouched(corpus):
     # Section 10's eighteen-month window over eleven units. Pinned rather than
     # bounded because this test's whole job is "adding EXC-004 changed nothing
     # else" — a range would let a drift of a dozen submissions through.
-    assert len(corpus.submissions) == 795
-    assert len(corpus.truth_rows) == 803
+    # 795 and 803 before slice 15z stopped filing stale evidence before its
+    # period opened. Stale filings now land after the period closes, so a few
+    # remediation attempts that would fall after the vantage point are not filed.
+    assert len(corpus.submissions) == 786
+    assert len(corpus.truth_rows) == 794
 
     # the obligation it waives is genuinely unevidenced
     filed = {(s.control_id, s.auditable_unit_id, s.period) for s in corpus.submissions}
@@ -524,3 +528,55 @@ def test_every_submission_has_exactly_one_truth_row(corpus):
     rows = [r for r in corpus.truth_rows if r["submission_id"]]
     assert len(rows) == len(corpus.submissions)
     assert len({r["submission_id"] for r in rows}) == len(corpus.submissions)
+
+
+# --- evidence is never filed before the obligation it answers ----------------
+
+def test_no_evidence_is_filed_before_its_obligation_exists(corpus):
+    """An auditor would spot this in a second.
+
+    Stale evidence used to be produced by *filing* it before the freshness
+    window opened, so the corpus held 14 filings dated before their period began
+    — 2027-Q2 evidence lodged in November 2026, 2026 evidence lodged in 2025,
+    before the window itself — and 18 remediations dated from them.
+    """
+    from sentinelops.periods import period_from_label
+
+    early = [
+        (s.id, s.period, s.submitted_at.date().isoformat())
+        for s in corpus.submissions
+        if s.submitted_at.date() < period_from_label(s.period).start
+    ]
+    assert early == []
+
+
+def test_no_remediation_is_filed_before_what_it_answers(corpus):
+    by_id = {s.id: s for s in corpus.submissions}
+    backwards = [
+        row["submission_id"]
+        for row in corpus.truth_rows
+        if row.get("is_remediation") and row.get("remediates_submission_id")
+        and by_id[row["submission_id"]].submitted_at
+        <= by_id[row["remediates_submission_id"]].submitted_at
+    ]
+    assert backwards == []
+
+
+def test_stale_evidence_is_an_old_document_filed_on_time(corpus):
+    """Filed after the period closes and by its due date; the document is old."""
+    from sentinelops.periods import due_date, period_from_label
+
+    controls = {c.id: c for c in corpus.controls}
+    kinds = {r["submission_id"]: r["defect_kind"] for r in corpus.truth_rows}
+    stale = [
+        s for s in corpus.submissions
+        if not s.is_remediation and kinds.get(s.id) == "stale"
+    ]
+    assert stale
+    for submission in stale:
+        period = period_from_label(submission.period)
+        control = controls[submission.control_id]
+        assert period.end < submission.submitted_at.date() <= due_date(
+            period, control.grace_days
+        ), submission.id
+        assert (period.end - submission.document_date).days > control.freshness_days

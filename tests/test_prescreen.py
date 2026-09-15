@@ -637,3 +637,22 @@ def _stage(repo, period="2026-01", content="A report.", doc_type="report",
         _submission(f"SUB-{period}-{doc_type}", content, submitted,
                     doc_type=doc_type, period=period, control_id=control_id)
     )
+
+
+def test_freshness_reads_the_document_date_not_the_filing_date(conn):
+    """A document filed on time can still be too old to speak for its period."""
+    repo = _one_instance(conn, freshness_days=30)
+    repo["inbound"].add(
+        InboundSubmission(
+            id="SUB-OLD-DOC", control_id="CTRL-X", auditable_unit_id="AREA-A",
+            period="2026-01", kind="document", doc_type="report",
+            content="Last year's report, sent in again.",
+            content_hash="hash-of-an-old-report",
+            submitted_at=datetime(2026, 2, 5, 9, 0), author="A. Owner",
+            document_date=date(2025, 10, 1),
+        )
+    )
+    report = prescreen(conn, END_OF_STORY)
+    assert report.exits["stale_evidence"] == 1
+    finding = repo["assessments"].list(check_instance_id="CHK-X-A-2026-01")[0]
+    assert "dated 2025-10-01" in finding.rationale

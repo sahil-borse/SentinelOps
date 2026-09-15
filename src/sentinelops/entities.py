@@ -166,6 +166,16 @@ class Evidence:
     submitted_at: datetime
     author: str
     is_remediation: bool = False
+    #: The date the document itself carries, which is not the date it was filed.
+    #: S2's freshness rule reads this. Until slice 15z freshness was measured on
+    #: the filing date, so the corpus could only make evidence stale by filing it
+    #: early — before the obligation it answered existed. A document with no
+    #: separate date is dated the day it was filed.
+    document_date: date | None = None
+
+    def __post_init__(self) -> None:
+        if self.document_date is None:
+            self.document_date = self.submitted_at.date()
 
 
 @dataclass
@@ -190,6 +200,12 @@ class InboundSubmission:
     submitted_at: datetime
     author: str
     is_remediation: bool = False
+    #: The date the document carries; see `Evidence.document_date`.
+    document_date: date | None = None
+
+    def __post_init__(self) -> None:
+        if self.document_date is None:
+            self.document_date = self.submitted_at.date()
 
 
 #: Section 4: the auditor either accepts a round or asks for more. There is no

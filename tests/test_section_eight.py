@@ -351,12 +351,15 @@ def test_too_little_history_says_so():
     assert short["recent"]["direction"] == "insufficient_history"
 
 
-def test_the_corpus_trend_covers_the_window_and_carries_a_verdict(result):
+def test_the_corpus_trend_covers_the_window_and_carries_a_verdict(replayed, result):
     trend = result["trend"]
     start, end = result["window"]
-    assert start == date(2026, 1, 1), "read from the first finding, not assumed"
+    first = min(f.raised_at.date() for f in repositories(replayed)["findings"].list())
+    assert start == date(first.year, first.month, 1), (
+        "read from the first finding, not assumed"
+    )
     assert end == SIMULATED_TODAY
-    assert trend[0]["month"] == "2026-01"
+    assert trend[0]["month"] == f"{start:%Y-%m}"
     assert trend[-1]["month"] == f"{SIMULATED_TODAY:%Y-%m}"
     assert trend[-1]["as_of"] == SIMULATED_TODAY.isoformat(), (
         "today is mid-month; the rest of the month has not happened"

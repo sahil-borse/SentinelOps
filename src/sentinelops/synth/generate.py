@@ -32,6 +32,7 @@ from .documents import (
     STRUCTURED_QUALITIES,
     build_context,
     render,
+    document_date,
     submitted_at,
 )
 from .exceptions import COMPLIANCE_EXCEPTIONS, suppresses
@@ -219,7 +220,7 @@ class Corpus:
 
     def fingerprint(self) -> str:
         """A hash of everything that must not drift between runs."""
-        parts = [f"{s.id}|{s.content_hash}|{s.submitted_at.isoformat()}"
+        parts = [f"{s.id}|{s.content_hash}|{s.submitted_at.isoformat()}|{s.document_date}"
                  for s in self.submissions]
         parts += [repr(sorted(r.items())) for r in self.truth_rows]
         return hashlib.sha256("\n".join(parts).encode()).hexdigest()
@@ -402,6 +403,7 @@ def generate_corpus(
                     submitted_at=datetime.combine(filed, time(9, 30)),
                     author=_owner_name(area),
                     is_remediation=False,
+                    document_date=document_date(spec, period, quality, filed),
                 )
                 corpus.submissions.append(submission)
                 corpus.truth_rows.append(
@@ -423,7 +425,7 @@ def generate_corpus(
                     )
                 )
 
-    _add_remediations(corpus, rng)
+    _add_remediations(corpus)
     _add_programme(corpus)
     return corpus
 
@@ -490,12 +492,20 @@ def _recurrence_truth(corpus: Corpus) -> list[dict[str, Any]]:
     return groups
 
 
-def _add_remediations(corpus: Corpus, rng: Random) -> None:
+def _add_remediations(corpus: Corpus) -> None:
     """Follow-up evidence that fixes an earlier gap, so the loop can close.
 
     Submitted against the same control, area and period as the failure it
     answers — remediation resolves the check that failed, it does not open a
     new one.
+
+    **Each series draws from its own random stream**, seeded from the corpus seed
+    and the id of the submission it answers. These used to share the corpus
+    stream, and a series stops drawing when its next attempt would land after
+    "today" — so moving one series' dates silently re-rolled the filing gaps and
+    document text of every series after it. Fixing the dates of 14 stale filings
+    changed 64 unrelated remediation series that way before this was noticed. A
+    series now owns its randomness, and a change to one cannot move another.
     """
     specs_by_id = {s.id: s for s in CONTROL_SPECS}
     areas_by_id = {a.id: a for a in AUDITABLE_UNITS}
@@ -529,15 +539,20 @@ def _add_remediations(corpus: Corpus, rng: Random) -> None:
             attempts = ["near_miss", "compliant"]
         else:
             attempts = ["compliant"]
+        # This series' own randomness: a string seed is hashed deterministically,
+        # so the same corpus seed and original always give the same series.
+        series_rng = Random(f"{corpus.seed}:{original.id}")
         # Dated from the original submission, not from the period, so a late
         # filing still gets a remediation that lands after it.
-        filed = original.submitted_at.date() + timedelta(days=rng.randrange(14, 40))
+        filed = original.submitted_at.date() + timedelta(
+            days=series_rng.randrange(14, 40)
+        )
 
         for attempt, quality in enumerate(attempts, start=1):
-            evidence = render(spec, area, period, quality, rng)
+            evidence = render(spec, area, period, quality, series_rng)
             sequence += 1
             if attempt > 1:
-                filed = filed + timedelta(days=rng.randrange(10, 30))
+                filed = filed + timedelta(days=series_rng.randrange(10, 30))
             if filed > SIMULATED_TODAY:
                 # The next attempt would land after "today", so it has not
                 # happened yet. The finding stays open with the rounds it has —

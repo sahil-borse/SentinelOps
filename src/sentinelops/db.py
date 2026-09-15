@@ -31,7 +31,10 @@ CREATE TABLE IF NOT EXISTS evidence (
     id TEXT PRIMARY KEY, check_instance_id TEXT NOT NULL REFERENCES check_instances(id),
     kind TEXT NOT NULL, doc_type TEXT NOT NULL, content TEXT NOT NULL,
     content_hash TEXT NOT NULL, submitted_at TEXT NOT NULL, author TEXT NOT NULL,
-    is_remediation INTEGER NOT NULL);
+    is_remediation INTEGER NOT NULL,
+    -- the date the document carries, which S2's freshness rule reads; distinct
+    -- from when it was filed
+    document_date TEXT NOT NULL);
 -- The gap taxonomy, derived from the corpus rather than written in advance.
 CREATE TABLE IF NOT EXISTS gap_categories (
     id TEXT NOT NULL, label TEXT NOT NULL, definition TEXT NOT NULL,
@@ -63,7 +66,7 @@ CREATE TABLE IF NOT EXISTS inbound_submissions (
     auditable_unit_id TEXT NOT NULL REFERENCES auditable_units(id), period TEXT NOT NULL,
     kind TEXT NOT NULL, doc_type TEXT NOT NULL, content TEXT NOT NULL,
     content_hash TEXT NOT NULL, submitted_at TEXT NOT NULL, author TEXT NOT NULL,
-    is_remediation INTEGER NOT NULL);
+    is_remediation INTEGER NOT NULL, document_date TEXT NOT NULL);
 -- One review round on one finding. Section 4's loop, made durable: the owner
 -- files, the auditor answers, and an insufficient answer opens the next round
 -- rather than editing this one.

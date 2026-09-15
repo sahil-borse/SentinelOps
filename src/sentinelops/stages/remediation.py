@@ -108,7 +108,7 @@ def _prescreen_remediation(control, evidence: Evidence, period_end: date):
     if age > control.freshness_days:
         return (
             "gap",
-            f"The remediation is dated {evidence.submitted_at.date()}, {age} days "
+            f"The remediation is dated {evidence.document_date}, {age} days "
             f"before the period closed, outside the {control.freshness_days} day "
             "freshness window.",
             [], [f"Remediation evidence is {age} days old."],

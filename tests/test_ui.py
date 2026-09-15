@@ -467,11 +467,19 @@ def test_the_run_cycle_button_actually_runs_a_cycle(tmp_path, monkeypatch, app_c
     assert after > before, "pressing the button raised checks"
     assert any("checks raised" in element.value for element in app.success)
 
-    # the upload form and the re-assess control only exist once checks do
+    # the upload form exists once checks do
     labels = {button.label for button in app.button}
     assert "Submit evidence" in labels
-    assert "Re-assess this check now" in labels
     assert any(u.label == "Evidence file" for u in app.get("file_uploader"))
+
+    # The re-assess control lives in assessment detail, so it exists once a check
+    # has been *judged*. On the first cycle, 28 January, nothing can have been:
+    # no period has closed. This used to pass here only because stale evidence
+    # was filed in 2025, before its 2026 obligation existed, and judged at once.
+    # A month on, January's evidence has been filed and assessed.
+    next(b for b in app.button if b.label == "+1 month").click().run()
+    assert not app.exception, [str(e) for e in app.exception]
+    assert "Re-assess this check now" in {button.label for button in app.button}
 
 
 def test_the_verify_button_reports_on_screen(tmp_path, monkeypatch, app_cache_cleared):

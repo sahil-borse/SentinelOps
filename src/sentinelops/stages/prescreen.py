@@ -115,6 +115,7 @@ def bind_evidence(repo, instance: CheckInstance, submission) -> Evidence:
         submitted_at=submission.submitted_at,
         author=submission.author,
         is_remediation=submission.is_remediation,
+        document_date=submission.document_date,
     )
     repo["evidence"].add(evidence)
     repo["audit"].append(
@@ -129,18 +130,25 @@ def bind_evidence(repo, instance: CheckInstance, submission) -> Evidence:
             "doc_type": evidence.doc_type,
             "content_hash": evidence.content_hash[:12],
             "is_remediation": evidence.is_remediation,
+            # Both dates, so the trail shows an old document filed on time as
+            # exactly that, rather than as a filing made before the obligation.
+            "submitted_at": evidence.submitted_at.isoformat(),
+            "document_date": evidence.document_date.isoformat(),
         },
     )
     return evidence
 
 
 def evidence_age_days(evidence: Evidence, period_end: date) -> int:
-    """How old the evidence is relative to the period it claims to cover.
+    """How old the document is relative to the period it claims to cover.
 
     Measured against period close, not against today: a report written in
     January cannot speak for a December period however recently it was filed.
+    And measured on the date the document carries, not the date it was filed.
+    Until slice 15z this read the filing date, which is why the corpus could
+    only produce stale evidence by filing it before the obligation existed.
     """
-    return (period_end - evidence.submitted_at.date()).days
+    return (period_end - evidence.document_date).days
 
 
 def evaluate_thresholds(
@@ -445,7 +453,7 @@ def _run(conn, as_of: date) -> PrescreenReport:
                 repo, instance,
                 verdict="gap",
                 rationale=(
-                    f"Evidence is dated {evidence.submitted_at.date()}, {age} days"
+                    f"Evidence is dated {evidence.document_date}, {age} days"
                     f" before {instance.period} closed, exceeding the"
                     f" {control.freshness_days} day freshness window for"
                     f" {control.title}."

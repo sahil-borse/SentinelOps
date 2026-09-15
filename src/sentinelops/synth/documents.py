@@ -301,12 +301,31 @@ def render(
 def submitted_at(
     spec: ControlSpec, period: Period, quality: str, rng: Random
 ) -> date:
-    """When the evidence was filed.
+    """When the evidence was filed: after the period closes, by its due date.
 
-    Stale evidence is dated before the freshness window opens — the S2 rule
-    catches it without a model call. Everything else lands between period close
-    and the due date.
+    Every quality, stale included. Stale evidence used to be *filed* before the
+    freshness window opened, which put 14 filings — and the 18 remediations
+    dated from them — before the obligation they answered existed, two of them
+    before the corpus window even began. An auditor reading the trail would have
+    seen evidence for 2027-Q2 lodged in November 2026. What makes evidence stale
+    is an old document, not an early filing; see `document_date`.
+
+    The stale branch draws no random number, exactly as before, so every other
+    document in the corpus is generated identically.
+    """
+    if quality == "stale":
+        return period.end + timedelta(days=max(1, spec.grace_days // 2))
+    return period.end + timedelta(days=rng.randrange(1, max(2, spec.grace_days)))
+
+
+def document_date(spec: ControlSpec, period: Period, quality: str, filed: date) -> date:
+    """The date the document itself carries. S2's freshness rule reads this.
+
+    Stale evidence is a document dated before the freshness window opens, filed
+    on time — last year's risk register sent in for this year — which the S2
+    rule catches without a model call. Everything else is dated the day it was
+    filed.
     """
     if quality == "stale":
         return period.start - timedelta(days=spec.freshness_days + 30)
-    return period.end + timedelta(days=rng.randrange(1, max(2, spec.grace_days)))
+    return filed
