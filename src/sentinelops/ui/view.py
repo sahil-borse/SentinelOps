@@ -535,6 +535,20 @@ div[class*="st-key-alert"] { background: $n0; border: 1px solid $n200; border-le
 [data-testid="stDataFrame"] { border: 1px solid $n200; border-radius: 8px; }
 [data-testid="stExpander"] details { border-radius: 10px; border-color: $n200; background: $n0; }
 
+[data-testid="stSidebarNavLink"] { position: relative; }
+[data-testid="stSidebarNavLink"]::after { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: $accent; color: $n0; font-size: 11px; font-weight: 700; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; box-sizing: border-box; }
+[data-testid="stSidebar"][aria-expanded="false"] { transform: none !important; width: 64px !important; min-width: 64px !important; max-width: 64px !important; overflow: hidden; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarUserContent"] { display: none; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stNavSectionHeader"] { display: none; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavLink"] span[label] { display: none; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarContent"] { padding-left: 0; padding-right: 0; overflow-x: hidden; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavItems"] { padding-left: 0; padding-right: 0; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavLinkContainer"] { display: flex; justify-content: center; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavLink"] { width: 40px; height: 36px; margin: 2px auto; padding: 0; justify-content: center; border-radius: 9px; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavLink"] > span:first-child { margin: 0; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavLink"]::after { position: absolute; top: -3px; right: -7px; min-width: 17px; height: 17px; padding: 0 4px; font-size: 9.5px; line-height: 17px; border: 2px solid $n0; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"] { display: none; }
+
 .so-topbar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid $n200; }
 .so-brand { font-weight: 700; font-size: 15px; color: $n900; letter-spacing: -0.01em; }
 .so-brand span { font-weight: 500; color: $n500; margin-left: 8px; font-size: 13px; }
@@ -1766,3 +1780,64 @@ def inbox_preview(rows: list[dict[str, Any]], limit: int = 5) -> str:
             f'<span>{row["sent"]:%H:%M}</span></div></div>'
         )
     return "".join(items)
+
+
+# --- sidebar badges: something here is waiting for you ---------------------------------
+
+#: A badge stops counting here. Past it the number is not information.
+BADGE_CAP = 99
+
+
+def nav_badges(conn, actor: dict[str, Any], as_of: date) -> dict[str, int]:
+    """Per page, how many things on it are waiting for this identity.
+
+    Only what asks something of the person: rounds waiting for a decision,
+    findings past target, work falling due this week, unread messages. A badge
+    that counts things nobody has to act on teaches people to ignore badges.
+    """
+    from .. import analytics
+
+    repo = repositories(conn)
+    unread = sum(1 for row in inbox_rows(conn, actor["id"], as_of=as_of) if row["unread"])
+    if actor["role"] == "pa_infosec":
+        week = analytics.upcoming(repo, as_of, horizon_days=7)
+        return {
+            "screens/today.py": len(repo["rounds"].list(auditor_response="pending")),
+            "screens/findings.py": len(overdue_rows(conn, as_of)),
+            "screens/schedule.py": len(week["audits"]) + week["activity_total"],
+            "screens/inbox.py": unread,
+        }
+    if actor["role"] == "unit_owner":
+        mine = my_findings(conn, actor["id"], as_of)
+        return {
+            "screens/my_findings.py": sum(1 for row in mine if row["days_past"] >= 0),
+            "screens/owner_detail.py": sum(
+                1 for row in mine if row["latest_response"] == "insufficient"
+            ),
+            "screens/inbox.py": unread,
+        }
+    return {"screens/overview.py": len(escalated_rows(conn, as_of))}
+
+
+def nav_badge_css(role: str | None, counts: dict[str, int]) -> str:
+    """A count beside each sidebar page that has something waiting.
+
+    Streamlit's navigation renders page names as plain text, so the badge is a
+    pseudo-element keyed on each link's address: the default page is served at
+    the root, every other page at its script's name. Only digits ever reach the
+    stylesheet, so nothing a record contains can.
+    """
+    rules = []
+    for pages in pages_for(role).values():
+        for page in pages:
+            count = int(counts.get(page["path"], 0))
+            if count <= 0:
+                continue
+            text = f"{BADGE_CAP}+" if count > BADGE_CAP else str(count)
+            stem = page["path"].rsplit("/", 1)[-1].removesuffix(".py")
+            suffix = "/" if page["default"] else f"/{stem}"
+            rules.append(
+                f'[data-testid="stSidebarNavLink"][href$="{suffix}"]::after '
+                f'{{ content: "{text}"; }}'
+            )
+    return f"<style>{''.join(rules)}</style>" if rules else ""

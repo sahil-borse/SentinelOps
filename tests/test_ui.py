@@ -1046,8 +1046,10 @@ def test_close_and_accept_are_absent_for_a_unit_owner(tmp_path, monkeypatch,
     with pytest.raises(ValueError):
         app.switch_page("screens/today.py")
 
-    css = view.CSS.replace(" ", "")
-    assert "display:none" not in css and "visibility:hidden" not in css
+    # The stylesheet hides nothing except the collapsed sidebar's labels, so a
+    # control cannot be present-but-hidden on a page.
+    hidden = _hiding_selectors(view.CSS)
+    assert all(selector.startswith(COLLAPSED_SIDEBAR) for selector in hidden), hidden
 
 
 def test_my_findings_are_filtered_in_the_query_not_the_display(live, monkeypatch):
@@ -1239,6 +1241,70 @@ def test_only_the_recipient_marks_a_notification_read(live):
     assert service.mark_read(live, note["id"], by=auditor)[0]
     assert not next(r for r in view.inbox_rows(live, auditor)
                     if r["id"] == note["id"])["unread"]
+
+
+COLLAPSED_SIDEBAR = '[data-testid="stSidebar"][aria-expanded="false"]'
+
+
+def _hiding_selectors(css: str) -> list[str]:
+    """Every selector whose rule hides what it matches."""
+    selectors = []
+    for rule in css.split("}"):
+        if "{" not in rule:
+            continue
+        selector, body = rule.rsplit("{", 1)
+        compact = body.replace(" ", "")
+        if "display:none" in compact or "visibility:hidden" in compact:
+            selectors.append(selector.replace("<style>", "").strip())
+    return selectors
+
+
+# --- sidebar badges and the collapsed rail ---------------------------------------------
+
+def test_sidebar_badges_count_what_is_waiting_for_pa_infosec(live):
+    from sentinelops import analytics
+
+    today = service.current_date(live)
+    actor = service.acting_as(live, service.default_identity(live))
+    badges = view.nav_badges(live, actor, today)
+    repo = repositories(live)
+    week = analytics.upcoming(repo, today, horizon_days=7)
+
+    assert badges["screens/today.py"] == len(repo["rounds"].list(auditor_response="pending"))
+    assert badges["screens/findings.py"] == len(view.overdue_rows(live, today))
+    assert badges["screens/schedule.py"] == len(week["audits"]) + week["activity_total"]
+    assert badges["screens/inbox.py"] == sum(
+        1 for row in view.inbox_rows(live, actor["id"], as_of=today) if row["unread"]
+    )
+    assert set(badges) <= set(view.page_paths("pa_infosec"))
+
+
+def test_sidebar_badges_for_an_owner_stay_inside_their_own_pages(live):
+    today = service.current_date(live)
+    owner = next(c for c in view.identity_choices(live) if c["role"] == "unit_owner")
+    actor = service.acting_as(live, owner["id"])
+    badges = view.nav_badges(live, actor, today)
+    assert set(badges) <= set(view.page_paths("unit_owner"))
+    mine = view.my_findings(live, owner["id"], today)
+    assert badges["screens/my_findings.py"] == sum(1 for r in mine if r["days_past"] >= 0)
+
+
+def test_the_badge_stylesheet_keys_on_each_page_address_and_carries_only_digits():
+    css = view.nav_badge_css("pa_infosec", {
+        "screens/today.py": 3, "screens/findings.py": 0, "screens/inbox.py": 318,
+    })
+    assert '[href$="/"]::after { content: "3"; }' in css, "the landing page lives at the root"
+    assert '[href$="/inbox"]::after { content: "99+"; }' in css
+    assert "/findings" not in css, "nothing waiting, no badge"
+    assert re.findall(r'content: "([^"]*)"', css) == ["3", "99+"]
+    assert view.nav_badge_css("pa_infosec", {}) == ""
+
+
+def test_the_collapsed_sidebar_keeps_an_icon_rail_rather_than_vanishing():
+    assert COLLAPSED_SIDEBAR in view.CSS
+    rail = [rule for rule in view.CSS.split("}") if COLLAPSED_SIDEBAR in rule]
+    assert any("transform: none" in rule and "width: 64px" in rule for rule in rail)
+    assert any("stSidebarUserContent" in rule for rule in rail), "only the icons remain"
 
 
 def test_the_inbox_shows_nothing_sent_after_the_simulated_date(conn, corpus):

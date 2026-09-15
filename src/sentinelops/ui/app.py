@@ -68,6 +68,11 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
+# A count beside every page with something waiting for this identity.
+badges = view.nav_badge_css(actor["role"], view.nav_badges(conn, actor, today))
+if badges:
+    shell.html(badges)
+
 shell.html(view.topbar(actor, choices, today))
 ticked = st.session_state.pop("last_tick", None)
 if ticked:

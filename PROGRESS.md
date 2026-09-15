@@ -126,3 +126,13 @@
   - review buttons truncated at laptop width; they are now stacked
   - a clipped Late column
   - "1 activity / 2 activitys"
+
+  **Sidebar badges and an icon rail.** Each sidebar page with something waiting for the acting identity carries a count, from `view.nav_badges`:
+  - for PA/InfoSec, rounds awaiting review on Today, findings past target on Findings, work due this week on Schedule, and unread messages on Inbox
+  - for an owner, overdue findings on My findings, rounds returned insufficient on Finding detail, and unread messages on Inbox
+
+  Only counts that ask something of the person, capped at 99+. Streamlit's navigation renders page names as text, so each badge is a pseudo-element keyed on the link's address. Only digits ever reach that stylesheet.
+
+  Collapsing the sidebar now leaves a 64px rail of page icons, each with its badge, instead of hiding it entirely. The stylesheet's only hiding rules are the collapsed rail's, and the test that controls are absent rather than hidden now checks exactly that.
+
+  Dates past the simulated day are also kept out of the inbox. The seeded audit programme writes its closure notices ahead of the calendar, so at the demo's start the inbox opened on next year's messages.
