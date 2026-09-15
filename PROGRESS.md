@@ -112,3 +112,17 @@
   - The seeded audit programme exists from the calendar's first day. At the demo's start date, Findings shows findings raised months "later", and Portfolio counts them. That was already true of the old screen, and it reads oddly at 28 Jan 2026; the demo reads best replayed to the vantage point.
   - Management have only Overview, as specified, although escalation notifications are addressed to managers.
   - On Findings, "band" is read as the ageing band, because since slice 16z a severity band is the severity.
+
+  **Density pass, same slice.** The first cut read well but left a lot of empty space. Changes:
+  - The main column had a 1320px cap and sat centred, so at 1920px a third of the screen was margin. It now uses the full width.
+  - The type scale is set explicitly in `view.TYPE_SCALE`: 24px page title, 16px section, 14px body, 28px figures. Card, figure, badge and header spacing are tightened to match.
+  - Finding facts sit two to a row.
+  - Tables with a handful of rows size to them.
+  - On Today, the review queue puts each item's details beside its evidence rather than above it. The right column, which ended early, now also carries Coming up (audits and activities in the next seven days) and Latest notifications, each linking to its full page.
+  - Schedule's empty left column gains a due-by-unit chart.
+
+  Screenshots at 1440px and 1920px caught more:
+  - sidebar cards overlapping, from Streamlit's negative markdown margin
+  - review buttons truncated at laptop width; they are now stacked
+  - a clipped Late column
+  - "1 activity / 2 activitys"

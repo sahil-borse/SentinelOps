@@ -1100,9 +1100,8 @@ def test_the_stylesheet_uses_one_accent_one_neutral_scale_and_the_severity_set()
     for text, _, _ in view.SEVERITY_STYLE.values():
         assert text.upper() in colours
     assert "tabular-nums" in view.CSS
-    for size in ("font-size: 30px", "font-size: 22px", "font-size: 17px",
-                 "font-size: 15px"):
-        assert size in view.CSS
+    for size in view.TYPE_SCALE.values():
+        assert f"font-size: {size:g}px" in view.CSS, "the type scale is set explicitly"
 
 
 def test_dates_read_as_business_dates():

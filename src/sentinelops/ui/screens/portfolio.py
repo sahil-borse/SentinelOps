@@ -117,7 +117,7 @@ with by_kind:
         st.dataframe(
             [{"Audit kind": view.AUDIT_KIND_LABELS.get(k, view.humanise(k)), "Findings": v}
              for k, v in dimensions["by_audit_kind"].items()],
-            hide_index=True, width="stretch", height=300,
+            hide_index=True, width="stretch",
         )
 
 closure_col, effort_col = st.columns(2, gap="large")

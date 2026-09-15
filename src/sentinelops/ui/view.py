@@ -506,42 +506,54 @@ PALETTE: frozenset[str] = frozenset(
     | {colour for style in SEVERITY_STYLE.values() for colour in style}
 )
 
+#: The type scale, in pixels. Set explicitly rather than inherited, so the
+#: dashboard reads at the same density on any machine: a working screen for a
+#: compliance team, not a document.
+TYPE_SCALE: dict[str, float] = {
+    "title": 24, "section": 16, "body": 14, "small": 12.5, "figure": 28,
+}
+
 _CSS = Template("""
 <style>
 .stApp { background: $n50; color: $n900; font-variant-numeric: tabular-nums; }
-.stApp p, .stApp li, .stApp label { font-size: 15px; line-height: 1.55; }
-[data-testid="stMainBlockContainer"] { padding-top: 1.4rem; padding-bottom: 4rem; max-width: 1320px; }
-.stApp h1 { font-size: 30px; font-weight: 650; letter-spacing: -0.015em; line-height: 1.2; color: $n900; }
-.stApp h2 { font-size: 22px; font-weight: 620; letter-spacing: -0.01em; color: $n900; }
-.stApp h3 { font-size: 17px; font-weight: 620; letter-spacing: -0.005em; color: $n900; padding: 0 0 2px 0; }
-[data-testid="stCaptionContainer"] p { color: $n500; font-size: 13.5px; }
+.stApp p, .stApp li, .stApp label { font-size: ${body}px; line-height: 1.5; }
+[data-testid="stHeader"] { background: transparent; height: 2.25rem; }
+[data-testid="stMainBlockContainer"] { padding: 2.1rem 1.75rem 2.5rem 1.75rem; max-width: none; }
+[data-testid="stMain"] [data-testid="stVerticalBlock"] { gap: 0.7rem; }
 [data-testid="stSidebar"] { background: $n0; border-right: 1px solid $n200; }
-.stButton button, .stFormSubmitButton button, .stDownloadButton button { border-radius: 9px; font-weight: 600; }
-[data-testid="stSidebar"] [data-testid="stColumn"] .stButton button { padding-left: 4px; padding-right: 4px; font-size: 13.5px; white-space: nowrap; }
-div[class*="st-key-card"] { background: $n0; border: 1px solid $n200; border-radius: 14px; padding: 20px 22px 18px; box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04); }
-div[class*="st-key-alert"] { background: $n0; border: 1px solid $n200; border-left: 4px solid $n900; border-radius: 14px; padding: 20px 22px 18px; }
-[data-testid="stDataFrame"] { border: 1px solid $n200; border-radius: 10px; }
+[data-testid="stSidebarUserContent"] { padding-top: 0.25rem; padding-bottom: 1rem; }
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: 0.5rem; }
+.stApp h1 { font-size: ${title}px; font-weight: 650; letter-spacing: -0.015em; line-height: 1.2; color: $n900; }
+.stApp h2 { font-size: ${section}px; font-weight: 640; color: $n900; }
+.stApp h3 { font-size: ${section}px; font-weight: 620; letter-spacing: -0.005em; color: $n900; padding: 0; line-height: 1.35; }
+[data-testid="stCaptionContainer"] p { color: $n500; font-size: ${small}px; line-height: 1.45; }
+.stButton button, .stFormSubmitButton button, .stDownloadButton button { border-radius: 8px; font-weight: 600; min-height: 2.25rem; }
+[data-testid="stSidebar"] [data-testid="stColumn"] .stButton button { padding-left: 2px; padding-right: 2px; font-size: 13px; white-space: nowrap; }
+[data-testid="stPageLink"] a p { font-size: 13px; font-weight: 600; color: $accent; }
+div[class*="st-key-card"] { background: $n0; border: 1px solid $n200; border-radius: 12px; padding: 14px 16px 12px; box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04); }
+div[class*="st-key-alert"] { background: $n0; border: 1px solid $n200; border-left: 4px solid $n900; border-radius: 12px; padding: 14px 16px 12px; }
+[data-testid="stDataFrame"] { border: 1px solid $n200; border-radius: 8px; }
 [data-testid="stExpander"] details { border-radius: 10px; border-color: $n200; background: $n0; }
 
-.so-topbar { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; padding-bottom: 14px; margin-bottom: 18px; border-bottom: 1px solid $n200; }
-.so-brand { font-weight: 700; font-size: 16px; color: $n900; letter-spacing: -0.01em; }
-.so-brand span { font-weight: 500; color: $n500; margin-left: 10px; font-size: 14px; }
-.so-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.so-chip { background: $n0; border: 1px solid $n200; border-radius: 999px; padding: 5px 12px; font-size: 13px; color: $n700; }
+.so-topbar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid $n200; }
+.so-brand { font-weight: 700; font-size: 15px; color: $n900; letter-spacing: -0.01em; }
+.so-brand span { font-weight: 500; color: $n500; margin-left: 8px; font-size: 13px; }
+.so-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.so-chip { background: $n0; border: 1px solid $n200; border-radius: 999px; padding: 3px 10px; font-size: 12.5px; color: $n700; }
 .so-chip b { color: $n900; font-weight: 650; }
 
-.so-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: $accent; }
-.so-title { font-size: 30px; font-weight: 650; letter-spacing: -0.015em; color: $n900; margin: 4px 0 6px; line-height: 1.2; }
-.so-subtitle { font-size: 15px; color: $n500; margin-bottom: 20px; max-width: 78ch; line-height: 1.55; }
+.so-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: $accent; }
+.so-title { font-size: ${title}px; font-weight: 650; letter-spacing: -0.015em; color: $n900; margin: 1px 0 2px; line-height: 1.2; }
+.so-subtitle { font-size: 13.5px; color: $n500; margin-bottom: 12px; max-width: 110ch; line-height: 1.5; }
 
-.so-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 0 0 22px; }
-.so-figure { background: $n0; border: 1px solid $n200; border-radius: 14px; padding: 16px 18px 14px; }
+.so-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 0 0 12px; }
+.so-figure { background: $n0; border: 1px solid $n200; border-radius: 12px; padding: 11px 14px 10px; }
 .so-figure.so-attention { box-shadow: inset 0 3px 0 $accent; }
-.so-figure-label { font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: $n500; }
-.so-figure-value { font-size: 34px; font-weight: 650; color: $n900; line-height: 1.15; margin-top: 6px; }
-.so-figure-compare { font-size: 13.5px; color: $n500; margin-top: 4px; }
+.so-figure-label { font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: $n500; }
+.so-figure-value { font-size: ${figure}px; font-weight: 650; color: $n900; line-height: 1.15; margin-top: 3px; }
+.so-figure-compare { font-size: ${small}px; color: $n500; margin-top: 2px; }
 
-.so-badge { display: inline-flex; align-items: center; gap: 6px; padding: 1px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 650; line-height: 20px; border: 1px solid $n300; color: $n700; background: $n100; white-space: nowrap; vertical-align: middle; }
+.so-badge { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 650; line-height: 18px; border: 1px solid $n300; color: $n700; background: $n100; white-space: nowrap; vertical-align: middle; }
 .so-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .so-sev-major { color: $major; background: $major_fill; border-color: $major_border; }
 .so-sev-minor { color: $minor; background: $minor_fill; border-color: $minor_border; }
@@ -550,51 +562,57 @@ div[class*="st-key-alert"] { background: $n0; border: 1px solid $n200; border-le
 .so-outline { background: $n0; }
 .so-ink { color: $n0; background: $n900; border-color: $n900; }
 
-.so-empty { border: 1px dashed $n300; border-radius: 12px; padding: 18px 20px; background: $n50; }
-.so-empty-title { font-weight: 650; color: $n700; margin-bottom: 4px; }
-.so-empty-why { color: $n500; font-size: 14px; line-height: 1.55; }
+.so-empty { border: 1px dashed $n300; border-radius: 10px; padding: 11px 14px; background: $n50; }
+.so-empty-title { font-weight: 650; color: $n700; margin-bottom: 2px; font-size: 13.5px; }
+.so-empty-why { color: $n500; font-size: 13px; line-height: 1.5; }
 
-.so-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 12px 0 14px; font-size: 14px; }
+.so-facts { display: grid; grid-template-columns: max-content 1fr max-content 1fr; gap: 4px 16px; margin: 8px 0 10px; font-size: 13.5px; }
+@media (max-width: 1100px) { .so-facts { grid-template-columns: max-content 1fr; } }
 .so-facts dt { color: $n500; }
 .so-facts dd { margin: 0; color: $n900; }
-.so-quote { border-left: 3px solid $n300; background: $n50; padding: 10px 14px; border-radius: 0 10px 10px 0; color: $n700; margin: 8px 0; line-height: 1.55; font-size: 14.5px; }
-.so-quote-cite { display: block; font-size: 12.5px; color: $n500; margin-bottom: 4px; font-weight: 600; }
-.so-id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; color: $n900; background: $n100; border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
-.so-muted { color: $n500; font-size: 13.5px; }
-.so-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.so-finding-title { font-size: 17px; font-weight: 600; color: $n900; margin: 10px 0 2px; line-height: 1.45; }
-.so-item { padding: 12px 0; border-bottom: 1px solid $n100; }
+.so-quote { border-left: 3px solid $n300; background: $n50; padding: 7px 12px; border-radius: 0 8px 8px 0; color: $n700; margin: 6px 0; line-height: 1.5; font-size: 13.5px; }
+.so-quote-cite { display: block; font-size: 12px; color: $n500; margin-bottom: 2px; font-weight: 600; }
+.so-id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; color: $n900; background: $n100; border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+.so-muted { color: $n500; font-size: 12.5px; }
+.so-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.so-finding-title { font-size: 15px; font-weight: 600; color: $n900; margin: 6px 0 2px; line-height: 1.4; }
+.so-item { padding: 8px 0; border-bottom: 1px solid $n100; }
 .so-item:last-child { border-bottom: 0; }
-.so-priority { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid $n100; }
-.so-rank { flex: 0 0 28px; height: 28px; border-radius: 8px; background: $accent_fill; color: $accent; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-.so-reason { margin-top: 4px; color: $n700; }
-.so-cite { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; background: $n100; border: 1px solid $n200; border-radius: 6px; padding: 0 6px; margin: 4px 4px 0 0; display: inline-block; color: $n700; }
-.so-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.so-line { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.so-line-title { font-size: 13.5px; font-weight: 600; color: $n900; line-height: 1.4; margin-top: 2px; }
+.so-line-meta { text-align: right; font-size: 12.5px; color: $n700; white-space: nowrap; }
+.so-line-meta span { display: block; color: $n500; }
+.so-priority { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid $n100; }
+.so-rank { flex: 0 0 24px; height: 24px; border-radius: 7px; background: $accent_fill; color: $accent; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+.so-reason { margin-top: 2px; color: $n700; font-size: 13.5px; }
+.so-cite { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11.5px; background: $n100; border: 1px solid $n200; border-radius: 6px; padding: 0 6px; margin: 4px 4px 0 0; display: inline-block; color: $n700; }
+.so-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 900px) { .so-pair { grid-template-columns: 1fr; } }
-.so-label { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: $n500; margin: 0 0 6px; }
-.so-read { background: $n50; border: 1px solid $n200; border-radius: 12px; padding: 12px 14px; }
-.so-read-value { font-size: 20px; font-weight: 650; color: $n900; margin: 2px 0; }
-.so-advisory { background: $n50; border: 1px solid $n200; border-radius: 12px; padding: 12px 14px; margin: 10px 0; }
+.so-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: $n500; margin: 0 0 4px; }
+.so-read { background: $n50; border: 1px solid $n200; border-radius: 10px; padding: 10px 12px; }
+.so-read-value { font-size: 18px; font-weight: 650; color: $n900; margin: 1px 0; }
+.so-advisory { background: $n50; border: 1px solid $n200; border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
 
-.so-who { border: 1px solid $n200; border-radius: 12px; padding: 12px 14px; background: $n50; margin: 4px 0 6px; }
-.so-who-name { font-weight: 650; color: $n900; font-size: 15px; }
-.so-who-line { font-size: 13px; color: $n500; margin-top: 2px; line-height: 1.45; }
-.so-date { font-size: 19px; font-weight: 650; color: $n900; }
-.so-date-sub { font-size: 12.5px; color: $n500; margin-bottom: 8px; }
-.so-meter { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-.so-meter div { background: $n50; border: 1px solid $n200; border-radius: 10px; padding: 8px 10px; }
-.so-meter b { display: block; font-size: 16px; color: $n900; }
-.so-meter span { font-size: 11px; color: $n500; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 650; }
+.so-who { border: 1px solid $n200; border-radius: 10px; padding: 9px 12px; background: $n50; margin-bottom: 14px; }
+.so-who-name { font-weight: 650; color: $n900; font-size: 14px; }
+.so-who-line { font-size: 12.5px; color: $n500; margin-top: 2px; line-height: 1.4; }
+.so-date { font-size: 15px; font-weight: 650; color: $n900; }
+.so-date-sub { font-size: 12px; color: $n500; margin-bottom: 10px; line-height: 1.4; }
+.so-meter { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
+.so-meter div { background: $n50; border: 1px solid $n200; border-radius: 8px; padding: 6px 9px; }
+.so-meter b { display: block; font-size: 14px; color: $n900; }
+.so-meter span { font-size: 10.5px; color: $n500; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 650; }
 
 .pill { display: inline-block; padding: .05rem .5rem; border-radius: 10px; font-size: .78rem; font-weight: 600; }
-.stepnav { color: $n500; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; }
-.why { background: $n50; border-left: 4px solid $accent; padding: .8rem 1.1rem; margin: .4rem 0 .9rem 0; font-size: 15px; line-height: 1.6; border-radius: 0 10px 10px 0; }
-.outcome { background: $accent_fill; border-left: 4px solid $accent; padding: .8rem 1.1rem; margin: .5rem 0; line-height: 1.6; border-radius: 0 10px 10px 0; }
+.stepnav { color: $n500; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
+.why { background: $n50; border-left: 4px solid $accent; padding: .7rem 1rem; margin: .3rem 0 .7rem 0; font-size: ${body}px; line-height: 1.6; border-radius: 0 10px 10px 0; }
+.outcome { background: $accent_fill; border-left: 4px solid $accent; padding: .7rem 1rem; margin: .4rem 0; line-height: 1.6; border-radius: 0 10px 10px 0; }
 </style>
 """)
 
 CSS = _CSS.substitute(
     accent=ACCENT, accent_fill=ACCENT_FILL, accent_border=ACCENT_BORDER,
+    **{name: f"{size:g}" for name, size in TYPE_SCALE.items()},
     **{f"n{step}": colour for step, colour in NEUTRAL.items()},
     **{
         f"{name.lower()}{suffix}": style[index]
@@ -735,8 +753,9 @@ def month_label(month: str) -> str:
     return f"{date.fromisoformat(month + '-01'):%b %Y}"
 
 
-def plural(count: int, word: str) -> str:
-    return f"{count} {word}{'' if count == 1 else 's'}"
+def plural(count: int, word: str, many: str | None = None) -> str:
+    """`3 days`, `1 day`; `many` for the words that do not take an s."""
+    return f"{count} {word if count == 1 else (many or word + 's')}"
 
 
 def due_phrase(days_past_target: int) -> str:
@@ -1697,3 +1716,45 @@ def check_table(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
          "Timing": due_phrase(r["days_past"])}
         for r in rows
     ]
+
+
+def upcoming_list(upcoming: dict[str, Any], limit: int = 5) -> str:
+    """Audits and activities falling due soonest, as one short list."""
+    entries = [
+        (audit["planned"], 0,
+         audit["title"] or AUDIT_KIND_LABELS.get(audit["kind"], humanise(audit["kind"])),
+         AUDIT_KIND_LABELS.get(audit["kind"], humanise(audit["kind"]))
+         + " · " + ", ".join(audit["scope"]),
+         audit["days_away"])
+        for audit in upcoming["audits"]
+    ] + [
+        (activity["due"], 1, activity["control"],
+         "Evidence due · " + activity["unit"] + " · " + activity["period"],
+         activity["days_away"])
+        for activity in upcoming["activities"]
+    ]
+    entries.sort(key=lambda entry: (entry[0], entry[1], entry[2]))
+    rows = []
+    for day, _, title, where, days in entries[:limit]:
+        when = "today" if days == 0 else "in " + plural(days, "day")
+        rows.append(
+            f'<div class="so-item so-line"><div><div class="so-line-title">{_e(title)}</div>'
+            f'<div class="so-muted">{_e(where)}</div></div><div class="so-line-meta">'
+            f'{_e(fmt_date(day))}<span>{_e(when)}</span></div></div>'
+        )
+    return "".join(rows)
+
+
+def inbox_preview(rows: list[dict[str, Any]], limit: int = 5) -> str:
+    """The newest few notifications, for a side panel."""
+    items = []
+    for row in rows[:limit]:
+        unread = badge("Unread", "accent") if row["unread"] else ""
+        items.append(
+            f'<div class="so-item so-line"><div><div class="so-row">'
+            f'{badge(row["kind_label"], "outline")}{unread}</div>'
+            f'<div class="so-line-title">{_e(row["subject"])}</div></div>'
+            f'<div class="so-line-meta">{_e(fmt_date(row["sent"]))}'
+            f'<span>{row["sent"]:%H:%M}</span></div></div>'
+        )
+    return "".join(items)

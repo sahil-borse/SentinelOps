@@ -241,17 +241,18 @@ def finding_detail(conn, finding_id: str, *, actor: dict[str, Any], today: date,
 def brief_panel(conn, today: date) -> None:
     """The prioritisation brief: one model call over the deterministic ranking."""
     with st.container(key="card_brief"):
-        st.subheader("Prioritisation brief")
-        st.caption(
-            "The open findings are ranked deterministically — severity band first, "
-            "then points. One model call reads that ranking and the section 8 "
-            "figures and says where attention would go furthest. Advisory; it "
-            "changes nothing."
-        )
         written = st.session_state.get("brief")
         stale = written is not None and written.as_of != today
-        if st.button("Write the brief" if written is None or stale else "Write it again",
-                     key="write_brief"):
+        head, action = st.columns([4, 1.1], vertical_alignment="center")
+        with head:
+            st.subheader("Prioritisation brief")
+        st.caption(
+            "Open findings ranked deterministically — severity band first, then "
+            "points. One model call reads the ranking and the section 8 figures and "
+            "says where attention would go furthest. Advisory; it changes nothing."
+        )
+        if action.button("Write the brief" if written is None or stale else "Write it again",
+                         key="write_brief", width="stretch"):
             with st.spinner("Reading the ranking and the section 8 figures — one model call…"):
                 st.session_state["brief"] = service.brief(conn)
             st.rerun()

@@ -44,7 +44,6 @@ conn, today, actor = shell.context()
 
 with st.sidebar:
     shell.html(view.identity_card(actor, choices))
-    st.divider()
     shell.html(view.calendar_card(today))
     if st.button("Run cycle now", type="primary", width="stretch",
                  help="Runs S1 to S4 for the simulated date: raise checks, screen, "
@@ -60,7 +59,6 @@ with st.sidebar:
                             f"day's cycle…"):
                 st.session_state["last_tick"] = service.advance(conn, days).summary()
             st.rerun()
-    st.divider()
     shell.html(view.meter_card(view.token_meter(conn)))
     if st.button("Start over", width="stretch",
                  help="Deletes the demo database and seeds the corpus again."):

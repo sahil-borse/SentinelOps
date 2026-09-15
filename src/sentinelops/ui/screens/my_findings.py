@@ -28,7 +28,7 @@ with st.container(key="card_mine"):
     else:
         st.caption("Select a finding to file evidence or report progress on it.")
         picked = st.dataframe(
-            view.owner_table(rows), hide_index=True, width="stretch", height=340,
+            view.owner_table(rows), hide_index=True, width="stretch",
             key="mine_table", on_select="rerun", selection_mode="single-row",
             column_config={
                 "Severity": shell.SEVERITY_COLUMN,
