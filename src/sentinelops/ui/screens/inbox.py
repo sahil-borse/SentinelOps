@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from sentinelops.ui import service, shell, view
+from sentinelops.ui import shell, view
 
 conn, today, actor = shell.context()
 rows = view.inbox_rows(conn, actor["id"], as_of=today)
@@ -32,7 +32,12 @@ with st.container(key="card_inbox"):
     else:
         picked = st.dataframe(
             view.inbox_table(shown), hide_index=True, width="stretch", height=380,
-            key="inbox_table", on_select="rerun", selection_mode="single-row",
+            # Keyed on the filter and a counter the modal bumps on close, so a
+            # closed notification is not still selected — and reopened — on the
+            # next rerun, and a new filter never inherits an old row index.
+            key=f"inbox_table_{choice}_{st.session_state.get('inbox_table_version', 0)}",
+            # A click anywhere on a row opens it, not only on a checkbox.
+            on_select="rerun", selection_mode="single-cell",
             column_config={
                 "Status": st.column_config.MultiselectColumn(
                     "Status", options=["Unread", "Read"], color=["primary", "gray"],
@@ -45,20 +50,6 @@ with st.container(key="card_inbox"):
                 "Subject": st.column_config.TextColumn("Subject", width="large"),
             },
         )
-        if picked.selection.rows:
-            note = shown[picked.selection.rows[0]]
-            with st.container(key="card_note"):
-                shell.html(
-                    f'<div class="so-row">{view.badge(note["kind_label"], "outline")}'
-                    f'{view.badge("Unread", "accent") if note["unread"] else ""}'
-                    f'<span class="so-muted">{view.fmt_when(note["sent"])} · about '
-                    f'{note["about"]}</span></div>'
-                    f'<div class="so-finding-title">{view.rich(note["subject"])}</div>'
-                )
-                shell.html(view.quote(note["body"]))
-                if note["unread"] and st.button("Mark as read", key=f"read_{note['id']}"):
-                    ok, message = service.mark_read(conn, note["id"], by=actor["id"])
-                    st.session_state["inbox_result"] = {"ok": ok, "message": message}
-                    st.rerun()
-        else:
-            st.caption("Select a notification to read it in full.")
+        st.caption("Select a notification to read it in full.")
+        if picked.selection.cells:
+            shell.notification(conn, shown[picked.selection.cells[0][0]], actor)

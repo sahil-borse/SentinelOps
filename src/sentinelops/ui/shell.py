@@ -301,3 +301,25 @@ def brief_panel(conn, today: date) -> None:
             )
         with st.expander("How the order is built"):
             st.code(service.priority_formula(), language="text")
+
+
+@st.dialog("Notification", width="medium", dismissible=False)
+def notification(conn, note: dict[str, Any], actor: dict[str, Any]) -> None:
+    """One notification, read in a modal the page waits behind.
+
+    Not dismissible by clicking outside or pressing Escape: the reader closes it
+    or marks it read. Either way the inbox table's selection is reset, because a
+    selection that survived the rerun would open the same notification again.
+    """
+    html(view.notification_header(note))
+    html(view.quote(note["body"]))
+    close_col, read_col = st.columns(2)
+    if close_col.button("Close", width="stretch", key=f"close_{note['id']}"):
+        st.session_state["inbox_table_version"] = st.session_state.get("inbox_table_version", 0) + 1
+        st.rerun()
+    if note["unread"] and read_col.button("Mark as read", type="primary", width="stretch",
+                                          key=f"read_{note['id']}"):
+        ok, message = service.mark_read(conn, note["id"], by=actor["id"])
+        st.session_state["inbox_result"] = {"ok": ok, "message": message}
+        st.session_state["inbox_table_version"] = st.session_state.get("inbox_table_version", 0) + 1
+        st.rerun()

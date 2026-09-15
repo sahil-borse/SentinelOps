@@ -535,6 +535,9 @@ div[class*="st-key-alert"] { background: $n0; border: 1px solid $n200; border-le
 [data-testid="stDataFrame"] { border: 1px solid $n200; border-radius: 8px; }
 [data-testid="stExpander"] details { border-radius: 10px; border-color: $n200; background: $n0; }
 
+div[class*="st-key-inbox_table"] [data-testid="stDataFrame"], div[class*="st-key-inbox_table"] [data-testid="stDataFrame"] * { cursor: pointer !important; }
+[data-testid="stDialog"] { background: rgba(17, 24, 39, 0.45) !important; cursor: not-allowed; }
+[data-testid="stDialog"] > div { cursor: default; border-radius: 14px; box-shadow: 0 20px 48px rgba(17, 24, 39, 0.28); }
 [data-testid="stSidebarNavLink"] { position: relative; }
 [data-testid="stSidebarNavLink"]::after { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: $accent; color: $n0; font-size: 11px; font-weight: 700; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; box-sizing: border-box; }
 [data-testid="stSidebar"][aria-expanded="false"] { transform: none !important; width: 64px !important; min-width: 64px !important; max-width: 64px !important; overflow: hidden; }
@@ -1841,3 +1844,13 @@ def nav_badge_css(role: str | None, counts: dict[str, int]) -> str:
                 f'{{ content: "{text}"; }}'
             )
     return f"<style>{''.join(rules)}</style>" if rules else ""
+
+
+def notification_header(note: dict[str, Any]) -> str:
+    """Kind, read state, when and about what — then the subject."""
+    unread = badge("Unread", "accent") if note["unread"] else ""
+    return (
+        f'<div class="so-row">{badge(note["kind_label"], "outline")}{unread}'
+        f'<span class="so-muted">{_e(fmt_when(note["sent"]))} · about {_e(note["about"])}'
+        f'</span></div><div class="so-finding-title">{_e(note["subject"])}</div>'
+    )

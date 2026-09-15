@@ -135,4 +135,9 @@
 
   Collapsing the sidebar now leaves a 64px rail of page icons, each with its badge, instead of hiding it entirely. The stylesheet's only hiding rules are the collapsed rail's, and the test that controls are absent rather than hidden now checks exactly that.
 
+  **Notifications open in a modal.** On the inbox, a row shows a pointer on hover, and a click anywhere on it opens the notification in `st.dialog`. The page behind is darkened and shows a not-allowed cursor.
+  - The dialog is not dismissible from outside. Close, or Mark as read, is the way out.
+  - Both reset the table's selection. A selection that survived the rerun reopened the same notification: the table is keyed on the filter and a counter the dialog bumps.
+  - Checked in a browser: the pointer on hover, a cell click opening the modal, an outside click leaving it open, and Close keeping it closed.
+
   Dates past the simulated day are also kept out of the inbox. The seeded audit programme writes its closure notices ahead of the calendar, so at the demo's start the inbox opened on next year's messages.

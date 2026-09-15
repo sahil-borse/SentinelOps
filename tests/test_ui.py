@@ -1307,6 +1307,35 @@ def test_the_collapsed_sidebar_keeps_an_icon_rail_rather_than_vanishing():
     assert any("stSidebarUserContent" in rule for rule in rail), "only the icons remain"
 
 
+def test_a_notification_opens_in_a_modal_the_reader_must_close():
+    """Clicked, a notification opens over a darkened page that waits for it.
+
+    Not dismissible from outside, and closing resets the table's selection: a
+    selection that survived the rerun would open the same notification again.
+    """
+    shell_source = (SRC / "ui" / "shell.py").read_text(encoding="utf-8")
+    assert '@st.dialog("Notification"' in shell_source
+    assert "dismissible=False" in shell_source
+    assert shell_source.count('st.session_state["inbox_table_version"]') == 2, (
+        "both ways out of the modal reset the selection"
+    )
+    inbox = (SRC / "ui" / "screens" / "inbox.py").read_text(encoding="utf-8")
+    assert "shell.notification(" in inbox
+    assert 'selection_mode="single-cell"' in inbox, "a click anywhere on the row opens it"
+    assert "inbox_table_version" in inbox and "{choice}" in inbox
+    assert "cursor: pointer" in view.CSS
+
+
+def test_the_notification_header_names_the_kind_time_and_subject():
+    markup = view.notification_header({
+        "kind_label": "Escalation", "unread": True, "about": "FND-1",
+        "sent": datetime(2027, 4, 15, 8, 0), "subject": "<b>Level 2</b> escalation",
+    })
+    assert ">Escalation<" in markup and ">Unread<" in markup
+    assert "15 Apr 2027, 08:00" in markup and "FND-1" in markup
+    assert "&lt;b&gt;Level 2&lt;/b&gt;" in markup, "the subject is escaped"
+
+
 def test_the_inbox_shows_nothing_sent_after_the_simulated_date(conn, corpus):
     """At the demo's start date the seeded audit programme has already written
     closure notices dated next year. A morning screen must not open on them."""
