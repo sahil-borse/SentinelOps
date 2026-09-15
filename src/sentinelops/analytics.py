@@ -612,3 +612,53 @@ def portfolio(conn, as_of: date, *, window: tuple[date, date] | None = None):
         "closure": closure_performance(repo),
         "upcoming": upcoming(repo, as_of),
     }
+
+
+def named_metrics(p: dict[str, Any]) -> dict[str, Any]:
+    """Section 8's figures under stable names a brief can cite.
+
+    The prioritisation brief may rest a claim on a finding or on a figure, and a
+    figure is only checkable if it has a name that resolves to one value. This is
+    that catalogue: every name here comes straight out of `portfolio`, nothing is
+    recomputed, and a claim citing a name that is not in it is rejected.
+    """
+    ovc = p["open_vs_closed"]
+    ageing = p["overdue_ageing"]
+    buckets = ageing["buckets"]
+    effort = p["effort"]
+    recurring_block = p["recurring"]
+    verdict = p["trend_verdict"]
+    overall_closure = p["closure"]["overall"]
+    mix = p["severity_mix"]["overall"]
+    metrics: dict[str, Any] = {
+        "open_findings": ovc["open"],
+        "closed_findings": ovc["closed"],
+        "closed_pct": ovc["closed_pct"],
+        "overdue_total": ageing["total"],
+        "overdue_0_30": buckets["0-30"],
+        "overdue_31_60": buckets["31-60"],
+        "overdue_61_90": buckets["61-90"],
+        "overdue_90_plus": buckets["90+"],
+        "oldest_overdue_days": ageing["oldest_days"],
+        "severity_major": mix.get("Major", 0),
+        "severity_minor": mix.get("Minor", 0),
+        "severity_observation": mix.get("Observation", 0),
+        "recurring_categories": recurring_block["by_gap_category"]["count"],
+        "recurring_categories_audit_track": recurring_block["audit_track"]["count"],
+        "recurrence_links": recurring_block["count"],
+        "multi_round_findings": effort["multi_round"],
+        "multi_reminder_findings": effort["multi_reminder"],
+        "worst_rounds": effort["worst_rounds"],
+        "trend_direction": verdict["direction"],
+        "trend_slope_per_month": verdict.get("slope_per_month"),
+        "trend_recent_direction": verdict.get("recent", {}).get("direction"),
+        "closure_mean_days": overall_closure["mean_days"],
+        "closure_median_days": overall_closure["median_days"],
+        "upcoming_audits": len(p["upcoming"]["audits"]),
+        "upcoming_activities": p["upcoming"]["activity_total"],
+    }
+    for unit, row in ovc["by_unit"].items():
+        metrics[f"open_in_unit:{unit}"] = row["open"]
+    for category, row in recurring_block["by_gap_category"]["categories"].items():
+        metrics[f"recurring_category:{category}"] = row["findings"]
+    return metrics

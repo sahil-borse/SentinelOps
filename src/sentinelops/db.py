@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS scheduled_audits (
     auditor_identity TEXT NOT NULL REFERENCES identities(id),
     planned_date TEXT NOT NULL, title TEXT NOT NULL, conducted_date TEXT,
     status TEXT NOT NULL, report_generated_at TEXT, report_issued_at TEXT,
-    report_issued_by TEXT NOT NULL);
+    report_issued_by TEXT NOT NULL, report_confirmed_at TEXT,
+    report_confirmed_by TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS inbound_submissions (
     id TEXT PRIMARY KEY, control_id TEXT NOT NULL REFERENCES control_definitions(id),
     auditable_unit_id TEXT NOT NULL REFERENCES auditable_units(id), period TEXT NOT NULL,

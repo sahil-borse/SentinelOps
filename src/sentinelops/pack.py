@@ -69,6 +69,7 @@ KNOWN_ACTIONS = (
     "finding_closed",
     "audit_conducted",
     "audit_report_generated",
+    "audit_report_confirmed",
     "audit_report_issued",
     "evidence_round_opened",
     "evidence_round_accepted",

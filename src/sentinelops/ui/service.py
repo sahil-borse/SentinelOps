@@ -372,6 +372,13 @@ def brief(conn, *, client=None):
     return intel.prioritisation_brief(conn, current_date(conn), client=client)
 
 
+def priority_formula() -> str:
+    """The priority score's formula and weights, for the brief panel to print."""
+    from .. import priority
+
+    return priority.formula_table()
+
+
 def recurrence_links(conn) -> list[dict[str, Any]]:
     """Findings that resemble something raised earlier somewhere else."""
     from .. import directory

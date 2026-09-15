@@ -547,40 +547,59 @@ with pattern[0]:
 with pattern[1]:
     st.markdown("**Prioritisation brief**")
     st.caption(
-        "One model call per cycle over the ranked findings and the metrics. "
-        "Advisory — it changes no state."
+        "A deterministic priority score ranks the open findings; one model call "
+        "per cycle reads that ranking and the section 8 metrics. Advisory — it "
+        "changes no state."
     )
     if st.button("Write the brief", use_container_width=True):
         st.session_state["brief"] = service.brief(conn)
         st.rerun()
     written = st.session_state.get("brief")
     if written is not None:
-        if written.text:
-            st.markdown(view.rich(written.text), unsafe_allow_html=True)
+        if written.published:
+            st.markdown("**Top priorities**")
+            for item in written.top_priorities:
+                st.markdown(
+                    f"- `{item['finding_id']}` · rank {item['rank']} · score "
+                    f"{item['score']:g} — {view.rich(item['reason'])}",
+                    unsafe_allow_html=True,
+                )
+            for title, claims in (("Emerging patterns", written.emerging_patterns),
+                                  ("Recommended focus", written.recommended_focus)):
+                if not claims:
+                    continue
+                st.markdown(f"**{title}**")
+                for claim in claims:
+                    cites = ", ".join(
+                        [f"`{i}`" for i in claim["finding_ids"]]
+                        + [f"`{m}` = {written.metrics.get(m)}" for m in claim["metrics"]]
+                    )
+                    st.markdown(
+                        f"- {view.rich(claim['statement'])}  \n"
+                        f"  <span class='meta'>cites {cites}</span>",
+                        unsafe_allow_html=True,
+                    )
             st.caption(
-                f"as of {written.as_of} · cites {len(written.cited)} finding(s) "
-                f"· {written.model_calls} model call"
+                f"as of {written.as_of} · {written.model_calls} model call · "
+                f"{written.input_tokens + written.output_tokens:,} tokens"
             )
-        else:
+        elif written.withheld:
             st.warning(
-                "The drafted brief made a statement it could not attribute to a "
-                "finding, so it was withheld. The metrics below are unaffected — "
-                "none of them came from the model."
+                "The drafted brief made a claim that did not check out, so it was "
+                "withheld: " + "; ".join(written.withheld[:3])
             )
-        metrics = written.metrics
-        st.markdown(
-            f"<span class='meta'>open {metrics['open']} · closed "
-            f"{metrics['closed']} · overdue {metrics['overdue']} · escalated "
-            f"{metrics['escalated']} · needing more than one round "
-            f"{metrics['multi_round']}</span>",
-            unsafe_allow_html=True,
-        )
-        st.markdown("**Ageing of open findings**")
+        st.markdown("**The ranking**")
         st.dataframe(
-            [{"Bucket (days past target)": k, "Findings": v}
-             for k, v in metrics["ageing"].items()],
-            use_container_width=True, hide_index=True, height=180,
+            [
+                {"Rank": r["rank"], "Finding": r["id"], "Score": r["score"],
+                 "Unit": r["unit"], "Severity": r["severity"],
+                 "Timing": r["timing_label"]}
+                for r in written.ranked[:10]
+            ],
+            use_container_width=True, hide_index=True, height=240,
         )
+        with st.expander("How the score is built"):
+            st.code(service.priority_formula(), language="text")
 
 st.divider()
 

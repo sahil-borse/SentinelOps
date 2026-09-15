@@ -443,58 +443,87 @@ def _canned_recurrence(prompt: str) -> dict:
 
 
 def _canned_brief(facts: str) -> dict:
-    """A brief that cites, because an uncited one is withheld."""
-    rows = []
-    lines = facts.splitlines()
-    for index, line in enumerate(lines):
+    """A brief that cites, because an uncited one is withheld.
+
+    Reads the metric catalogue and the ranked rows it was given and cites only
+    those. It picks the top of the ranking and describes it in the row's own
+    terms; a real model reads the descriptions and says why they matter.
+    """
+    metrics: dict[str, str] = {}
+    rows: list[list[str]] = []
+    section = ""
+    for line in facts.splitlines():
         stripped = line.strip()
-        if not stripped.startswith("- ") or " | " not in stripped:
+        if stripped.startswith("METRICS"):
+            section = "metrics"
             continue
-        parts = [p.strip() for p in stripped[2:].split(" | ")]
-        rows.append(parts)
+        if stripped.startswith("RANKED"):
+            section = "ranked"
+            continue
+        if section == "metrics" and " = " in stripped:
+            name, value = stripped.split(" = ", 1)
+            metrics[name.strip()] = value.strip()
+        elif section == "ranked" and stripped.startswith("- ") and " | " in stripped:
+            rows.append([part.strip() for part in stripped[2:].split(" | ")])
+    empty = {"top_priorities": [], "emerging_patterns": [], "recommended_focus": []}
     if not rows:
-        return {"brief": "", "cited_finding_ids": []}
+        return empty
 
-    def field(row, marker, default=""):
-        for part in row:
-            if marker in part:
-                return part
-        return default
-
-    ids = [r[0] for r in rows]
-    top = ids[:3]
-    open_count = next(
-        (l.split(":", 1)[1].strip() for l in lines if l.startswith("open findings:")),
-        str(len(ids)),
-    )
-    units = {}
-    for row in rows:
-        if len(row) > 1:
-            units.setdefault(row[1], []).append(row[0])
-    heaviest, heaviest_ids = max(units.items(), key=lambda kv: len(kv[1]))
-
-    sentences = [
-        f"{open_count} findings are open at this cycle.",
-        f"The most urgent are [{', '.join(top)}], which combine the highest "
-        f"severities with the longest time past target.",
+    # id | rank | score | unit | criticality | severity | category | timing |
+    # recurrence | chased
+    top = [
+        {
+            "finding_id": row[0],
+            "reason": (
+                f"{row[5]} in {row[3]} ({row[4]} unit), {row[7]}, {row[9]}"
+            )[:150],
+        }
+        for row in rows[:3]
     ]
-    if len(heaviest_ids) > 1:
-        sentences.append(
-            f"{heaviest} carries {len(heaviest_ids)} of the ranked items "
-            f"[{', '.join(heaviest_ids[:4])}], which is where attention would "
-            f"go furthest."
-        )
-    chased = [r[0] for r in rows if "chased" in " ".join(r) and
-              any(p.startswith("chased") and not p.endswith("0x") for p in r)]
-    if chased:
-        sentences.append(
-            f"Several have been chased more than once without evidence arriving "
-            f"[{', '.join(chased[:4])}]."
-        )
-    return {
-        "brief": " ".join(sentences),
-        "cited_finding_ids": ids,
-    }
+
+    patterns = []
+    by_unit: dict[str, list[str]] = {}
+    by_category: dict[str, list[str]] = {}
+    for row in rows:
+        by_unit.setdefault(row[3], []).append(row[0])
+        by_category.setdefault(row[6], []).append(row[0])
+    unit, unit_ids = max(by_unit.items(), key=lambda kv: (len(kv[1]), kv[0]))
+    if len(unit_ids) > 1:
+        name = f"open_in_unit:{unit}"
+        patterns.append({
+            "statement": f"{unit} holds {len(unit_ids)} of the most urgent findings.",
+            "finding_ids": unit_ids[:5],
+            "metrics": [name] if name in metrics else [],
+        })
+    repeated = {c: ids for c, ids in by_category.items() if len(ids) > 1}
+    if repeated:
+        category, category_ids = max(repeated.items(), key=lambda kv: (len(kv[1]), kv[0]))
+        name = f"recurring_category:{category}"
+        patterns.append({
+            "statement": (
+                f"The {category.replace('_', ' ')} category appears "
+                f"{len(category_ids)} times among them."
+            ),
+            "finding_ids": category_ids[:5],
+            "metrics": [name] if name in metrics else [],
+        })
+
+    focus = [{
+        "statement": f"Start with the top of the ranking, in {rows[0][3]}.",
+        "finding_ids": [rows[0][0]],
+        "metrics": [n for n in ("overdue_90_plus", "oldest_overdue_days") if n in metrics],
+    }]
+    if "trend_direction" in metrics:
+        focus.append({
+            "statement": (
+                f"Open findings are {metrics['trend_direction']} across the "
+                f"window, so new intake deserves as much attention as the backlog."
+            ),
+            "finding_ids": [],
+            "metrics": ["trend_direction"]
+            + (["trend_recent_direction"] if "trend_recent_direction" in metrics else []),
+        })
+    return {"top_priorities": top, "emerging_patterns": patterns, "recommended_focus": focus}
 
 
 def _canned_report(facts: str) -> dict:
@@ -526,7 +555,7 @@ def _canned_report(facts: str) -> dict:
 
     sentences = [
         f"This audit raised {len(rows)} finding(s) across "
-        f"{len(by_unit)} auditable unit(s)."
+        f"{len(by_unit)} auditable unit(s) {cite([r['id'] for r in rows])}."
     ]
     major = by_severity.get("Major", [])
     if major:

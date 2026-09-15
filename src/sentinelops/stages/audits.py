@@ -48,9 +48,10 @@ MAX_TOKENS = 500
 #: `[FND-1]` or `[FND-1, FND-2]`.
 CITATION = re.compile(r"\[([A-Z0-9\-]+(?:\s*,\s*[A-Z0-9\-]+)*)\]")
 
-#: A sentence with no ids is allowed only if it is arithmetic or a date — those
-#: come from the facts we handed the model and are checkable directly.
-BARE_SENTENCE_OK = re.compile(r"\d")
+#: No sentence goes uncited, counts included. Section 6 says every statement
+#: cites finding ids, and until slice 16 a sentence containing a digit was
+#: exempt, on the grounds that a count came from facts the model was given —
+#: which is exactly the sentence that is wrong when the model miscounts.
 
 
 @dataclass
@@ -70,6 +71,10 @@ class AuditReport:
     generated_at: datetime | None = None
     issued_at: datetime | None = None
     issued_by: str = ""
+    confirmed_at: datetime | None = None
+    confirmed_by: str = ""
+    #: Why the drafted summary was not published, when it was not.
+    summary_withheld: list[str] = field(default_factory=list)
 
     @property
     def by_severity(self) -> dict[str, int]:
@@ -334,8 +339,29 @@ def _structured(repo, people: Directory, audit: ScheduledAudit) -> list[dict[str
             "description": finding.description,
             "agreed_action_plan": finding.agreed_action_plan,
             "recurrence_of": list(finding.recurrence_of),
+            "recurrence_links": [
+                _prior_link(repo, units, prior_id)
+                for prior_id in finding.recurrence_of
+            ],
         })
     return rows
+
+
+def _prior_link(repo, units, prior_id: str) -> dict[str, Any]:
+    """The earlier finding a recurrence points at, as a reader needs it."""
+    prior = repo["findings"].get(prior_id)
+    if prior is None:
+        raise ValueError(
+            f"a recurrence link points at {prior_id}, which does not exist; a "
+            f"report must not carry a reference nobody can follow"
+        )
+    unit = units.get(prior.auditable_unit_id)
+    return {
+        "id": prior.id,
+        "unit": unit.name if unit else prior.auditable_unit_id,
+        "raised_on": prior.raised_at.date().isoformat(),
+        "category": prior.gap_category,
+    }
 
 
 def uncited_claims(summary: str, known_ids: set[str]) -> list[str]:
@@ -356,8 +382,7 @@ def uncited_claims(summary: str, known_ids: set[str]) -> list[str]:
             part.strip() for group in cited for part in group.split(",")
         }
         if not ids:
-            if not BARE_SENTENCE_OK.search(sentence):
-                problems.append(f"uncited: {sentence}")
+            problems.append(f"uncited: {sentence}")
             continue
         unknown = ids - known_ids
         if unknown:
@@ -392,6 +417,11 @@ def generate_report(
             f"{audit_id} is {audit.status}; a report is generated at audit "
             "completion, not before"
         )
+    if audit.report_issued_at is not None:
+        raise ValueError(
+            f"{audit_id}'s report was already issued on "
+            f"{audit.report_issued_at:%Y-%m-%d}; an issued report is not regenerated"
+        )
 
     # Section 1: severity is finalised after the audit completes and
     # communicated in the report. So the suggestion is produced here, beside the
@@ -422,16 +452,22 @@ def generate_report(
     )
 
     if findings:
-        summary, cited, model = _draft_summary(
+        summary, cited, model, withheld = _draft_summary(
             conn, audit, findings, people, client=client
         )
         report.summary = summary
         report.summary_cited = cited
         report.model = model
+        report.summary_withheld = withheld
 
     with simulated_clock(datetime.combine(as_of, time(16, 0))):
         report.generated_at = datetime.combine(as_of, time(16, 0))
         audit.report_generated_at = report.generated_at
+        # A confirmation is of the version the auditor read. A new version
+        # needs a new one.
+        confirmation_cleared = audit.report_confirmed_at is not None
+        audit.report_confirmed_at = None
+        audit.report_confirmed_by = ""
         repo["audits"].update(audit)
         repo["audit"].append(
             actor="ai" if report.summary else "system",
@@ -442,6 +478,8 @@ def generate_report(
                 "by_severity": report.by_severity,
                 "summary_present": bool(report.summary),
                 "summary_cited": report.summary_cited,
+                "summary_withheld_reasons": report.summary_withheld,
+                "confirmation_cleared": confirmation_cleared,
                 "prompt_version": PROMPT_VERSION,
                 "model": report.model,
             },
@@ -453,7 +491,7 @@ def generate_report(
 def _draft_summary(
     conn, audit: ScheduledAudit, findings: list[dict[str, Any]],
     people: Directory, *, client=None,
-) -> tuple[str, list[str], str]:
+) -> tuple[str, list[str], str, list[str]]:
     """One call. Citations verified against the findings this audit raised."""
     from ..llm import TokenMeter
 
@@ -488,24 +526,86 @@ def _draft_summary(
     payload = response.parsed_json or {}
     summary = str(payload.get("summary", "")).strip()
     if not summary:
-        return "", [], response.model
+        return "", [], response.model, ["the model returned no summary"]
 
     known = {f["id"] for f in findings}
     problems = uncited_claims(summary, known)
     if problems:
         # Not published. Section 6 says every statement cites finding ids, and a
         # summary that does not is worse than none: it reads as authoritative.
-        return "", [], response.model
+        # The reasons travel onto the trail rather than vanishing.
+        return "", [], response.model, problems
     cited = sorted({
         part.strip()
         for group in CITATION.findall(summary)
         for part in group.split(",")
     })
-    return summary, cited, response.model
+    return summary, cited, response.model, []
+
+
+def confirm(
+    conn, audit_id: str, *, by: str, as_of: date, remarks: str = "",
+) -> ScheduledAudit:
+    """The auditor reads the generated report and confirms it. Only then can it issue.
+
+    Section 6: the auditor reviews and confirms before the report is issued.
+    Until slice 16 that was a phrase in `issue`'s trail entry — "reviewed and
+    confirmed by the auditor before issue" — written whether or not anybody had
+    read a word. Confirmation is now its own act, by the auditor who conducted
+    the audit, against the version they read: regenerating clears it.
+    """
+    from ..repositories import repositories, simulated_clock
+
+    repo = repositories(conn)
+    people = directory.load(conn)
+    audit = repo["audits"].get(audit_id)
+    if audit is None:
+        raise ValueError(f"no such audit: {audit_id}")
+
+    identity = people.get(by)
+    authority.require(identity.role if identity else None, "conduct_audit",
+                      actor_id=by)
+    if by != audit.auditor_identity:
+        raise authority.AuthorityError(
+            f"{people.name(by)} did not conduct {audit_id}; its report is "
+            f"confirmed by the auditor who did, {people.name(audit.auditor_identity)}"
+        )
+    if audit.report_generated_at is None:
+        raise ValueError(
+            f"{audit_id} has no generated report to confirm; generate it first"
+        )
+    if audit.report_issued_at is not None:
+        raise ValueError(
+            f"{audit_id}'s report was issued on {audit.report_issued_at:%Y-%m-%d}; "
+            f"there is nothing left to confirm"
+        )
+    stamp = datetime.combine(as_of, time(16, 30))
+    if stamp < audit.report_generated_at:
+        raise ValueError(
+            f"{audit_id}'s report was generated at {audit.report_generated_at}; it "
+            f"cannot be confirmed before it existed"
+        )
+
+    with simulated_clock(stamp):
+        audit.report_confirmed_at = stamp
+        audit.report_confirmed_by = by
+        repo["audits"].update(audit)
+        repo["audit"].append(
+            actor="user", owner=people.name(by), action="audit_report_confirmed",
+            entity_type="ScheduledAudit", entity_id=audit.id,
+            detail={
+                "confirmed_by": by,
+                "confirmed_at": stamp.isoformat(),
+                "report_generated_at": audit.report_generated_at.isoformat(),
+                "remarks": remarks,
+            },
+            actor_identity=by,
+        )
+    return audit
 
 
 def issue(conn, audit_id: str, *, by: str, as_of: date) -> ScheduledAudit:
-    """A human confirms and issues. The model drafted; it does not sign."""
+    """Issue a confirmed report. A PA/InfoSec act, never before confirmation."""
     from ..repositories import repositories, simulated_clock
 
     repo = repositories(conn)
@@ -521,9 +621,25 @@ def issue(conn, audit_id: str, *, by: str, as_of: date) -> ScheduledAudit:
     identity = people.get(by)
     authority.require(identity.role if identity else None, "conduct_audit",
                       actor_id=by)
+    if audit.report_confirmed_at is None:
+        raise ValueError(
+            f"{audit_id}'s report has not been confirmed by its auditor, "
+            f"{people.name(audit.auditor_identity)}; it cannot be issued"
+        )
+    if audit.report_issued_at is not None:
+        raise ValueError(
+            f"{audit_id}'s report was already issued on "
+            f"{audit.report_issued_at:%Y-%m-%d}"
+        )
+    stamp = datetime.combine(as_of, time(17, 0))
+    if stamp < audit.report_confirmed_at:
+        raise ValueError(
+            f"{audit_id}'s report cannot be issued before it was confirmed "
+            f"({audit.report_confirmed_at})"
+        )
 
-    with simulated_clock(datetime.combine(as_of, time(17, 0))):
-        audit.report_issued_at = datetime.combine(as_of, time(17, 0))
+    with simulated_clock(stamp):
+        audit.report_issued_at = stamp
         audit.report_issued_by = by
         repo["audits"].update(audit)
         repo["audit"].append(
@@ -531,25 +647,82 @@ def issue(conn, audit_id: str, *, by: str, as_of: date) -> ScheduledAudit:
             entity_type="ScheduledAudit", entity_id=audit.id,
             detail={
                 "issued_by": by,
-                "issued_at": audit.report_issued_at.isoformat(),
+                "issued_at": stamp.isoformat(),
+                "confirmed_by": audit.report_confirmed_by,
+                "confirmed_at": audit.report_confirmed_at.isoformat(),
                 "findings": len(findings_of(repo, audit.id)),
-                "note": "reviewed and confirmed by the auditor before issue",
             },
             actor_identity=by,
         )
     return audit
 
 
+def attach_status(conn, report: AuditReport) -> AuditReport:
+    """Copy confirmation and issue off the record onto a report being rendered."""
+    from ..repositories import repositories
+
+    audit = repositories(conn)["audits"].get(report.audit_id)
+    people = directory.load(conn)
+    report.confirmed_at = audit.report_confirmed_at
+    report.confirmed_by = (
+        people.name(audit.report_confirmed_by) if audit.report_confirmed_by else ""
+    )
+    report.issued_at = audit.report_issued_at
+    report.issued_by = (
+        people.name(audit.report_issued_by) if audit.report_issued_by else ""
+    )
+    return report
+
+
+def report_status(report: AuditReport) -> str:
+    if report.issued_at:
+        return (
+            f"issued {report.issued_at:%Y-%m-%d} by {report.issued_by}, after "
+            f"confirmation by {report.confirmed_by} on {report.confirmed_at:%Y-%m-%d}"
+        )
+    if report.confirmed_at:
+        return (
+            f"confirmed by {report.confirmed_by} on {report.confirmed_at:%Y-%m-%d}; "
+            f"not yet issued"
+        )
+    return "draft, awaiting confirmation by the auditor"
+
+
+def report_heading(report: AuditReport) -> str:
+    """The title, prefixed with the audit kind only when it does not already say it."""
+    kind = report.kind.replace("_", " ").title()
+    title = report.title or report.audit_id
+    return title if kind.lower() in title.lower() else f"{kind} — {title}"
+
+
+def summary_note(report: AuditReport) -> str:
+    """What the summary is, stated from the record rather than assumed.
+
+    Until slice 16 this read "for the auditor to review and confirm before issue"
+    on a report already issued, and the HTML page said "reviewed and confirmed"
+    on one nobody had confirmed. It now says which of the three it is.
+    """
+    base = (
+        f"Drafted from the findings below ({report.prompt_version}); every "
+        f"statement cites the findings it rests on."
+    )
+    if report.issued_at:
+        return f"{base} Confirmed by {report.confirmed_by} before issue."
+    if report.confirmed_at:
+        return f"{base} Confirmed by {report.confirmed_by}; not yet issued."
+    return f"{base} A draft: the auditor reviews and confirms it before it can issue."
+
+
 def render_markdown(report: AuditReport) -> str:
     """The report as it is emailed today, minus the emailing.
 
     Deterministic. The only generated text in here is `report.summary`, and it
-    is clearly labelled as a draft for the auditor to confirm.
+    is labelled with whether the auditor has confirmed it.
     """
     out: list[str] = []
     add = out.append
     kind = report.kind.replace("_", " ").title()
-    add(f"# {kind} — {report.title or report.audit_id}")
+    add(f"# {report_heading(report)}")
     add("")
     add(f"| | |")
     add(f"|---|---|")
@@ -560,6 +733,7 @@ def render_markdown(report: AuditReport) -> str:
     add(f"| Planned | {report.planned_date} |")
     add(f"| Conducted | {report.conducted_date or 'not recorded'} |")
     add(f"| Findings | {len(report.findings)} |")
+    add(f"| Report | {report_status(report)} |")
     add("")
 
     if report.summary:
@@ -567,11 +741,7 @@ def render_markdown(report: AuditReport) -> str:
         add("")
         add(report.summary)
         add("")
-        add(
-            f"_Drafted from the findings below ({report.prompt_version}); every "
-            f"statement cites the findings it rests on. For the auditor to "
-            f"review and confirm before issue._"
-        )
+        add(f"_{summary_note(report)}_")
     else:
         add("## Summary")
         add("")
@@ -580,6 +750,15 @@ def render_markdown(report: AuditReport) -> str:
             "findings, or the drafted summary made a statement it could not "
             "attribute to one and was withheld._"
         )
+        if report.summary_withheld:
+            # Counted, not quoted: repeating a rejected statement here would
+            # publish the claim that was withheld. The reasons are on the trail.
+            add("")
+            add(
+                f"_{len(report.summary_withheld)} problem(s) were found with the "
+                f"draft. They are recorded on the audit trail rather than quoted "
+                f"here, because quoting a rejected statement would publish it._"
+            )
     add("")
 
     add("## Findings")
@@ -603,10 +782,14 @@ def render_markdown(report: AuditReport) -> str:
         if finding["agreed_action_plan"]:
             add(f"**Agreed action plan.** {finding['agreed_action_plan']}")
             add("")
-        if finding["recurrence_of"]:
+        if finding["recurrence_links"]:
             add(
-                f"**Recurrence.** This resembles "
-                f"{', '.join(finding['recurrence_of'])} raised previously."
+                "**Recurrence.** Resembles "
+                + "; ".join(
+                    f"{link['id']} ({link['unit']}, raised {link['raised_on']})"
+                    for link in finding["recurrence_links"]
+                )
+                + "."
             )
             add("")
     return "\n".join(out) + "\n"

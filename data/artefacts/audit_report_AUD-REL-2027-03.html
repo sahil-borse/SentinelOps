@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Release Audit report AUD-REL-2027-03</title><style>
+:root { color-scheme: light; }
+body { margin: 0; background: #f6f5f1; color: #1d2330;
+       font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 36px 20px 64px; }
+header { border-bottom: 2px solid #1d2330; padding-bottom: 14px; margin-bottom: 26px; }
+h1 { font-size: 26px; line-height: 1.2; margin: 0 0 6px; }
+h2 { font-size: 17px; margin: 30px 0 10px; letter-spacing: .01em; }
+h3 { font-size: 15px; margin: 22px 0 6px; }
+.meta { color: #5b6272; font-size: 13px; }
+.chip { display: inline-block; font: 12px/1.6 ui-monospace, Consolas, monospace;
+        background: #e8e6de; border-radius: 4px; padding: 0 6px; margin: 0 2px 2px 0;
+        white-space: nowrap; }
+.metric { background: #e3ebf5; }
+ol, ul { padding-left: 22px; }
+li { margin: 0 0 12px; }
+.reason { display: block; margin-top: 2px; }
+.cites { display: block; color: #5b6272; font-size: 13px; margin-top: 3px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 6px 0 12px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #dcd9cf;
+         vertical-align: top; }
+th { font-weight: 600; color: #3a4150; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+pre { background: #fff; border: 1px solid #dcd9cf; border-radius: 6px; padding: 12px 14px;
+      overflow-x: auto; font: 12.5px/1.5 ui-monospace, Consolas, monospace; }
+.note { background: #fff; border-left: 3px solid #8a93a6; padding: 10px 14px; margin: 14px 0; }
+.withheld { background: #fdf1ee; border-left: 3px solid #b3472f; padding: 10px 14px; }
+.finding { background: #fff; border: 1px solid #dcd9cf; border-radius: 6px;
+           padding: 12px 16px; margin: 0 0 12px; }
+.table-wrap { overflow-x: auto; }
+@media print { body { background: #fff; } .finding, pre { break-inside: avoid; } }
+</style></head><body><main><header>
+<h1>Release Audit — Coral first release</h1>
+<div class="meta">issued 2027-04-15 by P. Kaur, after confirmation by P. Kaur on 2027-04-15</div>
+</header>
+<div class="table-wrap"><table>
+<tr><th>Audit</th><td><span class="chip">AUD-REL-2027-03</span></td></tr>
+<tr><th>Kind</th><td>Release Audit</td></tr>
+<tr><th>Auditor</th><td>P. Kaur</td></tr>
+<tr><th>Scope</th><td>Project Coral, IT</td></tr>
+<tr><th>Planned</th><td>2027-03-15</td></tr>
+<tr><th>Conducted</th><td>2027-03-19</td></tr>
+<tr><th>Findings</th><td>3</td></tr>
+</table></div>
+<h2>Summary</h2>
+<p>This audit raised 3 finding(s) across 2 auditable unit(s) [FND-REL-2027-03-01, FND-REL-2027-03-02, FND-REL-2027-03-03]. The weight of the audit sits in 1 Major finding(s) [FND-REL-2027-03-01], which carry the shortest target dates. IT accounts for 2 of them [FND-REL-2027-03-02, FND-REL-2027-03-03]. The same gap category, change_not_authorised, appears more than once [FND-REL-2027-03-01, FND-REL-2027-03-02], which is the pattern worth attention here.</p>
+<div class="note">Drafted from the findings below (audit_report_v2); every statement cites the findings it rests on. Confirmed by P. Kaur before issue.</div>
+<h2>Findings</h2>
+<div class="finding">
+<h3><span class="chip">FND-REL-2027-03-01</span> Major</h3>
+<div class="meta">Project Coral · category change_not_authorised · owner M. Dubois · target 2027-03-26</div>
+<p>The Coral release shipped with a database account whose password had not been rotated since the project began, and which is shared between two services.</p>
+<p><strong>Agreed action plan.</strong> Rotate the credential, split it per service, and bring both into the key rotation schedule.</p>
+</div>
+<div class="finding">
+<h3><span class="chip">FND-REL-2027-03-02</span> Minor</h3>
+<div class="meta">IT · category change_not_authorised · owner Y. Nakamura · target 2027-04-02</div>
+<p>Two changes deployed alongside the Coral release were recorded in the change log after the fact rather than reviewed before go-live.</p>
+<p><strong>Agreed action plan.</strong> Review both retrospectively and enforce the pre-deployment gate.</p>
+</div>
+<div class="finding">
+<h3><span class="chip">FND-REL-2027-03-03</span> Observation</h3>
+<div class="meta">IT · category incident_follow_up_incomplete · owner Y. Nakamura · target 2027-04-16</div>
+<p>Post-incident reviews are completed but the actions arising from them are tracked in the incident ticket rather than anywhere that survives the ticket being closed.</p>
+<p><strong>Agreed action plan.</strong> Track post-incident actions in the same place as audit findings.</p>
+</div></main></body></html>

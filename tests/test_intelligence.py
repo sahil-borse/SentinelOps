@@ -367,104 +367,10 @@ def test_every_examination_is_on_the_trail_even_when_nothing_matched(classified)
     assert examined_with_candidates <= events
 
 
-# --- use 5: the prioritisation brief -----------------------------------------
-
-def test_the_brief_is_one_call_for_the_whole_portfolio(classified):
-    """Section 9's most important cost rule: it scales with cycles, not findings."""
-    conn, _ = classified
-
-    class Counting:
-        def __init__(self):
-            self.calls = 0
-
-        def complete(self, request):
-            from sentinelops.llm.providers.fake import FakeModelClient
-            self.calls += 1
-            return FakeModelClient().complete(request)
-
-    client = Counting()
-    brief = intelligence.prioritisation_brief(conn, AS_OF, client=client)
-    assert client.calls == 1
-    assert brief.metrics["open"] > 1
-
-
-def test_the_ranking_is_deterministic_and_not_the_models(classified):
-    """A model that ordered the queue would be prioritising, which section 2
-    does not permit. It interprets an order the code produced."""
-    conn, _ = classified
-    repo = repositories(conn)
-    people = load_directory(conn)
-    first = intelligence.rank_open_findings(repo, people, AS_OF)
-    second = intelligence.rank_open_findings(repo, people, AS_OF)
-    assert [r["id"] for r in first] == [r["id"] for r in second]
-    if len(first) > 1:
-        severities = [r["severity"] for r in first]
-        assert severities.index(severities[0]) == 0
-
-
-def test_the_brief_changes_no_state(classified):
-    conn, _ = classified
-    repo = repositories(conn)
-    before = {
-        f.id: (f.status, f.severity, f.gap_category, tuple(f.recurrence_of))
-        for f in repo["findings"].list()
-    }
-    intelligence.prioritisation_brief(conn, AS_OF)
-    after = {
-        f.id: (f.status, f.severity, f.gap_category, tuple(f.recurrence_of))
-        for f in repo["findings"].list()
-    }
-    assert before == after
-
-
-def test_every_claim_in_the_brief_cites_a_finding(classified):
-    conn, _ = classified
-    brief = intelligence.prioritisation_brief(conn, AS_OF)
-    assert brief.text
-    known = {row["id"] for row in brief.ranked}
-    assert intelligence.uncited_claims(brief.text, known) == []
-    assert set(brief.cited) <= known
-
-
-def test_an_uncited_brief_is_withheld(classified):
-    conn, _ = classified
-
-    class Vague:
-        def complete(self, request):
-            import json
-
-            from sentinelops.llm.protocol import LlmResponse
-            payload = {
-                "brief": "Compliance is broadly in a difficult position and "
-                         "management attention is required across the board.",
-                "cited_finding_ids": [],
-            }
-            return LlmResponse(
-                text=json.dumps(payload), parsed_json=payload, input_tokens=1,
-                output_tokens=1, cached_tokens=0, model="vague",
-                latency_ms=1, raw={},
-            )
-
-    brief = intelligence.prioritisation_brief(conn, AS_OF, client=Vague())
-    assert brief.text == ""
-    assert brief.cited == []
-    # the metrics survive, because none of them came from the model
-    assert brief.metrics["open"] > 0
-    assert brief.ranked
-
-
-def test_the_metrics_are_section_eight_and_deterministic(classified):
-    conn, _ = classified
-    repo = repositories(conn)
-    people = load_directory(conn)
-    ranked = intelligence.rank_open_findings(repo, people, AS_OF)
-    metrics = intelligence.portfolio_metrics(repo, AS_OF, ranked)
-
-    assert metrics["open"] + metrics["closed"] == len(repo["findings"].list())
-    assert set(metrics["ageing"]) == {"0-30", "31-60", "61-90", "90+"}
-    assert sum(metrics["severity_mix"].values()) == metrics["open"]
-    assert sum(metrics["by_unit"].values()) == metrics["open"]
-    assert sum(metrics["by_category"].values()) == metrics["open"]
+# --- use 5: the prioritisation brief ------------------------------------------
+#
+# Moved to tests/test_brief.py and tests/test_priority.py in slice 16, when the
+# ranking became a documented formula and the brief became strict JSON.
 
 
 # --- provenance and cost -----------------------------------------------------
@@ -497,3 +403,56 @@ def test_the_advisory_uses_are_stamped_as_ai(classified):
     for event in repo["audit"].read_all():
         if event.action in ("finding_classified", "recurrence_examined"):
             assert event.actor_kind == "ai"
+
+
+# --- recurrence does not pay twice for one question ----------------------------
+
+def test_recurrence_does_not_pay_twice_for_the_same_question(classified):
+    """It re-asked every unlinked finding on every run until slice 16.
+
+    The harness ran it once, so the bill never showed; the dashboard runs it
+    each cycle, and the token cost of one cycle carried every earlier cycle's
+    questions again.
+    """
+    conn, _ = classified
+    first = intelligence.detect_recurrence(conn, AS_OF)
+    assert first.model_calls > 0
+    second = intelligence.detect_recurrence(conn, AS_OF)
+    assert second.model_calls == 0
+    assert second.skipped_already_examined > 0
+
+
+def test_a_new_earlier_candidate_is_asked_about(classified):
+    """Not asking again is only right while there is nothing new to ask about."""
+    conn, _ = classified
+    intelligence.detect_recurrence(conn, AS_OF)
+    repo = repositories(conn)
+    target = next(
+        f for f in sorted(repo["findings"].list(), key=lambda f: f.raised_at,
+                          reverse=True)
+        if f.gap_category and not f.recurrence_of
+        and intelligence.candidates_for(repo, f)
+    )
+    other_unit = next(
+        u.id for u in repo["units"].list() if u.id != target.auditable_unit_id
+    )
+    earliest = min(f.raised_at for f in repo["findings"].list())
+    newcomer = Finding(
+        id="FND-NEWLY-FOUND-PRIOR",
+        source=target.source,
+        auditable_unit_id=other_unit,
+        description="A sentence about something else entirely.",
+        raised_by=target.raised_by,
+        raised_at=earliest - timedelta(days=1),
+        owner_identity=target.owner_identity,
+        target_date=target.target_date,
+        gap_category=target.gap_category,
+        severity="Minor",
+    )
+    with simulated_clock(newcomer.raised_at):
+        repo["findings"].add(newcomer)
+
+    again = intelligence.detect_recurrence(conn, AS_OF)
+    assert target.id in again.examined, (
+        "a candidate the finding was never shown appeared, so it is asked again"
+    )

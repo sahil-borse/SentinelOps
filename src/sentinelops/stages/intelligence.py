@@ -35,12 +35,15 @@ from .. import authority, directory
 from ..directory import Directory
 from ..entities import Finding
 from ..llm import TokenMeter, get_client
+from .. import analytics, priority
+from ..llm.parsing import validate
 from ..llm.prompts.brief import (
-    BRIEF_SYSTEM_V1,
+    BRIEF_SYSTEM_V2,
     MAX_TOKENS as BRIEF_MAX_TOKENS,
+    REASON_MAX,
     TOP_N,
-    brief_schema_v1,
-    brief_user_v1,
+    brief_schema_v2,
+    brief_user_v2,
 )
 from ..llm.prompts.brief import PROMPT_VERSION as BRIEF_PROMPT_VERSION
 from ..llm.prompts.recurrence import (
@@ -59,7 +62,7 @@ from ..llm.prompts.triage import (
 )
 from . import taxonomy
 from ..llm.prompts.triage import PROMPT_VERSION as TRIAGE_PROMPT_VERSION
-from ..llm.protocol import LlmRequest
+from ..llm.protocol import LlmError, LlmRequest
 
 #: Short answers, per finding, times the batch. A classification that needs four
 #: hundred tokens to explain itself is not a classification.
@@ -73,14 +76,6 @@ CONFIDENCE_FLOOR = 0.6
 
 #: `[FND-1]` or `[FND-1, FND-2]`.
 CITATION = re.compile(r"\[([A-Z0-9\-]+(?:\s*,\s*[A-Z0-9\-]+)*)\]")
-
-#: Ageing buckets, section 8's exactly.
-AGEING_BUCKETS: tuple[tuple[str, int, int], ...] = (
-    ("0-30", 0, 30),
-    ("31-60", 31, 60),
-    ("61-90", 61, 90),
-    ("90+", 91, 10_000),
-)
 
 
 @dataclass
@@ -108,18 +103,49 @@ class RecurrenceReport:
     linked: list[tuple[str, str]] = field(default_factory=list)
     model_calls: int = 0
     skipped_no_candidates: int = 0
+    #: Already asked about exactly these candidates, or more, and found no link.
+    skipped_already_examined: int = 0
 
 
 @dataclass
 class Brief:
+    """One prioritisation brief. Advisory: nothing reads it back to decide anything.
+
+    `ranked` and `metrics` are deterministic and always present. The three
+    sections are the model's, and they are empty unless every claim in the
+    drafted brief checked out; `withheld` says why when one did not.
+    """
+
     as_of: date
-    text: str = ""
-    cited: list[str] = field(default_factory=list)
-    metrics: dict[str, Any] = field(default_factory=dict)
+    top_priorities: list[dict[str, Any]] = field(default_factory=list)
+    emerging_patterns: list[dict[str, Any]] = field(default_factory=list)
+    recommended_focus: list[dict[str, Any]] = field(default_factory=list)
     ranked: list[dict[str, Any]] = field(default_factory=list)
+    metrics: dict[str, Any] = field(default_factory=dict)
+    withheld: list[str] = field(default_factory=list)
     model_calls: int = 0
     prompt_version: str = BRIEF_PROMPT_VERSION
     model: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    @property
+    def published(self) -> bool:
+        return bool(self.model_calls and not self.withheld and self.top_priorities)
+
+    @property
+    def cited_findings(self) -> list[str]:
+        cited = {item["finding_id"] for item in self.top_priorities}
+        for claim in self.emerging_patterns + self.recommended_focus:
+            cited.update(claim["finding_ids"])
+        return sorted(cited)
+
+    @property
+    def cited_metrics(self) -> list[str]:
+        return sorted({
+            name for claim in self.emerging_patterns + self.recommended_focus
+            for name in claim["metrics"]
+        })
 
 
 # --- use 1 and 4: classify the gap, suggest a severity ----------------------
@@ -381,6 +407,17 @@ def detect_recurrence(
         f for f in sorted(repo["findings"].list(), key=lambda f: f.raised_at)
         if f.gap_category and not f.recurrence_of
     ]
+    # What each finding has already been asked about. This used to re-ask every
+    # unlinked finding on every run, paying again for answers already on the
+    # trail — the harness ran it once so it never showed, but the dashboard runs
+    # it each cycle. A finding is asked again only when a candidate it was never
+    # shown has appeared since.
+    offered_before: dict[str, set[str]] = {}
+    for event in repo["audit"].read_all():
+        if event.action == "recurrence_examined":
+            offered_before.setdefault(event.entity_id, set()).update(
+                event.detail.get("candidates_offered", [])
+            )
     if limit is not None:
         findings = findings[:limit]
 
@@ -389,11 +426,17 @@ def detect_recurrence(
     with simulated_clock(datetime.combine(as_of, time(7, 30))):
         for finding in findings:
             candidates = candidates_for(repo, finding)
-            report.examined.append(finding.id)
             if not candidates:
+                report.examined.append(finding.id)
                 # No call at all. Most findings are the first of their kind.
                 report.skipped_no_candidates += 1
                 continue
+            if {c.id for c in candidates} <= offered_before.get(finding.id, set()):
+                # Asked already, about these candidates or more, and the answer
+                # was no link. Nothing new to ask.
+                report.skipped_already_examined += 1
+                continue
+            report.examined.append(finding.id)
             matches, response = _ask_recurrence(
                 conn, model_client, finding, candidates, units
             )
@@ -472,140 +515,144 @@ def _record_recurrence(repo, people, finding, matches, candidates, response, rep
 
 # --- use 5: the prioritisation brief ----------------------------------------
 
-def rank_open_findings(repo, people: Directory, as_of: date) -> list[dict[str, Any]]:
-    """The ranking, computed. Section 8's inputs, ordered by urgency.
-
-    Deterministic on purpose: the model is asked to *interpret* a ranking, not
-    to produce one. A model that decided the order would be making a
-    prioritisation decision, which is exactly what section 2 does not permit it
-    to do.
-    """
-    units = {u.id: u for u in repo["units"].list()}
-    escalations: dict[str, int] = {}
-    for event in repo["audit"].read_all():
-        if event.action == "finding_escalated":
-            escalations[event.entity_id] = max(
-                escalations.get(event.entity_id, 0),
-                int(event.detail.get("level", 0)),
-            )
-    weight = {"Major": 3, "Minor": 2, "Observation": 1}
-    rows = []
-    for finding in repo["findings"].list():
-        if finding.status != "open":
-            continue
-        severity = finding.severity or finding.suggested_severity or "Observation"
-        days_overdue = (as_of - finding.target_date).days
-        rows.append({
-            "id": finding.id,
-            "unit": (units[finding.auditable_unit_id].name
-                     if finding.auditable_unit_id in units
-                     else finding.auditable_unit_id),
-            "severity": severity,
-            "category": finding.gap_category or "unclassified",
-            "owner": people.name(finding.owner_identity),
-            "days_open": (as_of - finding.raised_at.date()).days,
-            "days_overdue": max(days_overdue, 0),
-            "follow_ups": finding.follow_up_count,
-            "escalation": escalations.get(finding.id, 0),
-            "recurrence_of": list(finding.recurrence_of),
-            "description": finding.description,
-            "_score": (
-                weight.get(severity, 1) * 100
-                + max(days_overdue, 0)
-                + finding.follow_up_count * 5
-                + escalations.get(finding.id, 0) * 25
-            ),
-        })
-    rows.sort(key=lambda r: (-r["_score"], r["id"]))
-    for row in rows:
-        row.pop("_score")
-    return rows
-
-
-def portfolio_metrics(repo, as_of: date, ranked: list[dict[str, Any]]):
-    """Section 8's figures, computed from state and the log. No model."""
-    findings = repo["findings"].list()
-    open_findings = [f for f in findings if f.status == "open"]
-    severity_mix: dict[str, int] = {}
-    by_unit: dict[str, int] = {}
-    by_category: dict[str, int] = {}
-    ageing = {name: 0 for name, _, _ in AGEING_BUCKETS}
-    units = {u.id: u.name for u in repo["units"].list()}
-
-    for finding in open_findings:
-        severity = finding.severity or finding.suggested_severity or "unassigned"
-        severity_mix[severity] = severity_mix.get(severity, 0) + 1
-        unit = units.get(finding.auditable_unit_id, finding.auditable_unit_id)
-        by_unit[unit] = by_unit.get(unit, 0) + 1
-        category = finding.gap_category or "unclassified"
-        by_category[category] = by_category.get(category, 0) + 1
-        overdue = (as_of - finding.target_date).days
-        if overdue >= 0:
-            for name, low, high in AGEING_BUCKETS:
-                if low <= overdue <= high:
-                    ageing[name] += 1
-                    break
-
-    rounds_per_finding: dict[str, int] = {}
-    for record in repo["rounds"].list():
-        rounds_per_finding[record.finding_id] = (
-            rounds_per_finding.get(record.finding_id, 0) + 1
-        )
+def _inline_ids(text: str) -> set[str]:
     return {
-        "open": len(open_findings),
-        "closed": len([f for f in findings if f.status == "closed"]),
-        "severity_mix": dict(sorted(severity_mix.items())),
-        "ageing": ageing,
-        "overdue": sum(1 for r in ranked if r["days_overdue"] > 0),
-        "escalated": sum(1 for r in ranked if r["escalation"]),
-        "by_unit": dict(sorted(by_unit.items(), key=lambda kv: -kv[1])),
-        "by_category": dict(sorted(by_category.items(), key=lambda kv: -kv[1])),
-        "multi_round": sum(1 for n in rounds_per_finding.values() if n > 1),
+        part.strip()
+        for group in CITATION.findall(text)
+        for part in group.split(",")
+        if part.strip()
     }
 
 
-def uncited_claims(text: str, known: set[str]) -> list[str]:
-    """Same rule as the audit report, and for the same reason."""
-    problems = []
-    for raw in re.split(r"(?<=[.!?])\s+", text.strip()):
-        sentence = raw.strip()
-        if not sentence:
+def _claim(entry: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "statement": str(entry.get("statement", "")).strip(),
+        "finding_ids": [str(i) for i in entry.get("finding_ids") or []],
+        "metrics": [str(m) for m in entry.get("metrics") or []],
+    }
+
+
+def validate_brief(
+    payload: Any, *, known_ids: set[str], metric_names: set[str],
+) -> list[str]:
+    """Every problem with a drafted brief, or an empty list when there are none.
+
+    A claim is checkable only if it says what it rests on. So: every top
+    priority names a finding from the ranked list the call was given, with a
+    one-line reason; every pattern and focus statement lists finding ids or
+    named metrics, and at least one of them; every id and every metric name
+    resolves; and an id mentioned inline in a statement is also listed. One
+    failure withholds the whole brief — a brief with one invented figure in it
+    reads exactly as authoritative as one without.
+    """
+    if not isinstance(payload, dict):
+        return ["the reply is not a JSON object"]
+    try:
+        validate(payload, brief_schema_v2())
+    except LlmError as error:
+        return [f"the reply does not match the schema: {error}"]
+
+    problems: list[str] = []
+    tops = payload.get("top_priorities") or []
+    if not isinstance(tops, list) or not tops:
+        problems.append("no top priorities were named")
+        tops = tops if isinstance(tops, list) else []
+    seen: set[str] = set()
+    for entry in tops:
+        if not isinstance(entry, dict):
+            problems.append("a top priority is not an object")
             continue
-        ids = {
-            part.strip()
-            for group in CITATION.findall(sentence)
-            for part in group.split(",")
-        }
-        if not ids:
-            if not re.search(r"\d", sentence):
-                problems.append(f"uncited: {sentence}")
+        finding_id = str(entry.get("finding_id", ""))
+        reason = str(entry.get("reason", "")).strip()
+        if finding_id not in known_ids:
+            problems.append(
+                f"top priority {finding_id!r} is not in the ranked list the brief "
+                f"was given"
+            )
+        if finding_id in seen:
+            problems.append(f"top priority {finding_id} is named twice")
+        seen.add(finding_id)
+        if not reason:
+            problems.append(f"top priority {finding_id} gives no reason")
+        elif "\n" in reason or len(reason) > REASON_MAX:
+            problems.append(
+                f"the reason for {finding_id} is not one line of at most "
+                f"{REASON_MAX} characters"
+            )
+        stray = _inline_ids(reason) - known_ids
+        if stray:
+            problems.append(
+                f"the reason for {finding_id} cites {', '.join(sorted(stray))}, "
+                f"which the brief was not given"
+            )
+
+    for section in ("emerging_patterns", "recommended_focus"):
+        entries = payload.get(section) or []
+        if not isinstance(entries, list):
+            problems.append(f"{section} is not a list")
             continue
-        unknown = ids - known
-        if unknown:
-            problems.append(f"cites unknown {', '.join(sorted(unknown))}")
+        if section == "recommended_focus" and not entries:
+            problems.append("no recommended focus was given")
+        for entry in entries:
+            if not isinstance(entry, dict):
+                problems.append(f"{section}: an entry is not an object")
+                continue
+            claim = _claim(entry)
+            label = claim["statement"][:90] or "(empty statement)"
+            if not claim["statement"]:
+                problems.append(f"{section}: an entry has no statement")
+            if not claim["finding_ids"] and not claim["metrics"]:
+                problems.append(f"{section}: uncited claim: {label}")
+            unknown_ids = set(claim["finding_ids"]) - known_ids
+            if unknown_ids:
+                problems.append(
+                    f"{section}: cites {', '.join(sorted(unknown_ids))}, which the "
+                    f"brief was not given: {label}"
+                )
+            unknown_metrics = set(claim["metrics"]) - metric_names
+            if unknown_metrics:
+                problems.append(
+                    f"{section}: cites metric(s) {', '.join(sorted(unknown_metrics))} "
+                    f"that are not in the catalogue: {label}"
+                )
+            unlisted = _inline_ids(claim["statement"]) - set(claim["finding_ids"])
+            if unlisted:
+                problems.append(
+                    f"{section}: the statement mentions "
+                    f"{', '.join(sorted(unlisted))} without citing them: {label}"
+                )
     return problems
 
 
 def prioritisation_brief(conn, as_of: date, *, client=None) -> Brief:
-    """One call. Over the ranking and the metrics, not over the findings."""
+    """One call per cycle, over the deterministic ranking and section 8's figures.
+
+    The order comes from `sentinelops.priority`; the figures from
+    `sentinelops.analytics`, under the names in `analytics.named_metrics`. The
+    model chooses which ranked findings to put first and says why, and names
+    patterns and a focus — but top priorities are always shown in the ranking's
+    order, so it can explain the queue without reordering it.
+    """
     from ..repositories import repositories, simulated_clock
 
     repo = repositories(conn)
     people = directory.load(conn)
-    ranked = rank_open_findings(repo, people, as_of)
-    metrics = portfolio_metrics(repo, as_of, ranked)
-    brief = Brief(as_of=as_of, metrics=metrics, ranked=ranked)
+    ranked = priority.rank(repo, people, as_of)
+    metrics = analytics.named_metrics(analytics.portfolio(conn, as_of))
+    brief = Brief(as_of=as_of, ranked=ranked, metrics=metrics)
     if not ranked:
         return brief
 
     top = ranked[:TOP_N]
     request = LlmRequest(
-        system=BRIEF_SYSTEM_V1,
+        system=BRIEF_SYSTEM_V2,
         messages=[{
             "role": "user",
-            "content": brief_user_v1(as_of.isoformat(), metrics, top),
+            "content": brief_user_v2(
+                as_of.isoformat(), metrics, top, total_open=len(ranked)
+            ),
         }],
-        response_schema=brief_schema_v1(),
+        response_schema=brief_schema_v2(),
         max_tokens=BRIEF_MAX_TOKENS,
         tier="brief",
     )
@@ -616,26 +663,47 @@ def prioritisation_brief(conn, as_of: date, *, client=None) -> Brief:
             response = meter.record((client or get_client()).complete(request))
         brief.model_calls = 1
         brief.model = response.model
+        brief.input_tokens = response.input_tokens
+        brief.output_tokens = response.output_tokens
 
         payload = response.parsed_json or {}
-        text = str(payload.get("brief", "")).strip()
-        known = {row["id"] for row in top}
-        if text and not uncited_claims(text, known):
-            brief.text = text
-            brief.cited = sorted({
-                part.strip()
-                for group in CITATION.findall(text)
-                for part in group.split(",")
-            })
+        by_id = {row["id"]: row for row in top}
+        problems = validate_brief(
+            payload, known_ids=set(by_id), metric_names=set(metrics),
+        )
+        if problems:
+            brief.withheld = problems
+        else:
+            brief.top_priorities = sorted(
+                (
+                    {
+                        "finding_id": entry["finding_id"],
+                        "reason": str(entry["reason"]).strip(),
+                        "rank": by_id[entry["finding_id"]]["rank"],
+                        "score": by_id[entry["finding_id"]]["score"],
+                    }
+                    for entry in payload["top_priorities"]
+                ),
+                key=lambda item: item["rank"],
+            )
+            brief.emerging_patterns = [
+                _claim(entry) for entry in payload.get("emerging_patterns") or []
+            ]
+            brief.recommended_focus = [
+                _claim(entry) for entry in payload.get("recommended_focus") or []
+            ]
 
         repo["audit"].append(
             actor="ai", owner="portfolio", action="brief_generated",
             entity_type="Cycle", entity_id=as_of.isoformat(),
             detail={
-                "open": metrics["open"],
+                "open": metrics["open_findings"],
                 "ranked": len(top),
-                "cited": brief.cited,
-                "withheld": not brief.text,
+                "top_priorities": [i["finding_id"] for i in brief.top_priorities],
+                "cited_findings": brief.cited_findings,
+                "cited_metrics": brief.cited_metrics,
+                "withheld": bool(brief.withheld),
+                "withheld_reasons": brief.withheld,
                 "prompt_version": BRIEF_PROMPT_VERSION,
                 "model": brief.model,
                 "note": "advisory; changes no state",

@@ -299,11 +299,20 @@ def test_an_uncited_claim_is_withheld_too(audited):
     assert report.summary == ""
 
 
-def test_uncited_claims_allows_a_sentence_that_only_states_a_count():
-    """A count came from the facts we supplied, so it is checkable directly."""
-    known = {"FND-1"}
+def test_a_sentence_that_only_states_a_count_must_cite_too():
+    """Section 6: every statement cites finding ids — counts included.
+
+    This used to be allowed, on the grounds that a count came from facts the
+    model was given. Section 6 makes no such exception, and "this audit raised 4
+    findings" is precisely the sentence that is wrong when the model miscounts.
+    A count now cites the findings it counts.
+    """
+    known = {"FND-1", "FND-2"}
     assert audits.uncited_claims(
-        "This audit raised 4 findings across 3 units.", known
+        "This audit raised 2 findings across 1 unit.", known
+    ) != []
+    assert audits.uncited_claims(
+        "This audit raised 2 findings across 1 unit [FND-1, FND-2].", known
     ) == []
     assert audits.uncited_claims("Access control is weak.", known) != []
 
@@ -315,6 +324,7 @@ def test_issuing_is_separate_from_generating_and_is_on_the_trail(audited):
     audits.generate_report(conn, "AUD-TEST-H1")
     assert repo["audits"].get("AUD-TEST-H1").report_issued_at is None
 
+    audits.confirm(conn, "AUD-TEST-H1", by=auditor.id, as_of=date(2026, 6, 15))
     audits.issue(conn, "AUD-TEST-H1", by=auditor.id, as_of=date(2026, 6, 15))
     audit = repo["audits"].get("AUD-TEST-H1")
     assert audit.report_issued_at is not None
@@ -322,7 +332,8 @@ def test_issuing_is_separate_from_generating_and_is_on_the_trail(audited):
 
     actions = [e.action for e in repo["audit"].read_for("ScheduledAudit", audit.id)]
     assert actions == [
-        "audit_conducted", "audit_report_generated", "audit_report_issued"
+        "audit_conducted", "audit_report_generated", "audit_report_confirmed",
+        "audit_report_issued",
     ]
 
 
@@ -355,3 +366,133 @@ def test_audit_findings_are_chased_like_any_other(audited):
     raised = {f.id for f in audits.findings_of(repo, "AUD-TEST-H1")}
     assert raised <= set(report.reminded)
     assert raised <= {finding_id for finding_id, _ in report.escalated}
+
+
+# --- the auditor confirms before issue ------------------------------------------
+
+def test_a_report_cannot_be_issued_until_its_auditor_confirms_it(audited):
+    """Issue used to write "reviewed and confirmed" whether anyone had or not."""
+    conn, repo, _, auditor, _ = audited
+    audits.generate_report(conn, "AUD-TEST-H1")
+    with pytest.raises(ValueError) as refused:
+        audits.issue(conn, "AUD-TEST-H1", by=auditor.id, as_of=date(2026, 6, 15))
+    assert "has not been confirmed" in str(refused.value)
+    assert repo["audits"].get("AUD-TEST-H1").report_issued_at is None
+
+
+def test_only_the_auditor_who_conducted_it_confirms(audited):
+    conn, _, people, auditor, units = audited
+    audits.generate_report(conn, "AUD-TEST-H1")
+    colleague = next(p for p in people.by_role("pa_infosec") if p.id != auditor.id)
+    with pytest.raises(AuthorityError):
+        audits.confirm(conn, "AUD-TEST-H1", by=colleague.id, as_of=date(2026, 6, 15))
+    owner = people.get(units[0].owner_identity)
+    with pytest.raises(AuthorityError):
+        audits.confirm(conn, "AUD-TEST-H1", by=owner.id, as_of=date(2026, 6, 15))
+
+
+def test_regenerating_a_report_clears_its_confirmation(audited):
+    """A confirmation is of the version the auditor read."""
+    conn, repo, _, auditor, _ = audited
+    audits.generate_report(conn, "AUD-TEST-H1")
+    audits.confirm(conn, "AUD-TEST-H1", by=auditor.id, as_of=date(2026, 6, 15))
+    assert repo["audits"].get("AUD-TEST-H1").report_confirmed_at is not None
+
+    audits.generate_report(conn, "AUD-TEST-H1", as_of=date(2026, 6, 16))
+    assert repo["audits"].get("AUD-TEST-H1").report_confirmed_at is None
+    with pytest.raises(ValueError):
+        audits.issue(conn, "AUD-TEST-H1", by=auditor.id, as_of=date(2026, 6, 16))
+    generated = [
+        e for e in repo["audit"].read_for("ScheduledAudit", "AUD-TEST-H1")
+        if e.action == "audit_report_generated"
+    ]
+    assert generated[-1].detail["confirmation_cleared"] is True
+
+
+def test_an_issued_report_is_not_regenerated(audited):
+    conn, _, _, auditor, _ = audited
+    audits.generate_report(conn, "AUD-TEST-H1")
+    audits.confirm(conn, "AUD-TEST-H1", by=auditor.id, as_of=date(2026, 6, 15))
+    audits.issue(conn, "AUD-TEST-H1", by=auditor.id, as_of=date(2026, 6, 16))
+    with pytest.raises(ValueError) as refused:
+        audits.generate_report(conn, "AUD-TEST-H1")
+    assert "already issued" in str(refused.value)
+
+
+def test_a_withheld_summary_says_why_on_the_trail(audited):
+    """A summary that vanished used to leave no reason anywhere."""
+    conn, repo, _, _, _ = audited
+
+    class Vague:
+        def complete(self, request):
+            from sentinelops.llm.protocol import LlmResponse
+            import json
+            payload = {
+                "summary": "Controls were found to be weak across the board.",
+                "cited_finding_ids": [],
+            }
+            return LlmResponse(
+                text=json.dumps(payload), parsed_json=payload, input_tokens=10,
+                output_tokens=10, cached_tokens=0, model="vague",
+                latency_ms=1, raw={},
+            )
+
+    report = audits.generate_report(conn, "AUD-TEST-H1", client=Vague())
+    assert report.summary == ""
+    assert report.summary_withheld
+    assert "uncited" in report.summary_withheld[0]
+    generated = [
+        e for e in repo["audit"].read_for("ScheduledAudit", "AUD-TEST-H1")
+        if e.action == "audit_report_generated"
+    ][-1]
+    assert generated.detail["summary_withheld_reasons"] == report.summary_withheld
+    rendered = audits.render_markdown(report)
+    assert report.summary_withheld[0] not in rendered, (
+        "the reason is on the trail; quoting it in the report would publish the "
+        "rejected statement"
+    )
+    assert "recorded on the audit trail" in rendered
+
+
+def test_a_recurrence_link_names_the_earlier_finding_its_unit_and_date(audited):
+    conn, repo, _, _, _ = audited
+    prior = repo["findings"].get("FND-IA-2026-H1-01")
+    target = audits.findings_of(repo, "AUD-TEST-H1")[0]
+    target.recurrence_of = [prior.id]
+    repo["findings"].update(target)
+
+    report = audits.generate_report(conn, "AUD-TEST-H1")
+    unit = repo["units"].get(prior.auditable_unit_id).name
+    assert f"{prior.id} ({unit}, raised {prior.raised_at.date()})" in (
+        audits.render_markdown(report)
+    )
+
+
+def test_a_dangling_recurrence_link_is_refused(audited):
+    conn, repo, _, _, _ = audited
+    target = audits.findings_of(repo, "AUD-TEST-H1")[0]
+    target.recurrence_of = ["FND-NEVER-EXISTED"]
+    repo["findings"].update(target)
+    with pytest.raises(ValueError) as refused:
+        audits.generate_report(conn, "AUD-TEST-H1")
+    assert "FND-NEVER-EXISTED" in str(refused.value)
+
+
+def test_the_html_report_carries_every_field_and_its_status(audited):
+    from sentinelops import render
+
+    conn, _, _, auditor, _ = audited
+    report = audits.generate_report(conn, "AUD-TEST-H1")
+    audits.confirm(conn, "AUD-TEST-H1", by=auditor.id, as_of=date(2026, 6, 15))
+    audits.issue(conn, "AUD-TEST-H1", by=auditor.id, as_of=date(2026, 6, 16))
+    audits.attach_status(conn, report)
+    page = render.report_html(report)
+
+    assert page.startswith("<!doctype html>")
+    assert "AUD-TEST-H1" in page and "Internal Audit" in page
+    assert report.auditor in page and str(CONDUCTED) in page
+    for finding in report.findings:
+        for key in ("id", "severity", "owner", "target_date", "category"):
+            assert str(finding[key]) in page, (key, finding[key])
+    assert "Remediate and evidence." in page
+    assert "issued 2026-06-16" in page and "after confirmation by" in page

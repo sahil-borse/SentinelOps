@@ -119,6 +119,10 @@ class ScheduledAudit:
     report_generated_at: datetime | None = None
     report_issued_at: datetime | None = None
     report_issued_by: str = ""
+    #: The auditor's confirmation of the generated report, which issue requires.
+    #: Cleared when the report is regenerated: a confirmation is of a version.
+    report_confirmed_at: datetime | None = None
+    report_confirmed_by: str = ""
 
     @property
     def is_complete(self) -> bool:
