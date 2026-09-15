@@ -164,6 +164,118 @@ def advance(conn, days: int, *, client=None) -> TickResult:
     return tick(conn, current_date(conn) + timedelta(days=days), client=client)
 
 
+# --- slice 18: jump to the next event, and reset the scenario ---------------------
+
+@dataclass
+class JumpResult:
+    moment: Any
+    tick: TickResult
+
+    @property
+    def day(self) -> date:
+        return self.moment.day
+
+
+def next_event(conn, *, subject: str | None = None):
+    """The next milestone after the simulated date: what, whose, and when."""
+    from .. import timeline
+
+    return timeline.next_moment(conn, current_date(conn), subject=subject)
+
+
+def jump_to_next_event(conn, *, subject: str | None = None, client=None) -> JumpResult | None:
+    """Advance the calendar straight to the next milestone and run that day's cycle.
+
+    The moment is worked out by `next_event` — the same function the screen used
+    to name it — so the jump lands where it said it would. None when nothing is
+    scheduled ahead.
+    """
+    moment = next_event(conn, subject=subject)
+    if moment is None:
+        return None
+    return JumpResult(moment=moment, tick=tick(conn, moment.day, client=client))
+
+
+def snapshot_path(corpus=None) -> Path:
+    """Where the pristine seeded scenario is kept, beside the demo database.
+
+    Named for the corpus and the schema it was built from, so a change to either
+    produces a new snapshot rather than restoring one that no longer fits.
+    """
+    from ..db import SCHEMA
+
+    corpus = corpus or generate_corpus()
+    schema = hashlib.sha256(SCHEMA.encode("utf-8")).hexdigest()[:8]
+    return Path(DB_PATH).parent / f"scenario-{corpus.fingerprint()[:12]}-{schema}.db"
+
+
+def ensure_snapshot() -> Path:
+    """The seeded scenario, built once and then only ever copied."""
+    import sqlite3
+
+    corpus = generate_corpus()
+    path = snapshot_path(corpus)
+    if path.exists():
+        return path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    memory = connect(":memory:")
+    target = None
+    partial = path.with_name(path.name + ".partial")
+    try:
+        seed_database(memory, corpus)
+        if partial.exists():
+            partial.unlink()
+        target = sqlite3.connect(partial)
+        memory.backup(target)
+    finally:
+        if target is not None:
+            target.close()
+        memory.close()
+    partial.replace(path)
+    return path
+
+
+def reset_scenario() -> Path:
+    """Restore the exact seeded state, so every recording take starts identically.
+
+    A byte copy of the snapshot rather than a fresh seed: the result does not
+    depend on seeding being reproducible, only on the file. Callers close their
+    connection first — Windows will not replace a file that is still open.
+    """
+    import shutil
+
+    snapshot = ensure_snapshot()
+    target = Path(DB_PATH)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    for suffix in ("-wal", "-shm", "-journal"):
+        sidecar = target.with_name(target.name + suffix)
+        if sidecar.exists():
+            sidecar.unlink()
+    shutil.copyfile(snapshot, target)
+    return target
+
+
+def prepare_demo_database() -> None:
+    """On first open, start from the snapshot — the state a reset returns to."""
+    if not Path(DB_PATH).exists():
+        reset_scenario()
+
+
+def state_digest(conn) -> str:
+    """One hash over every row of every table. Equal digests, identical state."""
+    digest = hashlib.sha256()
+    tables = sorted(
+        row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        )
+    )
+    for table in tables:
+        digest.update(table.encode("utf-8"))
+        for row in conn.execute(f"SELECT * FROM {table} ORDER BY 1"):
+            digest.update(repr(tuple(row)).encode("utf-8"))
+    return digest.hexdigest()
+
+
 def submit_evidence(
     conn,
     *,

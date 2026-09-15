@@ -35,8 +35,9 @@ WHEN_FORMAT = "D MMM YYYY, HH:mm"
 
 @st.cache_resource
 def database():
+    service.prepare_demo_database()
     conn = service.open_database()
-    service.seed(conn)
+    service.seed(conn)  # a no-op once the snapshot is in place
     return conn
 
 

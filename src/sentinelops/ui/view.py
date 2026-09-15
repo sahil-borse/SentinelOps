@@ -615,6 +615,9 @@ div[class*="st-key-inbox_table"] [data-testid="stDataFrame"], div[class*="st-key
 .so-who-name { font-weight: 650; color: $n900; font-size: 14px; }
 .so-who-line { font-size: 12.5px; color: $n500; margin-top: 2px; line-height: 1.4; }
 .so-date { font-size: 15px; font-weight: 650; color: $n900; }
+.so-next { border: 1px solid $n200; border-left: 3px solid $accent; border-radius: 10px; padding: 8px 10px; background: $n0; margin-bottom: 10px; line-height: 1.45; }
+.so-next-title { font-size: 13.5px; font-weight: 650; color: $n900; margin-bottom: 2px; }
+.so-next-when { font-size: 12.5px; color: $n700; margin-top: 2px; }
 .so-date-sub { font-size: 12px; color: $n500; margin-bottom: 10px; line-height: 1.4; }
 
 .pill { display: inline-block; padding: .05rem .5rem; border-radius: 10px; font-size: .78rem; font-weight: 600; }
@@ -900,6 +903,39 @@ def identity_card(actor: dict[str, Any], choices: list[dict[str, Any]]) -> str:
         f'<div class="so-who"><div class="so-row"><span class="so-who-name">'
         f'{_e(who["name"])}</span>{badge(who["role_label"], "accent")}</div>'
         f'{unit}<div class="so-who-line">{_e(may)}</div></div>'
+    )
+
+
+def next_event_card(moment, today: date) -> str:
+    """What the next jump will land on, named before anyone presses it."""
+    if moment is None:
+        return (
+            f'{label("Next event")}<div class="so-next"><div class="so-muted">No '
+            "reminder, target date, escalation or audit is scheduled ahead.</div></div>"
+        )
+    event = moment.headline
+    others = len(moment.events) - 1
+    days = (moment.day - today).days
+    return (
+        f'{label("Next event")}<div class="so-next">'
+        f'<div class="so-next-title">{_e(event.title)}</div>'
+        f'<div><span class="so-id">{_e(event.subject)}</span></div>'
+        f'<div class="so-muted">{_e(event.detail)}</div>'
+        f'<div class="so-next-when">{_e(fmt_long_date(moment.day))} · in '
+        f'{_e(plural(days, "day"))}</div>'
+        + (f'<div class="so-muted">and {_e(plural(others, "more event"))} that day</div>'
+           if others else "")
+        + "</div>"
+    )
+
+
+def jump_message(jumped) -> str:
+    event = jumped.moment.headline
+    others = len(jumped.moment.events) - 1
+    return (
+        f"Jumped to {fmt_date(jumped.day)} — {event.title} for {event.subject}"
+        + (f" and {plural(others, 'more event')}" if others else "")
+        + f". {jumped.tick.summary()}"
     )
 
 

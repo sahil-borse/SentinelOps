@@ -104,6 +104,45 @@ def target_date_for(
     return raised_on + timedelta(days=rule_for(severity, criticality).target_days)
 
 
+#: Escalation climbs to this level and no further. Reminders carry on past it.
+MAX_ESCALATION_LEVEL = 2
+
+
+def reminder_due(rule: FollowUpRule, days_to_target: int) -> bool:
+    """Whether a cycle on this day chases the owner.
+
+    From `remind_before` days out, on every cycle, and never stopping while the
+    finding is open — reminders continue after escalation.
+    """
+    return days_to_target <= rule.remind_before
+
+
+def escalation_level_earned(rule: FollowUpRule, days_past_target: int) -> int:
+    """The escalation level a finding this far past its target has earned.
+
+    Nothing until `escalate_after` days past; level 1 then, and one more each
+    further `escalate_after` days, capped at `MAX_ESCALATION_LEVEL`. The chase in
+    `_run` and the calendar's next-event planner both read this, so what the
+    screen says is coming is what the engine does.
+    """
+    if days_past_target < rule.escalate_after:
+        return 0
+    return min(
+        1 + (days_past_target - rule.escalate_after) // max(rule.escalate_after, 1),
+        MAX_ESCALATION_LEVEL,
+    )
+
+
+def first_reminder_on(target: date, rule: FollowUpRule) -> date:
+    """The first day `reminder_due` holds."""
+    return target - timedelta(days=rule.remind_before)
+
+
+def escalation_on(target: date, rule: FollowUpRule, level: int) -> date:
+    """The first day `escalation_level_earned` reaches `level`."""
+    return target + timedelta(days=rule.escalate_after * level)
+
+
 @dataclass
 class FollowUpReport:
     as_of: date
@@ -142,6 +181,11 @@ def _log(repo, people, *, kind: str, to: str, finding: Finding, subject: str,
         "recipients": [n.recipient_identity for n in written],
         "delivery": "recorded_not_sent",
     })
+
+
+def escalation_levels(repo) -> dict[str, int]:
+    """How far each finding has already been escalated, read off the trail."""
+    return _escalation_levels(repo)
 
 
 def _escalation_levels(repo) -> dict[str, int]:
@@ -273,21 +317,14 @@ def _run(conn, as_of: date) -> FollowUpReport:
         rule = rule_for(finding.severity, criticality)
         days_to_target = (finding.target_date - as_of).days
 
-        if 0 <= days_to_target <= rule.remind_before:
-            record_reminder(repo, finding, as_of, people, report)
-        elif days_to_target < 0:
+        if reminder_due(rule, days_to_target):
             # Reminders continue after escalation; escalating is not a way of
             # handing the problem on and going quiet.
             record_reminder(repo, finding, as_of, people, report)
-            overdue = -days_to_target
-            if overdue >= rule.escalate_after:
-                earned = min(
-                    1 + (overdue - rule.escalate_after) // max(rule.escalate_after, 1),
-                    2,
-                )
-                for level in range(already.get(finding.id, 0) + 1, earned + 1):
-                    escalate(repo, finding, level, as_of, people, report)
-                    already[finding.id] = level
+        earned = escalation_level_earned(rule, -days_to_target)
+        for level in range(already.get(finding.id, 0) + 1, earned + 1):
+            escalate(repo, finding, level, as_of, people, report)
+            already[finding.id] = level
 
     repo["audit"].append(
         actor="system", owner="follow-up", action="followup_completed",

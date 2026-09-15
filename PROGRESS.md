@@ -148,3 +148,19 @@
   Tests assert the landing page shows no spend, that `/cost` renders, and that no layout file links to it. The Walkthrough's step 4, "Count what that cost", still quotes the meter: it is a scripted demo step, and was left for a decision.
 
   Dates past the simulated day are also kept out of the inbox. The seeded audit programme writes its closure notices ahead of the calendar, so at the demo's start the inbox opened on next year's messages.
+- Slice 18 (2026-09-16): the simulated calendar jumps to what matters, the scenario resets exactly, and simulated time is asserted everywhere.
+  **Jump to next event.** New `timeline.py` lists each open finding's milestones: its first reminder, its target date, and the first day each escalation level is earned. It also lists planned audits. The sidebar names the earliest one — what, whose, when, and how many more that day — above a **Jump to next event** button. The button runs that day's cycle, and the named event happens on it. Every reminder is not a milestone: inside the reminder window the chase reminds on every cycle, so "the next reminder" is always tomorrow, and a jump to it would be a fixed step in disguise. The planner reads the engine's own rule. `followup._run` held its reminder and escalation arithmetic inline; it now calls `reminder_due` and `escalation_level_earned`, and the planner's dates come from `first_reminder_on` and `escalation_on`, each defined as the first day those functions change. A test pins the named rule to the arithmetic it replaced, over every severity and 100 days either side of target. `python -m sentinelops.demo.jumps` walks FND-CHANGED-PROCESS-IT-2027-03, a Major in IT, from 15 Apr 2027:
+  - a first reminder on 17 Apr
+  - target reached on 18 Apr, with a second chase
+  - escalation level 1 to M. Castellanos on 19 Apr
+  - escalation level 2 to H. Lindqvist on 20 Apr
+
+  Every reminder and escalation lands on the trail, and every notification is dated on its simulated day. A test does the same on a constructed Minor finding: 13, 16, 21 and 26 Mar, gaps of 3, 5 and 5 days.
+  **Scenario reset.** Start over became **Reset scenario**. The seeded state is built once into a snapshot beside the demo database, named for the corpus fingerprint and the schema hash so a change to either builds a new one. The reset is a byte copy of it, and the dashboard's first open starts from the same file. `service.state_digest` hashes every row of every table. In the demo, the seeded digest `50e0eb7b…` (0 checks, 5 open findings, 83 audit events, 66 notifications) became `af790d29…` after three jumps (203 checks, 1,037 events), and returned to `50e0eb7b…` on reset. Seeding is also asserted deterministic, and the snapshot equals a fresh in-memory seed.
+  **Simulated time everywhere.** `tests/test_simulated_time.py` runs a stretch that ends before the real date: the scheduler, the calendar jump, then every action the dashboard offers.
+  - rounds opened, found insufficient and accepted
+  - a closure, a notification marked read, and an upload and re-assessment
+  - the brief, and an audit report generated, confirmed and issued
+  - the audit pack
+
+  It asserts that no audit event and no notification stamp written during the run falls outside the stretch; a wall-clock stamp would be today's real date, after it. It found no leak. A second test appends an entry outside the clock and confirms the check catches it.

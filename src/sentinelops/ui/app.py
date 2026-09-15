@@ -45,11 +45,25 @@ conn, today, actor = shell.context()
 with st.sidebar:
     shell.html(view.identity_card(actor, choices))
     shell.html(view.calendar_card(today))
-    if st.button("Run cycle now", type="primary", width="stretch",
+    # Named before the jump: the card and the button read the same planner.
+    moment = service.next_event(conn)
+    shell.html(view.next_event_card(moment, today))
+    if moment is not None and st.button(
+        "Jump to next event", type="primary", width="stretch",
+        help="Moves the simulated clock straight to the milestone named above and "
+             "runs that day's cycle — not a fixed step.",
+    ):
+        with st.spinner(f"Jumping to {view.fmt_date(moment.day)} — "
+                        f"{moment.headline.title}…"):
+            jumped = service.jump_to_next_event(conn)
+        st.session_state["last_tick"] = view.jump_message(jumped)
+        st.rerun()
+    if st.button("Run cycle now", width="stretch",
                  help="Runs S1 to S4 for the simulated date: raise checks, screen, "
                       "assess, flag and chase."):
         with st.spinner(f"Running the cycle for {view.fmt_date(today)} — S1 to S4…"):
-            st.session_state["last_tick"] = service.tick(conn, today).summary()
+            summary = service.tick(conn, today).summary()
+        st.session_state["last_tick"] = f"Cycle complete · {summary}"
         st.rerun()
     steps = st.columns(3, gap="small")
     for column, days, label in ((steps[0], 1, "+1 day"), (steps[1], 7, "+1 week"),
@@ -57,13 +71,15 @@ with st.sidebar:
         if column.button(label, width="stretch"):
             with st.spinner(f"Advancing {view.plural(days, 'day')} and running that "
                             f"day's cycle…"):
-                st.session_state["last_tick"] = service.advance(conn, days).summary()
+                summary = service.advance(conn, days).summary()
+            st.session_state["last_tick"] = f"Cycle complete · {summary}"
             st.rerun()
-    if st.button("Start over", width="stretch",
-                 help="Deletes the demo database and seeds the corpus again."):
-        conn.close()  # Windows will not delete a file that is still open
-        shell.database.clear()
-        service.open_database(fresh=True).close()
+    if st.button("Reset scenario", width="stretch",
+                 help="Restores the exact seeded state, so every take starts identically."):
+        with st.spinner("Restoring the seeded scenario…"):
+            conn.close()  # Windows will not replace a file that is still open
+            shell.database.clear()
+            service.reset_scenario()
         st.session_state.clear()
         st.rerun()
 
@@ -75,7 +91,7 @@ if badges:
 shell.html(view.topbar(actor, choices, today))
 ticked = st.session_state.pop("last_tick", None)
 if ticked:
-    st.success(f"Cycle complete · {ticked}")
+    st.success(ticked)
 
 navigation = {
     section: [

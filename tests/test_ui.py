@@ -407,7 +407,8 @@ def test_every_required_control_is_present_on_the_screen():
         "Chronic findings",
         "Review queue",
         "Prioritisation brief",
-        "Start over",
+        "Reset scenario",
+        "Jump to next event",
     ):
         assert control in source, f"missing from the dashboard: {control}"
 
@@ -514,7 +515,7 @@ def test_the_dashboard_renders_end_to_end(tmp_path, monkeypatch, app_cache_clear
                      "Overdue and escalation queue", "Prioritisation brief"):
         assert expected in headings
     for expected in ("Run cycle now", "+1 day", "+1 week", "+1 month",
-                     "Start over", "Write the brief"):
+                     "Reset scenario", "Jump to next event", "Write the brief"):
         assert expected in _buttons(app)
 
     for page, heading in (
@@ -1311,6 +1312,52 @@ def test_the_collapsed_sidebar_keeps_an_icon_rail_rather_than_vanishing():
     rail = [rule for rule in view.CSS.split("}") if COLLAPSED_SIDEBAR in rule]
     assert any("transform: none" in rule and "width: 64px" in rule for rule in rail)
     assert any("stSidebarUserContent" in rule for rule in rail), "only the icons remain"
+
+
+def test_the_next_event_is_named_before_the_jump_and_the_jump_lands_on_it(
+    tmp_path, monkeypatch, app_cache_cleared
+):
+    app = _dashboard(tmp_path, monkeypatch)
+    db = service.open_database(tmp_path / "demo.db")
+    try:
+        moment = service.next_event(db)
+    finally:
+        db.close()
+    assert moment is not None
+
+    shown = " ".join(m.value for m in app.markdown)
+    assert "Next event" in shown
+    assert moment.headline.title in shown and moment.headline.subject in shown
+
+    next(b for b in app.button if b.label == "Jump to next event").click().run()
+    assert not app.exception, [str(e) for e in app.exception]
+    assert any("Jumped to" in element.value for element in app.success)
+    db = service.open_database(tmp_path / "demo.db")
+    try:
+        assert service.current_date(db) == moment.day
+    finally:
+        db.close()
+
+
+def test_reset_scenario_restores_the_exact_seeded_state(tmp_path, monkeypatch,
+                                                        app_cache_cleared):
+    app = _dashboard(tmp_path, monkeypatch)
+    db = service.open_database(tmp_path / "demo.db")
+    seeded = service.state_digest(db)
+    db.close()
+
+    next(b for b in app.button if b.label == "Run cycle now").click().run()
+    db = service.open_database(tmp_path / "demo.db")
+    assert service.state_digest(db) != seeded
+    db.close()
+
+    next(b for b in app.button if b.label == "Reset scenario").click().run()
+    assert not app.exception, [str(e) for e in app.exception]
+    db = service.open_database(tmp_path / "demo.db")
+    try:
+        assert service.state_digest(db) == seeded
+    finally:
+        db.close()
 
 
 def test_model_cost_is_reachable_only_by_its_address():
