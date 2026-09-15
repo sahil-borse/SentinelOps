@@ -140,4 +140,11 @@
   - Both reset the table's selection. A selection that survived the rerun reopened the same notification: the table is keyed on the filter and a counter the dialog bumps.
   - Checked in a browser: the pointer on hover, a cell click opening the modal, an outside click leaving it open, and Close keeping it closed.
 
+  **Model spend moved to `/cost`.** Calls, tokens and cost came off the sidebar, the Audit trail figures and the brief's caption, which now reads without a call count. They moved to a page registered for every role with `visibility="hidden"`: in nobody's navigation, linked from no page, and reached only by typing the address. Spend is for whoever runs the system, not part of a compliance team's working screen. The page shows:
+  - the totals
+  - spend by what made the call (evidence assessment, recurrence, classification, taxonomy, review, brief, report), with each one's share of tokens
+  - spend by tier and model
+
+  Tests assert the landing page shows no spend, that `/cost` renders, and that no layout file links to it. The Walkthrough's step 4, "Count what that cost", still quotes the meter: it is a scripted demo step, and was left for a decision.
+
   Dates past the simulated day are also kept out of the inbox. The seeded audit programme writes its closure notices ahead of the calendar, so at the demo's start the inbox opened on next year's messages.

@@ -15,7 +15,7 @@ closure = stats["closure"]["overall"]
 shell.html(view.page_header(
     "Portfolio",
     "Section 8, computed from the record and the audit log. Arithmetic only — "
-    "rendering this page spends nothing.",
+    "no model is involved.",
     eyebrow="PA/InfoSec · insight",
 ))
 shell.html(view.figures([

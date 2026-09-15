@@ -59,7 +59,6 @@ with st.sidebar:
                             f"day's cycle…"):
                 st.session_state["last_tick"] = service.advance(conn, days).summary()
             st.rerun()
-    shell.html(view.meter_card(view.token_meter(conn)))
     if st.button("Start over", width="stretch",
                  help="Deletes the demo database and seeds the corpus again."):
         conn.close()  # Windows will not delete a file that is still open
@@ -86,4 +85,11 @@ navigation = {
     ]
     for section, pages in view.pages_for(actor["role"]).items()
 }
+# Reachable by its address only — /cost — and linked from nowhere: model spend
+# is for whoever runs the system, not part of anyone's working screen.
+first_section = next(iter(navigation))
+navigation[first_section] += [
+    st.Page(page["path"], title=page["title"], icon=page["icon"], visibility="hidden")
+    for page in view.HIDDEN_PAGES
+]
 st.navigation(navigation, position="sidebar", expanded=True).run()

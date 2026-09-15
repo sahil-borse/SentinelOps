@@ -108,7 +108,7 @@ with st.container(key="card_upload"):
             "Document type", service.doc_types_for(conn, target),
             format_func=lambda kind: kind.replace("_", " "),
             help="The first entries are what this control accepts. Pick another to see "
-                 "the wrong-type rule reject it without a model call.",
+                 "the wrong-type rule reject it before any model is asked.",
         )
         remediation = st.checkbox("This is remediation for an existing finding", True)
         recheck = st.checkbox(

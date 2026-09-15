@@ -2,11 +2,12 @@
 
 import streamlit as st
 
+from sentinelops.repositories import repositories
 from sentinelops.ui import service, shell, view
 
 conn, today, actor = shell.context()
-meter = view.token_meter(conn)
 totals = service.counts(conn)
+notifications = len(repositories(conn)["notifications"].list())
 
 shell.html(view.page_header(
     "Audit trail",
@@ -16,10 +17,10 @@ shell.html(view.page_header(
 ))
 shell.html(view.figures([
     view.Figure("Audit events", f"{totals['audit_events']:,}", "Written as things happened"),
-    view.Figure("Model calls", f"{meter['calls']:,}", f"{meter['total_tokens']:,} tokens"),
-    view.Figure("Cost", f"${meter['cost_usd']:.4f}", "Read off each response; placeholder rates"),
-    view.Figure("Decided without a model", f"{meter['zero_model_share']:.0%}",
-                "Findings reached by a pre-screen rule"),
+    view.Figure("Findings closed", f"{totals['actions_resolved']:,}",
+                "Each by an auditor, with remarks"),
+    view.Figure("Open findings", f"{totals['actions_open']:,}", "Still waiting on the auditor"),
+    view.Figure("Notifications", f"{notifications:,}", "Recorded, not emailed"),
 ]))
 
 verify_col, pack_col = st.columns(2, gap="large")

@@ -504,7 +504,9 @@ def test_the_dashboard_renders_end_to_end(tmp_path, monkeypatch, app_cache_clear
 
     shown = " ".join(m.value for m in app.markdown)
     assert "SentinelOps" in shown
-    assert "Simulated date" in shown and "Cost" in shown
+    assert "Simulated date" in shown
+    for spend in ("Model spend", "Model calls", "Tokens"):
+        assert spend not in shown, "model spend lives on /cost, not the working screens"
 
     # PA/InfoSec land on Today: what needs them, first
     headings = [element.value for element in app.subheader]
@@ -528,6 +530,10 @@ def test_the_dashboard_renders_end_to_end(tmp_path, monkeypatch, app_cache_clear
 
     _open(app, "inbox")
     assert "Inbox" in " ".join(m.value for m in app.markdown)
+
+    # reachable by its address, though no page links to it
+    _open(app, "cost")
+    assert "By what made the call" in [e.value for e in app.subheader]
 
     # the walkthrough, with step one offered first on a fresh demo
     _open(app, "walkthrough")
@@ -1305,6 +1311,34 @@ def test_the_collapsed_sidebar_keeps_an_icon_rail_rather_than_vanishing():
     rail = [rule for rule in view.CSS.split("}") if COLLAPSED_SIDEBAR in rule]
     assert any("transform: none" in rule and "width: 64px" in rule for rule in rail)
     assert any("stSidebarUserContent" in rule for rule in rail), "only the icons remain"
+
+
+def test_model_cost_is_reachable_only_by_its_address():
+    """Registered for everyone, in nobody's navigation, and linked from nowhere."""
+    hidden = [page["path"] for page in view.HIDDEN_PAGES]
+    assert hidden == ["screens/cost.py"]
+    for role in view.PAGES:
+        assert "screens/cost.py" not in view.page_paths(role)
+    app_source = (SRC / "ui" / "app.py").read_text(encoding="utf-8")
+    assert 'visibility="hidden"' in app_source
+    assert "meter_card" not in app_source, "no spend in the sidebar"
+    for path in LAYOUT:
+        if path.name in ("cost.py", "app.py"):
+            continue
+        text = path.read_text(encoding="utf-8")
+        assert "cost.py" not in text and '"/cost"' not in text, (
+            f"{path.name} links to the cost page"
+        )
+
+
+def test_spend_is_grouped_by_what_made_the_call(live):
+    rows = view.spend_by_purpose(live)
+    meter = view.token_meter(live)
+    assert rows, "a few cycles in, the model has been asked something"
+    assert sum(r["calls"] for r in rows) == meter["calls"]
+    assert sum(r["tokens"] for r in rows) == meter["total_tokens"]
+    assert abs(sum(r["share"] for r in rows) - 100) < 1
+    assert sum(t["calls"] for t in view.spend_by_tier(live)) == meter["calls"]
 
 
 def test_a_notification_opens_in_a_modal_the_reader_must_close():

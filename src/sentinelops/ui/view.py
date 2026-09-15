@@ -616,10 +616,6 @@ div[class*="st-key-inbox_table"] [data-testid="stDataFrame"], div[class*="st-key
 .so-who-line { font-size: 12.5px; color: $n500; margin-top: 2px; line-height: 1.4; }
 .so-date { font-size: 15px; font-weight: 650; color: $n900; }
 .so-date-sub { font-size: 12px; color: $n500; margin-bottom: 10px; line-height: 1.4; }
-.so-meter { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
-.so-meter div { background: $n50; border: 1px solid $n200; border-radius: 8px; padding: 6px 9px; }
-.so-meter b { display: block; font-size: 14px; color: $n900; }
-.so-meter span { font-size: 10.5px; color: $n500; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 650; }
 
 .pill { display: inline-block; padding: .05rem .5rem; border-radius: 10px; font-size: .78rem; font-weight: 600; }
 .stepnav { color: $n500; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
@@ -916,18 +912,53 @@ def calendar_card(today: date) -> str:
     )
 
 
-def meter_card(meter: dict[str, Any]) -> str:
-    cells = (
-        ("Model calls", f"{meter['calls']:,}"),
-        ("Tokens", f"{meter['total_tokens']:,}"),
-        ("Cost", f"${meter['cost_usd']:.4f}"),
-        ("No model", f"{meter['zero_model_share']:.0%}"),
-    )
-    return (
-        '<div class="so-label">Model spend</div><div class="so-meter">'
-        + "".join(f"<div><span>{_e(k)}</span><b>{_e(v)}</b></div>" for k, v in cells)
-        + "</div>"
-    )
+#: What each token_usage label prefix was spent on, as the cost page names it.
+SPEND_PURPOSES = {
+    "S3": "Evidence assessment (S3)",
+    "RECUR": "Recurrence detection",
+    "TRIAGE": "Gap classification and severity",
+    "TAXONOMY": "Gap taxonomy",
+    "BRIEF": "Prioritisation brief",
+    "REVIEW": "Evidence round review",
+    "REPORT": "Audit report summary",
+}
+
+
+def spend_by_purpose(conn) -> list[dict[str, Any]]:
+    """Model calls grouped by what made them, largest token spend first."""
+    groups: dict[str, dict[str, Any]] = {}
+    for row in conn.execute(
+        "SELECT label, input_tokens, output_tokens, cached_tokens, cost_usd FROM token_usage"
+    ):
+        key = (row["label"] or "unlabelled").split(":", 1)[0]
+        group = groups.setdefault(key, {
+            "purpose": SPEND_PURPOSES.get(key, humanise(key)), "calls": 0,
+            "input": 0, "output": 0, "cached": 0, "cost": 0.0,
+        })
+        group["calls"] += 1
+        group["input"] += row["input_tokens"]
+        group["output"] += row["output_tokens"]
+        group["cached"] += row["cached_tokens"]
+        group["cost"] += row["cost_usd"]
+    total = sum(g["input"] + g["output"] for g in groups.values()) or 1
+    rows = []
+    for group in groups.values():
+        tokens = group["input"] + group["output"]
+        rows.append({**group, "tokens": tokens, "share": round(100 * tokens / total, 1)})
+    return sorted(rows, key=lambda r: (-r["tokens"], r["purpose"]))
+
+
+def spend_by_tier(conn) -> list[dict[str, Any]]:
+    """Model calls grouped by tier and the model that answered."""
+    return [
+        {"tier": row["tier"], "model": row["model"], "calls": row["calls"],
+         "tokens": row["tokens"], "cost": row["cost"]}
+        for row in conn.execute(
+            "SELECT tier, model, COUNT(*) calls, SUM(input_tokens + output_tokens) tokens,"
+            " SUM(cost_usd) cost FROM token_usage GROUP BY tier, model"
+            " ORDER BY tokens DESC, tier"
+        )
+    ]
 
 
 # --- navigation, scoped by role -------------------------------------------------
@@ -978,6 +1009,13 @@ def pages_for(role: str | None) -> dict[str, list[dict[str, Any]]]:
 
 def page_paths(role: str | None) -> list[str]:
     return [page["path"] for pages in pages_for(role).values() for page in pages]
+
+
+#: Registered for every role and shown in no navigation: reached only by typing
+#: the address. Model spend is for whoever runs the system.
+HIDDEN_PAGES: list[dict[str, Any]] = [
+    _page("Model cost", "cost", ":material/payments:"),
+]
 
 
 # --- findings ---------------------------------------------------------------------

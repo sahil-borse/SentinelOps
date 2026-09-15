@@ -248,19 +248,19 @@ def brief_panel(conn, today: date) -> None:
             st.subheader("Prioritisation brief")
         st.caption(
             "Open findings ranked deterministically — severity band first, then "
-            "points. One model call reads the ranking and the section 8 figures and "
+            "points. A model reads the ranking and the section 8 figures and "
             "says where attention would go furthest. Advisory; it changes nothing."
         )
         if action.button("Write the brief" if written is None or stale else "Write it again",
                          key="write_brief", width="stretch"):
-            with st.spinner("Reading the ranking and the section 8 figures — one model call…"):
+            with st.spinner("Reading the ranking and the section 8 figures…"):
                 st.session_state["brief"] = service.brief(conn)
             st.rerun()
         if written is None:
             html(view.empty_state(
                 f"No brief written for {view.fmt_date(today)}",
-                "Press **Write the brief** to have the ranking read. It costs one "
-                "model call per cycle, however many findings are open.",
+                "Press **Write the brief** to have the ranking read and this "
+                "cycle's priorities drafted.",
             ))
             return
         if stale:
@@ -277,11 +277,8 @@ def brief_panel(conn, today: date) -> None:
                 html(view.label("Recommended focus"))
                 html(view.claims(written.recommended_focus, written.metrics,
                                  "No focus recommended."))
-            st.caption(
-                f"Written for {view.fmt_date(written.as_of)} · {written.model_calls} "
-                f"model call · {written.input_tokens + written.output_tokens:,} tokens · "
-                f"every claim cites the findings or figures it rests on"
-            )
+            st.caption(f"Written for {view.fmt_date(written.as_of)} · every claim cites "
+                       f"the findings or figures it rests on")
         elif written.withheld:
             st.warning("The drafted brief made a claim that did not check out, so it "
                        "was withheld: " + "; ".join(written.withheld[:3]))
