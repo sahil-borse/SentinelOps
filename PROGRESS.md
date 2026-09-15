@@ -76,3 +76,39 @@
 
   Everything that happened, and everything planned, is inside. The window bounds obligation periods, not every date, and the new `tests/test_dates.py` says exactly that: periods inside the window; what happened inside it and by the vantage point; what is planned inside it; only the last periods' filings and due dates past its end, never past the last due date (2027-07-15); a pre-window document date only on stale evidence; nothing filed after the vantage point used. Every date column must be classified, or the test fails. Each rule was checked by planting a violation. The 138 filings dated after the vantage point sit in the inbox, skipped by S1, S2 and remediation. `token_usage.ts` is wall-clock (`datetime.now()` in the meter). That is outside section 12's rule, which names audit events and notifications; it is classified as not business time, and left.
   **No band promotion.** Promoting a finding more than a year past target moved a Minor above a Major on age alone, re-litigating a severity the auditor assigned and communicated in the audit report. Putting a promoted finding at the bottom of the band above instead would be a no-op, since it already heads its own band. So there is none: `Findings are ordered by severity band (Major, then Minor, then Observation), and within a band by points = criticality + timing + recurrence + follow-ups.` Age past a year is `analytics.CHRONIC_DAYS`: each ranked row carries a `chronic` flag, the rendered rankings mark it, and PA/InfoSec see a separate "Chronic findings" alert on the dashboard, listing them oldest first. Neither moves a row. At 2027-04-15 the ten ranked first are the nine open Majors and FND-FINDING-CLOSURE-HR-2026-Q2, the Minor in HR 247 days late. FND-IA-2026-H1-02, the Minor 377 days late, is back in the Minor band at 11th, and is the one chronic finding.
+- Slice 17 (2026-09-16): the dashboard rebuilt as a compliance team's morning screen. Still Streamlit, and still one rule: layout in the pages, computation in `view.py`, actions in `service.py`, neither importing Streamlit.
+  **Pages, scoped by role.** Native multi-page navigation (`st.navigation`), with the pages registered per role from one table, `view.PAGES`:
+  - PA/InfoSec land on **Today**, which holds the review queue, the chronic findings alert, the overdue queue and the prioritisation brief. Their other pages are Findings, Schedule, Inbox, Portfolio, Recurrence, Audit trail and the Walkthrough.
+  - Unit owners land on **My findings**, and also have Finding detail and Inbox.
+  - Management get **Overview**.
+
+  `app.py` is now the entry point only: theme, the header every page shares, the identity selector, the simulated calendar and meter, then navigation. Each page is a script in `ui/screens/`, and none of them defines a function. `shell.py` holds what several pages draw: the finding detail panel, the brief panel and the document frame. The identity selector changes both the pages and the permitted actions. The header always names who you are acting as, with their role and unit.
+  **Absent, not hidden.** Close, Accept and Mark insufficient are rendered only for an identity that may use them. A test sets up an open finding with a round waiting, and confirms PA/InfoSec see all three controls. It then walks every unit owner page and asserts none of the three is in the element tree Streamlit sends the browser. It also asserts an owner cannot open an auditor's page by name, since the page is not registered for their role, and that the stylesheet hides nothing.
+  **New actions:**
+  - owners file an evidence round against their own unit's finding; the unit is checked in the service, as well as the role in the stage
+  - PA/InfoSec accept a round, which closes the finding; the separation check runs before the round is answered, so a refusal cannot leave a round accepted with its finding still open
+  - PA/InfoSec mark a round insufficient, which counts the chase
+  - owners record progress
+  - recipients mark notifications read
+
+  An advisory reading is attached to each new round for the auditor.
+  **The design system**, in `view.py`:
+  - one accent (teal), one neutral scale, and three severity colours that nothing else borrows
+  - every badge carries its label, and severity renders in tables as a labelled pill column
+  - explicit heading and base font sizes, and tabular figures
+  - a few large figures with a comparison at the top of each page
+  - card panels; dates as 15 Apr 2027, in simulated business time
+  - an empty state on every panel that says what would be there and why it is not; spinners on every slow action
+
+  A test checks every colour in the stylesheet is in the palette.
+  **Found by looking at it.** Every page was screenshotted headlessly at the vantage point for all three roles. Four fixes came of that:
+  - The landing page opened scrolled halfway down. The document frame's `scrollIntoView` scrolls every ancestor, and a same-origin frame's ancestors include the dashboard. It now scrolls its own window, and the test that required `scrollIntoView` now forbids it. `components.v1.html` is deprecated, and the frame moved to `st.iframe`. The evidence inside is escaped, as before.
+  - The owner could see the model's advisory reading of their own round. That reading is the auditor's: the owner benefits from acceptance and could write the next round to the model. It is now shown to PA/InfoSec only, and a test covers both sides.
+  - Owner detail opened on a closed finding; it now opens on open work first.
+  - `ID-ASSESSOR` appeared as a person; system identities are now named.
+
+  **Tests moved with the panels.** The existing AppTest coverage checks the same behaviours: the dashboard renders, a cycle runs, upload reports back, an empty upload is refused, the chain verifies, and the walkthrough renders emphasis. Each is now checked on the page it lives on, reached through the identity selector and `switch_page`. My findings is filtered by unit in the repository query, and a spy on `Repository.list` asserts it.
+  **Open, not changed:**
+  - The seeded audit programme exists from the calendar's first day. At the demo's start date, Findings shows findings raised months "later", and Portfolio counts them. That was already true of the old screen, and it reads oddly at 28 Jan 2026; the demo reads best replayed to the vantage point.
+  - Management have only Overview, as specified, although escalation notifications are addressed to managers.
+  - On Findings, "band" is read as the ageing band, because since slice 16z a severity band is the severity.

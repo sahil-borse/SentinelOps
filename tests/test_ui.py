@@ -7,7 +7,8 @@ not.
 """
 
 import ast
-from datetime import date
+import re
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,8 @@ from sentinelops.synth import generate_corpus, seed_database
 from sentinelops.ui import service, story, view
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "sentinelops"
+SCREENS = sorted((SRC / "ui" / "screens").glob("*.py"))
+LAYOUT = (SRC / "ui" / "app.py", SRC / "ui" / "shell.py", *SCREENS)
 
 
 @pytest.fixture(scope="module")
@@ -365,10 +368,16 @@ def test_counts_agree_with_the_records(live):
 # --- the app file itself ----------------------------------------------------
 
 def test_the_app_is_layout_and_nothing_else():
-    """If logic creeps into app.py it stops being tested. Keep it thin."""
-    tree = ast.parse((SRC / "ui" / "app.py").read_text(encoding="utf-8"))
-    functions = [n for n in tree.body if isinstance(n, ast.FunctionDef)]
-    assert len(functions) <= 1, "computation belongs in view.py or service.py"
+    """If logic creeps into the pages it stops being tested. Keep them thin.
+
+    The entry point and every screen define no functions at all; the shared
+    panels live in `shell.py`, and every computation in `view.py` or `service.py`.
+    """
+    for path in (SRC / "ui" / "app.py", *SCREENS):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        functions = [n for n in ast.walk(tree)
+                     if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        assert not functions, f"{path.name}: computation belongs in view.py or service.py"
 
 
 def test_neither_logic_module_imports_streamlit():
@@ -378,8 +387,10 @@ def test_neither_logic_module_imports_streamlit():
 
 
 def test_every_required_control_is_present_on_the_screen():
-    """The slice named twelve things. This asserts each one is wired up."""
-    app = (SRC / "ui" / "app.py").read_text(encoding="utf-8")
+    """The controls the slices named, each still wired up somewhere on a page."""
+    source = " ".join(
+        path.read_text(encoding="utf-8") for path in (*LAYOUT, SRC / "ui" / "view.py")
+    )
     for control in (
         "Compliance status by process area",
         "Overdue and escalation queue",
@@ -394,8 +405,11 @@ def test_every_required_control_is_present_on_the_screen():
         "Cost",
         "+1 month",
         "Chronic findings",
+        "Review queue",
+        "Prioritisation brief",
+        "Start over",
     ):
-        assert control in app, f"missing from the dashboard: {control}"
+        assert control in source, f"missing from the dashboard: {control}"
 
 
 def test_chronic_findings_are_the_open_ones_more_than_a_year_past_target(conn, corpus):
@@ -439,50 +453,92 @@ def app_cache_cleared():
     yield
     st.cache_resource.clear()
 
+def _dashboard(tmp_path, monkeypatch, *, timeout=300):
+    """The real entry point, headless, on a demo database of its own."""
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setattr(service, "DB_PATH", tmp_path / "demo.db")
+    app = AppTest.from_file(str(SRC / "ui" / "app.py"), default_timeout=timeout)
+    app.run()
+    return app
+
+
+def _act_as(app, identity_id):
+    app.sidebar.selectbox(key="acting_as").set_value(identity_id).run()
+
+
+def _open(app, page):
+    app.switch_page(f"screens/{page}.py").run()
+    assert not app.exception, [e.message for e in app.exception]
+
+
+def _buttons(app):
+    return {button.label for button in app.button}
+
+
+def _owner_with_checks(tmp_path):
+    """A unit owner whose unit owes evidence on the demo database right now."""
+    db = service.open_database(tmp_path / "demo.db")
+    try:
+        today = service.current_date(db)
+        return next(
+            choice["id"] for choice in view.identity_choices(db)
+            if choice["role"] == "unit_owner"
+            and view.owner_checks(db, choice["unit"], today)
+        )
+    finally:
+        db.close()
+
+
 def test_the_dashboard_renders_end_to_end(tmp_path, monkeypatch, app_cache_cleared):
-    """Runs the real script headlessly, seeds, and checks the screen came up.
+    """Runs the real entry point headlessly, and every page PA/InfoSec can reach.
 
     The logic modules are tested above; this is the one that would catch a
     layout call that raises — a mistyped column count, a metric handed the
-    wrong type — which no amount of testing `view.py` would find.
+    wrong type — which no amount of testing `view.py` would find. Slice 17 made
+    the dashboard multi-page, so each panel this used to find on one long page
+    is now checked on the page it lives on.
     """
-    from streamlit.testing.v1 import AppTest
-
-    monkeypatch.setattr(service, "DB_PATH", tmp_path / "demo.db")
-    app = AppTest.from_file(str(SRC / "ui" / "app.py"), default_timeout=120)
-    app.run()
-
+    app = _dashboard(tmp_path, monkeypatch, timeout=120)
     assert not app.exception, [str(e) for e in app.exception]
-    assert app.title[0].value == "SentinelOps"
 
+    shown = " ".join(m.value for m in app.markdown)
+    assert "SentinelOps" in shown
+    assert "Simulated date" in shown and "Cost" in shown
+
+    # PA/InfoSec land on Today: what needs them, first
     headings = [element.value for element in app.subheader]
-    for expected in ("Compliance status by process area",
-                     "Overdue and escalation queue", "Assessment detail",
-                     "Submit evidence", "Open findings", "Audit"):
+    for expected in ("Review queue", "Chronic findings",
+                     "Overdue and escalation queue", "Prioritisation brief"):
         assert expected in headings
-
-    labels = {button.label for button in app.button}
     for expected in ("Run cycle now", "+1 day", "+1 week", "+1 month",
-                     "Verify audit chain", "Generate audit pack", "Start over"):
-        assert expected in labels
+                     "Start over", "Write the brief"):
+        assert expected in _buttons(app)
 
-    # the walkthrough leads, with step one offered first
+    for page, heading in (
+        ("findings", "On record"),
+        ("schedule", "Compliance activities due"),
+        ("portfolio", "Compliance status by process area"),
+        ("recurrence", "This has happened before"),
+        ("audit_trail", "Verify the chain"),
+    ):
+        _open(app, page)
+        assert heading in [e.value for e in app.subheader], page
+    assert {"Verify audit chain", "Generate audit pack"} <= _buttons(app)
+
+    _open(app, "inbox")
+    assert "Inbox" in " ".join(m.value for m in app.markdown)
+
+    # the walkthrough, with step one offered first on a fresh demo
+    _open(app, "walkthrough")
     assert "GUIDED WALKTHROUGH" in " ".join(m.value for m in app.markdown)
-    assert story.STEPS[0].button in labels
-    assert "1 · Raise this month's checks" in headings
-
-    # the corpus seeded itself on first open, with no cycle run yet
-    assert any("Simulated date" == m.label for m in app.metric)
-    assert any(m.label == "Cost" for m in app.metric)
+    assert story.STEPS[0].button in _buttons(app)
+    assert story.STEPS[0].title in [e.value for e in app.subheader]
 
 
 def test_the_run_cycle_button_actually_runs_a_cycle(tmp_path, monkeypatch, app_cache_cleared):
-    """And the panels that only exist once there is something to show appear."""
-    from streamlit.testing.v1 import AppTest
-
-    monkeypatch.setattr(service, "DB_PATH", tmp_path / "demo.db")
-    app = AppTest.from_file(str(SRC / "ui" / "app.py"), default_timeout=300)
-    app.run()
+    """And the controls that only exist once there is something to act on appear."""
+    app = _dashboard(tmp_path, monkeypatch)
 
     before = service.counts(service.open_database(tmp_path / "demo.db"))["instances"]
     next(b for b in app.button if b.label == "Run cycle now").click().run()
@@ -492,27 +548,35 @@ def test_the_run_cycle_button_actually_runs_a_cycle(tmp_path, monkeypatch, app_c
     assert after > before, "pressing the button raised checks"
     assert any("checks raised" in element.value for element in app.success)
 
-    # the upload form exists once checks do
-    labels = {button.label for button in app.button}
-    assert "Submit evidence" in labels
+    # the upload form exists once checks do, for the unit that owes the evidence
+    _act_as(app, _owner_with_checks(tmp_path))
+    _open(app, "owner_detail")
+    assert "Submit evidence" in _buttons(app)
     assert any(u.label == "Evidence file" for u in app.get("file_uploader"))
 
-    # The re-assess control lives in assessment detail, so it exists once a check
-    # has been *judged*. On the first cycle, 28 January, nothing can have been:
-    # no period has closed. This used to pass here only because stale evidence
-    # was filed in 2025, before its 2026 obligation existed, and judged at once.
-    # A month on, January's evidence has been filed and assessed.
+    # The re-assess control lives in a finding raised from a check, so it exists
+    # once a check has been *judged* and failed. On the first cycle, 28 January,
+    # nothing can have been: no period has closed. A month on, January's
+    # evidence has been filed and assessed.
     next(b for b in app.button if b.label == "+1 month").click().run()
     assert not app.exception, [str(e) for e in app.exception]
-    assert "Re-assess this check now" in {button.label for button in app.button}
+    db = service.open_database(tmp_path / "demo.db")
+    try:
+        finding = next((f for f in repositories(db)["findings"].list()
+                        if f.check_instance_id), None)
+        auditor = service.default_identity(db)
+    finally:
+        db.close()
+    assert finding is not None, "a month of judged checks raises an activity finding"
+    _act_as(app, auditor)
+    app.session_state["selected_finding"] = finding.id
+    _open(app, "findings")
+    assert "Re-assess this check now" in _buttons(app)
 
 
 def test_the_verify_button_reports_on_screen(tmp_path, monkeypatch, app_cache_cleared):
-    from streamlit.testing.v1 import AppTest
-
-    monkeypatch.setattr(service, "DB_PATH", tmp_path / "demo.db")
-    app = AppTest.from_file(str(SRC / "ui" / "app.py"), default_timeout=180)
-    app.run()
+    app = _dashboard(tmp_path, monkeypatch, timeout=180)
+    _open(app, "audit_trail")
     next(b for b in app.button if b.label == "Verify audit chain").click().run()
 
     assert not app.exception, [str(e) for e in app.exception]
@@ -683,14 +747,12 @@ def test_submitting_evidence_reports_back_on_screen(tmp_path, monkeypatch,
     the rerun, so a successful upload looked like a dead button. Messages are
     now parked in session state and rendered on the way back.
     """
-    from streamlit.testing.v1 import AppTest
-
-    monkeypatch.setattr(service, "DB_PATH", tmp_path / "demo.db")
-    app = AppTest.from_file(str(SRC / "ui" / "app.py"), default_timeout=300)
-    app.run()
+    app = _dashboard(tmp_path, monkeypatch)
     next(b for b in app.button if b.label == "Run cycle now").click().run()
+    _act_as(app, _owner_with_checks(tmp_path))
+    _open(app, "owner_detail")
 
-    app.text_area[0].set_value(
+    next(t for t in app.text_area if t.label == "…or paste the evidence directly").set_value(
         "Quarterly review - corrected resubmission\n\n"
         "1. Every privileged account was listed and reviewed line by line.\n"
         "2. Reviewer recorded and countersigned.\n"
@@ -706,12 +768,10 @@ def test_submitting_evidence_reports_back_on_screen(tmp_path, monkeypatch,
 
 
 def test_submitting_nothing_says_so(tmp_path, monkeypatch, app_cache_cleared):
-    from streamlit.testing.v1 import AppTest
-
-    monkeypatch.setattr(service, "DB_PATH", tmp_path / "demo.db")
-    app = AppTest.from_file(str(SRC / "ui" / "app.py"), default_timeout=300)
-    app.run()
+    app = _dashboard(tmp_path, monkeypatch)
     next(b for b in app.button if b.label == "Run cycle now").click().run()
+    _act_as(app, _owner_with_checks(tmp_path))
+    _open(app, "owner_detail")
     next(b for b in app.button if b.label == "Submit evidence").click().run()
 
     assert not app.exception, [str(e) for e in app.exception]
@@ -722,17 +782,19 @@ def test_no_message_is_written_immediately_before_a_rerun():
     """The class of bug, not just the instance.
 
     Anything printed on the line before `st.rerun()` never reaches the screen.
-    Park it in session state instead.
+    Park it in session state instead. Checked across every page.
     """
-    source = (SRC / "ui" / "app.py").read_text(encoding="utf-8").splitlines()
-    for number, line in enumerate(source):
-        if line.strip() != "st.rerun()":
-            continue
-        window = " ".join(source[max(0, number - 3):number])
-        for painter in ("st.success(", "st.error(", "st.warning(", "st.info("):
-            assert painter not in window, (
-                f"line {number + 1}: {painter} just before st.rerun() is discarded"
-            )
+    for path in LAYOUT:
+        source = path.read_text(encoding="utf-8").splitlines()
+        for number, line in enumerate(source):
+            if line.strip() != "st.rerun()":
+                continue
+            window = " ".join(source[max(0, number - 3):number])
+            for painter in ("st.success(", "st.error(", "st.warning(", "st.info("):
+                assert painter not in window, (
+                    f"{path.name} line {number + 1}: {painter} just before "
+                    f"st.rerun() is discarded"
+                )
 
 
 # --- long documents must not become an endless scroll ----------------------
@@ -770,10 +832,17 @@ def test_the_whole_document_is_present_in_both_states():
 
 
 def test_the_frame_scrolls_to_the_first_citation():
-    """A long document should arrive at its highlight, not at page one."""
+    """A long document should arrive at its highlight, not at page one — and
+    move only its own frame.
+
+    It used `scrollIntoView`, which scrolls every scrollable ancestor. In a
+    same-origin frame that includes the dashboard, and slice 17's landing page
+    opened scrolled halfway down, onto the first document in the review queue.
+    """
     frame = view.document_frame(LONG, ["The reviewer field was left blank."])
-    assert "scrollIntoView" in frame.html
     assert "querySelector('mark')" in frame.html
+    assert "window.scrollTo" in frame.html
+    assert "scrollIntoView" not in frame.html
 
 
 def test_the_frame_is_a_self_contained_page():
@@ -875,11 +944,8 @@ def test_the_show_more_button_is_offered_only_when_it_would_do_something():
 
 def test_the_walkthrough_panel_renders_emphasis_on_screen(tmp_path, monkeypatch,
                                                           app_cache_cleared):
-    from streamlit.testing.v1 import AppTest
-
-    monkeypatch.setattr(service, "DB_PATH", tmp_path / "demo.db")
-    app = AppTest.from_file(str(SRC / "ui" / "app.py"), default_timeout=300)
-    app.run()
+    app = _dashboard(tmp_path, monkeypatch)
+    _open(app, "walkthrough")
     next(b for b in app.button
          if b.label == story.STEPS[0].button).click().run()
 
@@ -894,3 +960,283 @@ def test_the_walkthrough_panel_renders_emphasis_on_screen(tmp_path, monkeypatch,
     joined = " ".join(panels)
     assert "<strong>" in joined, "emphasis must be converted to HTML"
     assert "**" not in joined, "raw asterisks inside an HTML block reach the screen"
+
+
+# --- slice 17: pages scoped by role, and the controls an owner never gets -------------
+
+def test_pages_are_scoped_to_the_role():
+    pa = view.page_paths("pa_infosec")
+    owner = view.page_paths("unit_owner")
+    management = view.page_paths("management")
+
+    assert pa[0] == "screens/today.py", "PA/InfoSec land on Today"
+    assert {"screens/today.py", "screens/portfolio.py", "screens/recurrence.py",
+            "screens/findings.py", "screens/schedule.py", "screens/inbox.py"} <= set(pa)
+    assert owner == ["screens/my_findings.py", "screens/owner_detail.py",
+                     "screens/inbox.py"]
+    assert management == ["screens/overview.py"]
+    assert not (set(owner) - {"screens/inbox.py"}) & set(pa)
+    assert not set(management) & (set(pa) | set(owner))
+
+    for role in view.PAGES:
+        defaults = [page for pages in view.pages_for(role).values()
+                    for page in pages if page["default"]]
+        assert len(defaults) == 1 and defaults[0]["path"] == view.page_paths(role)[0]
+    for path in {*pa, *owner, *management}:
+        assert (SRC / "ui" / path).exists(), path
+    assert view.pages_for(None) == view.PAGES["management"], "no role, read-only"
+
+
+def test_close_and_accept_are_absent_for_a_unit_owner(tmp_path, monkeypatch,
+                                                      app_cache_cleared):
+    """Section 7: the owner's Close control is absent, not disabled — Accept too.
+
+    Set up so both have something to act on: an open finding with an evidence
+    round waiting. PA/InfoSec see both controls, so their absence for the owner
+    is a statement about the owner rather than about an empty screen. Absent
+    means not in the element tree Streamlit sends to the browser, which is what
+    becomes the DOM; and the stylesheet hides nothing, so a control cannot be
+    present but hidden instead.
+    """
+    from sentinelops import directory
+    from sentinelops.stages import rounds
+
+    db = service.open_database(tmp_path / "demo.db")
+    service.seed(db)
+    repo, people = repositories(db), directory.load(db)
+    finding = next(
+        f for f in repo["findings"].list()
+        if f.status == "open" and people.get(f.owner_identity)
+        and people.get(f.owner_identity).role == "unit_owner"
+        and people.get(f.owner_identity).auditable_unit == f.auditable_unit_id
+    )
+    rounds.open_round(
+        repo, people, finding, by=finding.owner_identity, evidence_ref="EV-TEST",
+        evidence_text="All three leavers' accounts were disabled; tickets attached.",
+        as_of=service.current_date(db),
+    )
+    db.close()
+
+    forbidden = {"Accept and close", "Mark insufficient", "Close finding"}
+    app = _dashboard(tmp_path, monkeypatch)
+    assert {"Accept and close", "Mark insufficient"} <= _buttons(app)
+    app.session_state["selected_finding"] = finding.id
+    _open(app, "findings")
+    assert "Close finding" in _buttons(app)
+    assert "dvisory reading" in " ".join(m.value for m in app.markdown), (
+        "the auditor sees how the model read the round"
+    )
+
+    _act_as(app, finding.owner_identity)
+    app.session_state["owner_finding"] = finding.id
+    for path in view.page_paths("unit_owner"):
+        app.switch_page(path).run()
+        assert not app.exception, [e.message for e in app.exception]
+        assert not forbidden & _buttons(app), path
+        if path.endswith("owner_detail.py"):
+            shown = " ".join(m.value for m in app.markdown)
+            assert finding.id in shown, (
+                "the owner is looking at the very finding PA/InfoSec could close"
+            )
+            assert "dvisory reading" not in shown, (
+                "the model's reading of a round is the auditor's, not the filer's"
+            )
+
+    # nor can an owner reach an auditor's page by naming it
+    with pytest.raises(ValueError):
+        app.switch_page("screens/today.py")
+
+    css = view.CSS.replace(" ", "")
+    assert "display:none" not in css and "visibility:hidden" not in css
+
+
+def test_my_findings_are_filtered_in_the_query_not_the_display(live, monkeypatch):
+    from sentinelops import directory
+    from sentinelops.repositories import Repository
+
+    repo, people = repositories(live), directory.load(live)
+    owner = next(
+        p for p in people.by_role("unit_owner")
+        if any(f.auditable_unit_id == p.auditable_unit for f in repo["findings"].list())
+    )
+    asked: list[dict] = []
+    real = Repository.list
+
+    def spy(self, **where):
+        if self.table == "findings":
+            asked.append(dict(where))
+        return real(self, **where)
+
+    monkeypatch.setattr(Repository, "list", spy)
+    rows = view.my_findings(live, owner.id, date(2026, 5, 28), include_closed=True)
+
+    assert {"auditable_unit_id": owner.auditable_unit} in asked
+    assert rows and {r["unit_id"] for r in rows} == {owner.auditable_unit}
+    assert [r["target"] for r in rows] == sorted(r["target"] for r in rows)
+
+
+# --- slice 17: the design system -----------------------------------------------------
+
+def test_severity_is_never_colour_alone():
+    for severity in view.SEVERITIES:
+        markup = view.severity_badge(severity)
+        assert f">{severity}<" in markup
+        assert f"so-sev-{severity.lower()}" in markup
+    assert ">Unassigned<" in view.severity_badge(None)
+    for markup, text in (
+        (view.status_badge("open"), "Open"),
+        (view.progress_badge(None), "Not acknowledged"),
+        (view.progress_badge("action_in_progress"), "Action in progress"),
+        (view.response_badge("pending"), "Awaiting review"),
+        (view.chronic_badge(), "Chronic"),
+    ):
+        assert f">{text}<" in markup, "a badge is a label with a colour, never a raw enum"
+
+
+def test_the_stylesheet_uses_one_accent_one_neutral_scale_and_the_severity_set():
+    colours = {c.upper() for c in re.findall(r"#[0-9A-Fa-f]{6}", view.CSS)}
+    assert colours <= {c.upper() for c in view.PALETTE}
+    assert view.ACCENT.upper() in colours
+    for text, _, _ in view.SEVERITY_STYLE.values():
+        assert text.upper() in colours
+    assert "tabular-nums" in view.CSS
+    for size in ("font-size: 30px", "font-size: 22px", "font-size: 17px",
+                 "font-size: 15px"):
+        assert size in view.CSS
+
+
+def test_dates_read_as_business_dates():
+    assert view.fmt_date(date(2027, 4, 15)) == "15 Apr 2027"
+    assert view.fmt_date(datetime(2027, 4, 15, 10, 0)) == "15 Apr 2027"
+    assert view.fmt_long_date(date(2027, 4, 15)) == "Thursday 15 April 2027"
+    assert view.fmt_when(datetime(2027, 4, 15, 10, 0)) == "15 Apr 2027, 10:00"
+    assert view.fmt_date(None) == "—"
+    assert view.due_phrase(3) == "3 days late"
+    assert view.due_phrase(1) == "1 day late"
+    assert view.due_phrase(0) == "Due today"
+    assert view.due_phrase(-2) == "Due in 2 days"
+
+
+def test_an_empty_state_says_what_would_be_there_and_why():
+    markup = view.empty_state("Nothing is waiting for review",
+                              "When an owner files **evidence** it arrives here.")
+    assert "Nothing is waiting for review" in markup
+    assert "<strong>evidence</strong>" in markup
+    assert "<script>" not in view.empty_state("<script>", "<script>")
+
+
+def test_system_identities_are_named_not_shown_as_ids(live):
+    from sentinelops import directory
+
+    people = directory.load(live)
+    assert view.person(people, "ID-ASSESSOR") == "automated assessment"
+    assert view.person(people, "ID-SYSTEM") == "the scheduler"
+
+
+# --- slice 17: the actions the new pages call ------------------------------------------
+
+def _pending_round(conn):
+    from sentinelops import directory
+    from sentinelops.stages import rounds
+
+    repo, people = repositories(conn), directory.load(conn)
+    finding = next(
+        f for f in repo["findings"].list()
+        if f.status == "open" and people.get(f.owner_identity)
+        and people.get(f.owner_identity).auditable_unit == f.auditable_unit_id
+        and not any(r.is_open for r in rounds.rounds_for(repo, f.id))
+    )
+    ok, message = service.open_evidence_round(
+        conn, finding.id, by=finding.owner_identity, evidence_ref="EV-1",
+        evidence_text="Both accounts were disabled on 2 April; the tickets are attached.",
+        note="Done.",
+    )
+    assert ok, message
+    return finding, rounds.rounds_for(repo, finding.id)[-1]
+
+
+def test_an_owner_files_a_round_and_it_joins_the_review_queue(live):
+    finding, submission = _pending_round(live)
+    assert submission.auditor_response == "pending"
+    assert repositories(live)["findings"].get(finding.id).status == "open"
+    queue = view.review_queue(live, service.current_date(live))
+    item = next(i for i in queue if i["id"] == submission.id)
+    assert item["recommendation"] is not None, "an advisory reading waits beside it"
+
+
+def test_an_owner_cannot_file_on_another_units_finding(live):
+    from sentinelops import directory
+
+    repo, people = repositories(live), directory.load(live)
+    finding = next(f for f in repo["findings"].list() if f.status == "open")
+    stranger = next(p for p in people.by_role("unit_owner")
+                    if p.auditable_unit != finding.auditable_unit_id)
+    ok, message = service.open_evidence_round(
+        live, finding.id, by=stranger.id, evidence_ref="EV", evidence_text="text",
+    )
+    assert not ok and "does not own" in message
+
+
+def test_accepting_a_round_closes_the_finding(live):
+    finding, submission = _pending_round(live)
+    ok, message = service.respond_to_round(
+        live, submission.id, response="accepted", by=service.default_identity(live),
+        remarks="Accounts confirmed disabled against the tickets.",
+    )
+    assert ok, message
+    assert repositories(live)["findings"].get(finding.id).status == "closed"
+
+
+def test_an_insufficient_round_keeps_the_finding_open_and_counts_the_chase(live):
+    finding, submission = _pending_round(live)
+    before = repositories(live)["findings"].get(finding.id).follow_up_count
+    ok, message = service.respond_to_round(
+        live, submission.id, response="insufficient", by=service.default_identity(live),
+        remarks="The tickets are not attached.",
+    )
+    assert ok, message
+    after = repositories(live)["findings"].get(finding.id)
+    assert after.status == "open"
+    assert after.follow_up_count == before + 1
+
+
+def test_an_owner_cannot_answer_a_round_and_nothing_moves(live):
+    finding, submission = _pending_round(live)
+    ok, _ = service.respond_to_round(
+        live, submission.id, response="accepted", by=finding.owner_identity,
+        remarks="Fine.",
+    )
+    assert not ok
+    assert repositories(live)["rounds"].get(submission.id).auditor_response == "pending"
+    assert repositories(live)["findings"].get(finding.id).status == "open"
+
+
+def test_owner_progress_is_recorded_and_moves_nothing(live):
+    from sentinelops import directory
+
+    repo, people = repositories(live), directory.load(live)
+    finding = next(
+        f for f in repo["findings"].list()
+        if f.status == "open" and people.get(f.owner_identity)
+        and people.get(f.owner_identity).auditable_unit == f.auditable_unit_id
+    )
+    ok, message = service.record_progress(live, finding.id, "implemented",
+                                          by=finding.owner_identity)
+    assert ok, message
+    after = repo["findings"].get(finding.id)
+    assert after.owner_progress == "implemented" and after.status == "open"
+    refused, _ = service.record_progress(live, finding.id, "implemented",
+                                         by=service.default_identity(live))
+    assert not refused, "PA/InfoSec do not report an owner's progress for them"
+
+
+def test_only_the_recipient_marks_a_notification_read(live):
+    auditor = service.default_identity(live)
+    rows = view.inbox_rows(live, auditor)
+    assert rows
+    note = rows[0]
+    other = next(c["id"] for c in view.identity_choices(live) if c["id"] != auditor)
+    assert not service.mark_read(live, note["id"], by=other)[0]
+    assert service.mark_read(live, note["id"], by=auditor)[0]
+    assert not next(r for r in view.inbox_rows(live, auditor)
+                    if r["id"] == note["id"])["unread"]

@@ -2,761 +2,85 @@
 
     streamlit run src/sentinelops/ui/app.py
 
-Once it is up, nothing else needs a terminal: the calendar advances, cycles run,
-evidence uploads, checks re-assess, the audit pack generates and the chain
-verifies, all from the screen.
+The entry point: the theme, the header every page shares, the identity selector,
+the simulated calendar, and navigation scoped to the selected identity's role.
+Each page is a script in `screens/`.
 
-This file is deliberately dull. Every computation lives in `view.py` and every
-action in `service.py`, both of which are tested; what is left here is layout.
+Layout only. Every computation lives in `view.py` and every action in
+`service.py`, both tested and neither importing Streamlit; `shell.py` holds the
+two panels more than one page draws.
 """
 
 from __future__ import annotations
 
-from datetime import date
-
 import streamlit as st
-import streamlit.components.v1 as components
 
-# Absolute, not relative: Streamlit executes this file as a top-level
-# script, not as a package member, so `from . import ...` fails at the
-# first browser connect — after the server has already reported healthy.
-from sentinelops.ui import service, story, view
+# Absolute, not relative: Streamlit executes this file as a top-level script,
+# not as a package member, so `from . import ...` fails at the first browser
+# connect — after the server has already reported healthy.
+from sentinelops.ui import service, shell, view
 
-st.set_page_config(page_title="SentinelOps", layout="wide", page_icon="🛡️")
+st.set_page_config(page_title="SentinelOps", layout="wide", page_icon="🛡️",
+                   initial_sidebar_state="expanded")
+shell.html(view.CSS)
 
-CSS = """
-<style>
-  .doc { background:#fbfbf9; border:1px solid #ddd; padding:.9rem 1.1rem;
-         white-space:pre-wrap; font-size:.86rem; line-height:1.55;
-         font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
-         max-height:30rem; overflow-y:auto; }
-  .elide { color:#999; font-style:italic; background:#f0f0ee; padding:0 .3rem;
-           border-radius:2px; }
-  .doc mark { background:#ffe680; box-shadow:0 0 0 2px #ffe680; border-radius:2px; }
-  .pill { display:inline-block; padding:.05rem .5rem; border-radius:10px;
-          font-size:.78rem; font-weight:600; }
-  .v-gap,.v-insufficient_evidence { background:#fde8e8; color:#8a1c1c; }
-  .v-compliant { background:#e6f4ea; color:#0a6b32; }
-  .v-partial { background:#fff4d6; color:#7a5200; }
-  .muted { color:#666; font-size:.84rem; }
-  .why { background:#f4f6fb; border-left:4px solid #4a6fa5; padding:.8rem 1.1rem;
-         margin:.4rem 0 .9rem 0; font-size:.95rem; line-height:1.6; }
-  .outcome { background:#eef7f0; border-left:4px solid #2e7d4f; padding:.8rem 1.1rem;
-             margin:.5rem 0; line-height:1.6; }
-  .stepnav { color:#555; font-size:.85rem; letter-spacing:.02em; }
-</style>
-"""
-st.markdown(CSS, unsafe_allow_html=True)
+conn = shell.database()
+choices = view.identity_choices(conn)
+labels = {choice["id"]: choice["label"] for choice in choices}
+if st.session_state.get("acting_as") not in labels:
+    st.session_state["acting_as"] = service.default_identity(conn)
 
-
-@st.cache_resource
-def database():
-    conn = service.open_database()
-    service.seed(conn)
-    return conn
-
-
-conn = database()
-today = service.current_date(conn)
-totals = service.counts(conn)
-meter = view.token_meter(conn)
-
-# ---------------------------------------------------------------- controls --
-title_col, who_col = st.columns([3, 1])
-with title_col:
-    st.title("SentinelOps")
-    st.caption(
-        "Compliance checks that cannot be forgotten, judged the same way "
-        "everywhere, with the audit trail written as it happens."
+# Not authentication — section 11 rules that out — an identity selector. Its job
+# is to make segregation of duties visible: pick someone and both the pages and
+# the permitted actions change. A unit owner's pages have no Close control at all.
+with st.sidebar:
+    st.selectbox(
+        "Acting as", list(labels), key="acting_as", format_func=labels.get,
+        help="An identity selector, not a login. Choosing someone changes the pages "
+             "you see and the actions you may take.",
     )
 
-# Not authentication — section 11 rules that out — an identity selector. Its
-# job is to make segregation of duties visible: switch to a unit owner and the
-# Close control is not on the page at all.
-people = service.identities(conn)
-with who_col:
-    labels = {
-        f"{row['name']} — {row['role'].replace('_', '/')}"
-        f"{' · ' + row['unit'] if row['unit'] else ''}": row["id"]
-        for row in people
-    }
-    picked = st.selectbox("Acting as", list(labels), key="acting_as")
-    actor = service.acting_as(conn, labels[picked])
-    st.caption(
-        "May close findings" if actor["may_close"]
-        else "May not close findings — section 7"
-    )
+conn, today, actor = shell.context()
 
-# ------------------------------------------------------------ walkthrough --
-step_index = st.session_state.get("step", story.current_step(conn))
-step_index = max(0, min(step_index, len(story.STEPS) - 1))
-step = story.STEPS[step_index]
-
-with st.container(border=True):
-    st.markdown(
-        f"<span class='stepnav'>GUIDED WALKTHROUGH · step {step_index + 1} of "
-        f"{len(story.STEPS)}</span>", unsafe_allow_html=True,
-    )
-    st.subheader(step.title)
-    st.markdown(f"<div class='why'>{view.rich(story.why_for(step, conn))}</div>",
-                unsafe_allow_html=True)
-
-    go, back, forward, _ = st.columns([2, 1, 1, 3])
-    if go.button(step.button, type="primary", use_container_width=True):
-        with st.spinner("Working…"):
-            outcome = story.run(conn, step.key)
-        st.session_state["outcome"] = {
-            "headline": outcome.headline, "detail": outcome.detail,
-            "warning": outcome.warning, "step": step_index,
-        }
-        if outcome.focus:
-            st.session_state["selected"] = outcome.focus
-        st.session_state["step"] = min(step_index + 1, len(story.STEPS) - 1)
+with st.sidebar:
+    shell.html(view.identity_card(actor, choices))
+    st.divider()
+    shell.html(view.calendar_card(today))
+    if st.button("Run cycle now", type="primary", width="stretch",
+                 help="Runs S1 to S4 for the simulated date: raise checks, screen, "
+                      "assess, flag and chase."):
+        with st.spinner(f"Running the cycle for {view.fmt_date(today)} — S1 to S4…"):
+            st.session_state["last_tick"] = service.tick(conn, today).summary()
         st.rerun()
-    if back.button("Back", use_container_width=True, disabled=step_index == 0):
-        st.session_state["step"] = step_index - 1
-        st.rerun()
-    if forward.button("Skip", use_container_width=True,
-                      disabled=step_index == len(story.STEPS) - 1):
-        st.session_state["step"] = step_index + 1
-        st.rerun()
-
-    shown = st.session_state.get("outcome")
-    if shown:
-        if shown.get("warning"):
-            st.error(shown["warning"])
-        st.markdown(
-            f"<div class='outcome'>{view.rich(shown['headline'])}<br><br>"
-            + "<br><br>".join(view.rich(line) for line in shown["detail"])
-            + "</div>",
-            unsafe_allow_html=True,
-        )
-
-st.divider()
-st.markdown("#### Operator console")
-st.caption(
-    "Everything the walkthrough did, in full detail. Safe to ignore on a first "
-    "pass — the walkthrough above drives all of it."
-)
-
-bar = st.columns([1.5, 1, 1, 1, 1, 1.2])
-bar[0].metric("Simulated date", today.isoformat())
-if bar[1].button("Run cycle now", use_container_width=True, type="primary"):
-    with st.spinner("Running S1 → S4…"):
-        st.session_state["last_tick"] = service.tick(conn, today).summary()
-    st.rerun()
-for column, days, label in (
-    (bar[2], 1, "+1 day"), (bar[3], 7, "+1 week"), (bar[4], 30, "+1 month"),
-):
-    if column.button(label, use_container_width=True):
-        with st.spinner(f"Advancing {days} days and running the cycle…"):
-            st.session_state["last_tick"] = service.advance(conn, days).summary()
-        st.rerun()
-if bar[5].button("Start over", use_container_width=True):
-    conn.close()  # Windows will not delete a file that is still open
-    database.clear()
-    service.open_database(fresh=True).close()
-    st.session_state.clear()
-    st.rerun()
-
-if st.session_state.get("last_tick"):
-    st.success(st.session_state["last_tick"])
-
-# ------------------------------------------------------------------ meters --
-row = st.columns(6)
-row[0].metric("Checks raised", totals["instances"])
-row[1].metric("Open gaps", totals["flags_gap"])
-row[2].metric("Overdue", totals["flags_overdue"])
-row[3].metric("Exceptions", totals["flags_exception"])
-row[4].metric("Actions open", totals["actions_open"],
-              delta=f"{totals['actions_resolved']} resolved", delta_color="normal")
-row[5].metric("Needs human review", totals["needs_review"])
-
-cost = st.columns(5)
-cost[0].metric("Model calls", f"{meter['calls']:,}")
-cost[1].metric("Tokens", f"{meter['total_tokens']:,}")
-cost[2].metric("Cached", f"{meter['cached_tokens']:,}")
-cost[3].metric("Cost", f"${meter['cost_usd']:.4f}")
-cost[4].metric("Decided without a model", f"{meter['zero_model_share']:.0%}",
-               help="Findings reached by rule at S2 rather than by a model at S3.")
-
-# ------------------------------------------------------------ chronic alert --
-# A finding stays open until the auditor is satisfied, and some stay open a very
-# long time. Past a year they are called out here for PA/InfoSec, on their own:
-# the priority order is severity first and does not re-rank them for age.
-if actor["role"] == "pa_infosec":
-    chronic = service.chronic_findings(conn)
-    if chronic["findings"]:
-        st.error(
-            f"**Chronic findings: {len(chronic['findings'])} open more than "
-            f"{chronic['threshold_days']} days past target.** Flagged on their "
-            "own; the priority order is not changed by it."
-        )
-        st.dataframe(
-            [
-                {"Finding": r["id"], "Unit": r["unit"], "Severity": r["severity"],
-                 "Days past target": r["days_past_target"],
-                 "Target": r["target_date"], "Chased": r["follow_ups"],
-                 "Owner": r["owner"]}
-                for r in chronic["findings"]
-            ],
-            use_container_width=True, hide_index=True,
-        )
-
-st.divider()
-
-# ------------------------------------------------------- status and queues --
-left, right = st.columns([1.15, 1])
-
-with left:
-    st.subheader("Compliance status by process area")
-    st.dataframe(
-        [
-            {
-                "Area": row.name, "Team": row.team, "Owner": row.owner,
-                "Criticality": row.criticality, "Due": row.due,
-                "Assessed": row.assessed, "Overdue": row.overdue,
-                "Waived": row.waived, "Open gaps": row.gaps,
-                "Worst severity": round(row.worst_severity, 2),
-            }
-            for row in view.status_by_area(conn)
-        ],
-        use_container_width=True, hide_index=True,
-    )
-
-with right:
-    st.subheader("Overdue and escalation queue")
-    queue = view.overdue_queue(conn, today)
-    if not queue:
-        st.info("Nothing overdue. Advance the calendar to make checks fall due.")
-    else:
-        st.dataframe(
-            [
-                {
-                    "Check": row["instance"], "Category": row["category"],
-                    "Severity": f"{row['severity']:.2f} {row['band']}",
-                    "Days late": row["days_late"], "Escalation": row["escalation"],
-                    "Owner": row["owner"], "Team": row["team"],
-                }
-                for row in queue[:40]
-            ],
-            use_container_width=True, hide_index=True, height=320,
-        )
-        st.caption(f"{len(queue)} open, worst first. Escalation 0 = with the owner, "
-                   "1 = department head, 2 = Group Compliance.")
-
-st.divider()
-
-# ------------------------------------------------ finding detail + citation --
-st.subheader("Assessment detail")
-pickable = view.assessable_instances(conn)
-if not pickable:
-    st.info("No checks assessed yet — press **Run cycle now**.")
-else:
-    default = st.session_state.get("selected", pickable[0])
-    selected = st.selectbox(
-        "Check instance", pickable,
-        index=pickable.index(default) if default in pickable else 0,
-    )
-    st.session_state["selected"] = selected
-    detail = view.finding_detail(conn, selected)
-
-    if detail is None:
-        st.info("No finding for that check yet.")
-    else:
-        finding = detail["finding"]
-        head = st.columns([1, 1, 1, 1])
-        head[0].markdown(
-            f"**Verdict**<br><span class='pill v-{finding.verdict}'>"
-            f"{finding.verdict}</span>", unsafe_allow_html=True,
-        )
-        head[1].metric("Confidence", f"{finding.confidence:.2f}")
-        head[2].metric("Decided by", finding.decided_by)
-        head[3].metric("Human review", "yes" if finding.needs_human_review else "no")
-
-        st.markdown(f"**Rationale.** {finding.rationale}")
-        if finding.gaps:
-            for gap in finding.gaps:
-                st.markdown(f"- **Gap:** {gap}")
-        if finding.recommended_action:
-            st.markdown(f"**Recommended action.** {finding.recommended_action}")
-
-        document, meta = st.columns([2, 1])
-        with document:
-            st.markdown("**Source document, with cited spans highlighted**")
-            evidence = detail["evidence"]
-            if evidence is None:
-                st.warning(
-                    "No evidence was ever filed for this check — which is the "
-                    "finding. Nothing to highlight."
-                )
-            else:
-                expanded = st.session_state.get("doc_expanded", False)
-                frame = view.document_frame(
-                    evidence.content, finding.cited_spans, expanded=expanded,
-                )
-                # An iframe, so the document scrolls inside its own box and the
-                # page length never depends on the document length.
-                components.html(frame.html, height=frame.height, scrolling=True)
-                st.caption(frame.caption())
-                if not frame.fits or expanded:
-                    if st.button(
-                        "Show less" if expanded else "Show more",
-                        key="doc_toggle",
-                        help="Makes the panel taller. The document scrolls inside "
-                             "it either way — the page does not grow.",
-                    ):
-                        st.session_state["doc_expanded"] = not expanded
-                        st.rerun()
-                missing = view.unmatched_spans(evidence.content, finding.cited_spans)
-                if missing:
-                    st.error(f"Cited text not found in the source: {missing}")
-                st.caption(
-                    f"{evidence.id} · {evidence.doc_type} · filed "
-                    f"{evidence.submitted_at:%Y-%m-%d} by {evidence.author}"
-                    + (" · remediation" if evidence.is_remediation else "")
-                )
-        with meta:
-            st.markdown("**Provenance**")
-            st.code(
-                f"prompt   {finding.prompt_version or '—'}\n"
-                f"criteria {finding.criteria_hash or '—'}\n"
-                f"evidence {finding.evidence_hash[:16] or '—'}\n"
-                f"assessed {finding.assessed_at:%Y-%m-%d}",
-                language="text",
-            )
-            if len(detail["history"]) > 1:
-                st.markdown("**Assessment history**")
-                for item in detail["history"]:
-                    marker = "current" if item.id == finding.id else "superseded"
-                    st.caption(f"{item.id} — {item.verdict} ({marker})")
-            recheck = st.session_state.pop("recheck", None)
-            if recheck:
-                (st.success if recheck["ok"] else st.warning)(recheck["message"])
-            if st.button("Re-assess this check now", use_container_width=True):
-                with st.spinner("Binding remediation and re-running S2/S3…"):
-                    outcome = service.reassess(conn, selected, today)
-                if outcome.new_assessment_id:
-                    message = (
-                        f"Re-checked: **{outcome.verdict}** — "
-                        f"{outcome.new_assessment_id} supersedes "
-                        f"{outcome.superseded_assessment_id}."
-                        + (" The action closed." if outcome.resolved
-                           else " The action stayed open.")
-                    )
-                else:
-                    message = outcome.reason
-                st.session_state["recheck"] = {
-                    "ok": bool(outcome.new_assessment_id), "message": message,
-                }
-                st.rerun()
-
-        with st.expander("Audit timeline for this check", expanded=False):
-            st.dataframe(
-                [
-                    {
-                        "#": row["seq"], "When": row["when"].strftime("%Y-%m-%d %H:%M"),
-                        "Actor": row["actor"], "Owner": row["owner"],
-                        "Event": row["event"], "Entity": row["entity"],
-                    }
-                    for row in view.timeline(conn, selected)
-                ],
-                use_container_width=True, hide_index=True, height=300,
-            )
-
-st.divider()
-
-# ----------------------------------------------------------------- upload ---
-upload, actions = st.columns([1, 1.2])
-
-with upload:
-    st.subheader("Submit evidence")
-    st.caption(
-        "Files uploaded here go into the same staging table as the generated "
-        "corpus and through the same pre-screen and assessment. Nothing about "
-        "an uploaded document is a special case."
-    )
-    targets = view.instances_awaiting_evidence(conn)
-    if not targets:
-        st.info("No checks are open for evidence yet.")
-    else:
-        target = st.selectbox("Against check", targets, key="upload_target")
-        types = service.doc_types_for(conn, target)
-        chosen = st.selectbox(
-            "Document type", types,
-            help="The first entries are what this control accepts. Pick another "
-                 "to see the wrong-type rule reject it without a model call.",
-        )
-        author = st.text_input("Submitted by", value="R. Mehta")
-        remediation = st.checkbox("This is remediation for an existing finding", True)
-        recheck = st.checkbox(
-            "Re-check it straight away", True,
-            help="Runs the pre-screen and, if the rules cannot decide it, the "
-                 "assessment — the same path any other evidence takes.",
-        )
-        uploaded = st.file_uploader(
-            "Evidence file", type=["txt", "md", "json", "csv", "log"],
-            help="Plain text, markdown, JSON or CSV.",
-        )
-        typed = st.text_area(
-            "…or paste the evidence directly", height=120,
-            placeholder="Paste a report here if you would rather not upload a file.",
-        )
-        if st.button("Submit evidence", type="primary", use_container_width=True):
-            content = ""
-            name = "pasted.txt"
-            if uploaded is not None:
-                content = uploaded.getvalue().decode("utf-8", errors="replace")
-                name = uploaded.name
-            elif typed.strip():
-                content = typed
-            if not content.strip():
-                st.session_state["upload"] = {
-                    "ok": False,
-                    "message": "Nothing to submit — upload a file or paste text.",
-                }
-            else:
-                submission = service.submit_evidence(
-                    conn, instance_id=target, filename=name, content=content,
-                    author=author or "unknown", doc_type=chosen, as_of=today,
-                    is_remediation=remediation,
-                )
-                lines = [
-                    f"**{submission.id}** filed against `{target}` — "
-                    f"{len(content.encode()):,} bytes, type `{chosen}`."
-                ]
-                if recheck:
-                    outcome = service.reassess(conn, target, today)
-                    if outcome.new_assessment_id:
-                        lines.append(
-                            f"Re-checked: **{outcome.verdict}** "
-                            f"(decided by `{outcome.decided_by}`). "
-                            f"{outcome.new_assessment_id} supersedes "
-                            f"{outcome.superseded_assessment_id}."
-                        )
-                        lines.append(
-                            "**The action closed.**" if outcome.resolved
-                            else f"The action stayed open — {outcome.reason}"
-                        )
-                    else:
-                        lines.append(f"Not re-checked: {outcome.reason}")
-                else:
-                    lines.append(
-                        "Press **Re-assess this check now** in Assessment detail "
-                        "above to have it judged."
-                    )
-                st.session_state["selected"] = target
-                paragraphs = '\n\n'.join(lines)
-                st.session_state["upload"] = {"ok": True, "message": paragraphs}
+    steps = st.columns(3, gap="small")
+    for column, days, label in ((steps[0], 1, "+1 day"), (steps[1], 7, "+1 week"),
+                                (steps[2], 30, "+1 month")):
+        if column.button(label, width="stretch"):
+            with st.spinner(f"Advancing {view.plural(days, 'day')} and running that "
+                            f"day's cycle…"):
+                st.session_state["last_tick"] = service.advance(conn, days).summary()
             st.rerun()
-
-        # Rendered after the rerun, not before it: a message written immediately
-        # before st.rerun() is discarded, which is why this used to look like
-        # nothing had happened at all.
-        posted = st.session_state.pop("upload", None)
-        if posted:
-            (st.success if posted["ok"] else st.error)(posted["message"])
-
-with actions:
-    st.subheader("Open findings")
-    rows = view.open_actions(conn)
-    if not rows:
-        st.info("No open findings.")
-    else:
-        st.dataframe(
-            [
-                {
-                    "Finding": r["action"], "Severity": r["severity"],
-                    "Owner progress": r["status"], "Owner": r["owner"],
-                    "Unit": r["team"], "Target": r["due"].isoformat(),
-                    "Chased": r["chased"],
-                }
-                for r in rows[:40]
-            ],
-            use_container_width=True, hide_index=True, height=260,
-        )
-        st.caption(f"{len(rows)} open. "
-                   f"{totals['actions_resolved']} closed by an auditor to date.")
-    # Section 7: "In the UI the owner's Close control is absent, not disabled."
-    # A greyed-out button still tells the owner that closing is nearly theirs to
-    # do, and invites them to ask why it is off. Absent says the right thing.
-    if rows and actor["may_close"]:
-        with st.form("close_finding", clear_on_submit=True):
-            st.markdown("**Close a finding** — auditor only")
-            target = st.selectbox(
-                "Finding", [r["action"] for r in rows], key="close_target"
-            )
-            remarks = st.text_area(
-                "Closure remarks",
-                placeholder="What satisfied you, and on what evidence.",
-                key="close_remarks", height=70,
-            )
-            if st.form_submit_button("Close finding", use_container_width=True):
-                ok, message = service.close_finding(
-                    conn, target, by=actor["id"], remarks=remarks
-                )
-                st.session_state["closure"] = {"ok": ok, "message": message}
-                st.rerun()
-    elif rows:
-        role_reads = {
-            "unit_owner": "a unit owner",
-            "management": "management",
-            "pa_infosec": "PA/InfoSec",
-        }
-        st.caption(
-            f"Closing a finding is reserved for PA/InfoSec. "
-            f"{actor['name']} is "
-            f"{role_reads.get(actor['role'], actor['role'])}."
-        )
-
-    # Anything drawn immediately before st.rerun() is discarded, so the result
-    # is parked in session state and rendered on the next pass.
-    posted = st.session_state.pop("closure", None)
-    if posted:
-        (st.success if posted["ok"] else st.error)(posted["message"])
-
-    closed = view.resolved_actions(conn)
-    if closed:
-        with st.expander(f"{len(closed)} closed", expanded=False):
-            for row in closed:
-                st.markdown(f"**{row['action']}** — {row['note']}")
-
-st.divider()
-
-# ------------------------------------------------------------- the long view --
-# The two panels that justify the pitch. Everything above this line is one
-# finding at a time; these are the things no human holds in their head across
-# eighteen months, six functions and several project teams.
-st.subheader("Patterns across the portfolio")
-pattern = st.columns([3, 2])
-
-with pattern[0]:
-    st.markdown("**This has happened before**")
-    links = service.recurrence_links(conn)
-    if not links:
-        st.info(
-            "No recurrences suggested yet. Run a cycle — findings are "
-            "classified and compared as they are raised."
-        )
-    else:
-        crossing = [r for r in links if r["crosses_units"]]
-        st.caption(
-            f"{len(links)} suggested link(s), {len(crossing)} of them between "
-            f"different units. Advisory: a link points at an earlier finding "
-            f"and merges nothing."
-        )
-        for row in links[:6]:
-            with st.container(border=True):
-                st.markdown(
-                    f"**{row['finding']}** · {row['unit']} · "
-                    f"{row['raised']}  \n"
-                    f"{view.rich(row['description'][:220])}",
-                    unsafe_allow_html=True,
-                )
-                st.markdown(
-                    f"<span class='meta'>resembles <b>{row['prior']}</b> · "
-                    f"{row['prior_unit']} · {row['prior_raised']} · "
-                    f"{row['months_apart']} months earlier</span>",
-                    unsafe_allow_html=True,
-                )
-                st.markdown(
-                    f"<span class='meta'>{view.rich(row['prior_description'][:220])}"
-                    f"</span>",
-                    unsafe_allow_html=True,
-                )
-                if row["reason"]:
-                    st.caption(row["reason"])
-
-with pattern[1]:
-    st.markdown("**Prioritisation brief**")
-    st.caption(
-        "A deterministic priority score ranks the open findings; one model call "
-        "per cycle reads that ranking and the section 8 metrics. Advisory — it "
-        "changes no state."
-    )
-    if st.button("Write the brief", use_container_width=True):
-        st.session_state["brief"] = service.brief(conn)
+    st.divider()
+    shell.html(view.meter_card(view.token_meter(conn)))
+    if st.button("Start over", width="stretch",
+                 help="Deletes the demo database and seeds the corpus again."):
+        conn.close()  # Windows will not delete a file that is still open
+        shell.database.clear()
+        service.open_database(fresh=True).close()
+        st.session_state.clear()
         st.rerun()
-    written = st.session_state.get("brief")
-    if written is not None:
-        if written.published:
-            st.markdown("**Top priorities**")
-            for item in written.top_priorities:
-                st.markdown(
-                    f"- `{item['finding_id']}` · rank {item['rank']} · "
-                    f"{item['band']}, {item['score']:g} points — "
-                    f"{view.rich(item['reason'])}",
-                    unsafe_allow_html=True,
-                )
-            for title, claims in (("Emerging patterns", written.emerging_patterns),
-                                  ("Recommended focus", written.recommended_focus)):
-                if not claims:
-                    continue
-                st.markdown(f"**{title}**")
-                for claim in claims:
-                    cites = ", ".join(
-                        [f"`{i}`" for i in claim["finding_ids"]]
-                        + [f"`{m}` = {written.metrics.get(m)}" for m in claim["metrics"]]
-                    )
-                    st.markdown(
-                        f"- {view.rich(claim['statement'])}  \n"
-                        f"  <span class='meta'>cites {cites}</span>",
-                        unsafe_allow_html=True,
-                    )
-            st.caption(
-                f"as of {written.as_of} · {written.model_calls} model call · "
-                f"{written.input_tokens + written.output_tokens:,} tokens"
-            )
-        elif written.withheld:
-            st.warning(
-                "The drafted brief made a claim that did not check out, so it was "
-                "withheld: " + "; ".join(written.withheld[:3])
-            )
-        st.markdown("**The ranking**")
-        st.dataframe(
-            [
-                {"Rank": r["rank"], "Finding": r["id"], "Band": r["band"],
-                 "Points": r["score"], "Unit": r["unit"],
-                 "Timing": r["timing_label"],
-                 "Chronic": "yes" if r["chronic"] else ""}
-                for r in written.ranked[:10]
-            ],
-            use_container_width=True, hide_index=True, height=240,
-        )
-        with st.expander("How the order is built"):
-            st.code(service.priority_formula(), language="text")
 
-st.divider()
+shell.html(view.topbar(actor, choices, today))
+ticked = st.session_state.pop("last_tick", None)
+if ticked:
+    st.success(f"Cycle complete · {ticked}")
 
-# ---------------------------------------------------------------- analytics --
-# Section 2 lists analytics under never-AI, and this panel is arithmetic over
-# rows the pipeline already wrote. The cost meter does not move when it renders.
-with st.expander("Portfolio analytics — section 8, all deterministic", expanded=False):
-    stats = service.portfolio_analytics(conn)
-    top = st.columns(4)
-    top[0].metric("Open", stats["open_vs_closed"]["open"])
-    top[1].metric("Closed", f"{stats['open_vs_closed']['closed_pct']}%")
-    top[2].metric("Overdue", stats["overdue_ageing"]["total"])
-    top[3].metric("Recurrence links", stats["recurring"]["count"])
-
-    grid = st.columns(2)
-    with grid[0]:
-        st.markdown("**Open vs closed, per unit**")
-        st.dataframe(
-            [
-                {"Unit": unit, "Open": row["open"], "Closed": row["closed"],
-                 "Closed %": row["closed_pct"]}
-                for unit, row in stats["open_vs_closed"]["by_unit"].items()
-            ],
-            use_container_width=True, hide_index=True, height=240,
-        )
-        st.markdown("**Ageing of overdue findings**")
-        st.dataframe(
-            [{"Days past target": k, "Findings": v}
-             for k, v in stats["overdue_ageing"]["buckets"].items()],
-            use_container_width=True, hide_index=True, height=180,
-        )
-        st.markdown("**Closure performance**")
-        st.dataframe(
-            [
-                {"Severity": k, "Closed": v["closed"],
-                 "Mean days": v["mean_days"], "Median days": v["median_days"]}
-                for k, v in stats["closure"].items()
-            ],
-            use_container_width=True, hide_index=True, height=180,
-        )
-    with grid[1]:
-        st.markdown("**Open findings by month**")
-        trend = stats["trend"]
-        # Named x, or the axis reads 0,1,2,3 and a chart of open findings over
-        # time becomes a chart of nothing in particular.
-        st.line_chart(
-            [{"month": p["month"], "open": p["open"]} for p in trend],
-            x="month", y="open", height=200,
-        )
-        verdict = stats["trend_verdict"]
-        recent = verdict.get("recent", {})
-        st.caption(
-            f"{trend[0]['month']} to {trend[-1]['month']}, replayed from raise "
-            f"and closure dates rather than sampled from today's state. "
-            f"**{verdict['direction'].capitalize()}** across the window"
-            + (f" ({verdict['slope_per_month']:+.2f} a month)"
-               if "slope_per_month" in verdict else "")
-            + (f", **{recent['direction']}** over the last quarter."
-               if recent.get("direction") not in (None, "insufficient_history")
-               else ".")
-        )
-        st.markdown("**By gap category**")
-        st.dataframe(
-            [{"Category": k.replace("_", " "), "Findings": v}
-             for k, v in stats["by_dimension"]["by_category"].items()],
-            use_container_width=True, hide_index=True, height=220,
-        )
-        st.markdown("**Evidence rounds per finding**")
-        st.dataframe(
-            [{"Rounds": k, "Findings": v}
-             for k, v in stats["effort"]["rounds"].items()],
-            use_container_width=True, hide_index=True, height=180,
-        )
-
-    st.markdown("**Due in the next 30 days**")
-    upcoming = stats["upcoming"]
-    if upcoming["audits"]:
-        for audit in upcoming["audits"]:
-            st.markdown(
-                f"- **{audit['id']}** · {audit['kind'].replace('_', ' ')} · "
-                f"in {audit['days_away']} days · {', '.join(audit['scope'])}"
-            )
-    st.caption(
-        f"{upcoming['activity_total']} compliance activities also fall due in "
-        f"the window."
-    )
-
-st.divider()
-
-# ------------------------------------------------------- audit and integrity --
-st.subheader("Audit")
-audit = st.columns([1, 1, 2])
-
-if audit[0].button("Verify audit chain", use_container_width=True):
-    st.session_state["chain"] = service.verify_chain(conn)
-if audit[1].button("Generate audit pack", use_container_width=True):
-    with st.spinner("Replaying the log…"):
-        period_start, period_end = service.pack_period(conn)
-        pack, markdown, page = service.generate_pack(
-            conn, period_start=period_start, period_end=period_end,
-            scope="All process areas, all applicable controls",
-        )
-    st.session_state["pack"] = (pack.totals["events"], markdown, page)
-
-chain = st.session_state.get("chain")
-if chain is not None:
-    if chain.ok:
-        audit[2].success(
-            f"Chain intact — {chain.checked:,} entries verified, "
-            "every entry hashed against the one before it."
-        )
-    else:
-        audit[2].error(f"Chain broken at sequence {chain.broken_at}: {chain.reason}")
-
-if st.session_state.get("pack"):
-    events, markdown, page = st.session_state["pack"]
-    st.success(f"Pack built from {events:,} audit events — no current-state table "
-               "was read.")
-    downloads = st.columns(2)
-    # Named for the span the pack covers. These were `audit_pack_2026.*` whatever
-    # the calendar said.
-    pack_name = service.pack_file_name(conn)
-    downloads[0].download_button(
-        "Download pack (HTML)", page, file_name=f"{pack_name}.html",
-        mime="text/html", use_container_width=True,
-    )
-    downloads[1].download_button(
-        "Download pack (Markdown)", markdown, file_name=f"{pack_name}.md",
-        mime="text/markdown", use_container_width=True,
-    )
-
-st.caption(
-    f"{totals['audit_events']:,} audit events · database "
-    f"`{service.DB_PATH}` · corpus is synthetic and seeded."
-)
+navigation = {
+    section: [
+        st.Page(page["path"], title=page["title"], icon=page["icon"],
+                default=page["default"])
+        for page in pages
+    ]
+    for section, pages in view.pages_for(actor["role"]).items()
+}
+st.navigation(navigation, position="sidebar", expanded=True).run()

@@ -1,0 +1,17 @@
+# The dashboard's theme. Read by `streamlit run` from the project root.
+# The accent and neutrals match `sentinelops.ui.view`'s design tokens; the
+# injected stylesheet does the rest.
+
+[theme]
+base = "light"
+primaryColor = "#0F766E"
+backgroundColor = "#F8FAFB"
+secondaryBackgroundColor = "#F1F4F6"
+textColor = "#111827"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false

@@ -372,6 +372,151 @@ def brief(conn, *, client=None):
     return intel.prioritisation_brief(conn, current_date(conn), client=client)
 
 
+def default_identity(conn) -> str:
+    """Who the dashboard opens as: the first PA/InfoSec auditor.
+
+    The landing page is their morning screen, so the demo starts there. Anyone
+    else is one choice away in the identity selector.
+    """
+    from .. import directory
+
+    people = directory.load(conn)
+    auditors = people.by_role("pa_infosec")
+    return auditors[0].id if auditors else people.all()[0].id
+
+
+def open_evidence_round(
+    conn, finding_id: str, *, by: str, evidence_ref: str, evidence_text: str,
+    note: str = "",
+) -> tuple[bool, str]:
+    """A unit owner files evidence on one of their unit's findings.
+
+    The round is opened through `stages.rounds`, which checks the role; the unit
+    is checked here too, because "own unit only" is a scope rule the role table
+    cannot express. An advisory reading is attached for the auditor straight
+    away. If that reading cannot be made, the filing still stands — the owner's
+    evidence is not lost because a model call failed — and the message says so.
+    """
+    from .. import authority, directory
+    from ..stages import review
+    from ..stages import rounds as rounds_stage
+
+    repo = repositories(conn)
+    people = directory.load(conn)
+    as_of = current_date(conn)
+    finding = repo["findings"].get(finding_id)
+    if finding is None:
+        return False, f"No such finding: {finding_id}."
+    identity = people.get(by)
+    if identity is None or identity.auditable_unit != finding.auditable_unit_id:
+        return False, (
+            f"{people.name(by)} does not own the unit {finding.id} was raised "
+            f"against. Evidence is filed by the owning unit."
+        )
+    if not evidence_text.strip():
+        return False, "Nothing to submit — upload a file or paste the evidence."
+    try:
+        submission = rounds_stage.open_round(
+            repo, people, finding, by=by, evidence_ref=evidence_ref or finding.id,
+            evidence_text=evidence_text, note=note, as_of=as_of,
+        )
+    except (authority.AuthorityError, ValueError) as refusal:
+        return False, str(refusal)
+
+    lines = [
+        f"**{submission.id}** filed as round {submission.round_number} on "
+        f"{finding.id}. It is with PA/InfoSec for review; the finding stays open "
+        f"until an auditor is satisfied."
+    ]
+    try:
+        review.evaluate(conn, submission.id, as_of=as_of)
+    except Exception as error:  # the filing stands without advice; say why
+        lines.append(f"No advisory reading could be attached for the auditor: {error}")
+    return True, "\n\n".join(lines)
+
+
+def respond_to_round(
+    conn, submission_id: str, *, response: str, by: str, remarks: str,
+) -> tuple[bool, str]:
+    """PA/InfoSec answer a round: accepted closes the finding, insufficient does not.
+
+    The same pairing the remediation stage uses. Acceptance closes through
+    `followup.close_on_repo`, which re-checks role, separation of duty and that
+    the auditor is satisfied; the separation check is made *before* the round is
+    answered too, so a refusal cannot leave a round accepted and its finding
+    still open.
+    """
+    from .. import authority, directory
+    from ..stages import followup
+    from ..stages import rounds as rounds_stage
+
+    repo = repositories(conn)
+    people = directory.load(conn)
+    as_of = current_date(conn)
+    submission = repo["rounds"].get(submission_id)
+    if submission is None:
+        return False, f"No such evidence round: {submission_id}."
+    finding = repo["findings"].get(submission.finding_id)
+    try:
+        if response == "accepted":
+            authority.require_separation(
+                rounds_stage.submitters_of(repo, finding.id) | {finding.owner_identity},
+                by, "close_finding",
+            )
+        rounds_stage.respond(
+            repo, people, submission, response=response, by=by, remarks=remarks,
+            as_of=as_of,
+        )
+        if response == "accepted":
+            followup.close_on_repo(
+                repo, finding, by=by, remarks=remarks, as_of=as_of, people=people,
+            )
+            return True, (
+                f"Round {submission.round_number} accepted and **{finding.id}** "
+                f"closed by {people.name(by)}."
+            )
+        followup.record_insufficient_round(
+            repo, finding, by=by, remarks=remarks, owner_name=people.name(by),
+            as_of=as_of,
+        )
+    except (authority.AuthorityError, ValueError) as refusal:
+        return False, str(refusal)
+    return True, (
+        f"Round {submission.round_number} marked insufficient. **{finding.id}** "
+        f"stays open, and {people.name(finding.owner_identity)} has been asked "
+        f"for more evidence."
+    )
+
+
+def record_progress(conn, finding_id: str, progress: str, *, by: str) -> tuple[bool, str]:
+    """What the owner says they have done. Advisory; it moves no status."""
+    from .. import authority
+    from ..stages import followup
+
+    try:
+        finding = followup.record_owner_progress(
+            conn, finding_id, progress, by=by, as_of=current_date(conn)
+        )
+    except (authority.AuthorityError, ValueError) as refusal:
+        return False, str(refusal)
+    return True, (
+        f"Progress on **{finding.id}** recorded as "
+        f"{progress.replace('_', ' ')}. The finding stays open until an auditor "
+        f"is satisfied."
+    )
+
+
+def mark_read(conn, notification_id: str, *, by: str) -> tuple[bool, str]:
+    """The one change a notification allows, and only by its recipient."""
+    from .. import notify
+
+    try:
+        notify.mark_read(conn, notification_id, by=by, as_of=current_date(conn))
+    except (PermissionError, ValueError) as refusal:
+        return False, str(refusal)
+    return True, "Marked as read."
+
+
 def chronic_findings(conn) -> dict[str, Any]:
     """Open findings more than a year past target, for PA/InfoSec.
 
