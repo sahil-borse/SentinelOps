@@ -685,7 +685,7 @@ def prioritisation_brief(conn, as_of: date, *, client=None) -> Brief:
                         "finding_id": entry["finding_id"],
                         "reason": str(entry["reason"]).strip(),
                         "rank": by_id[entry["finding_id"]]["rank"],
-                        "band": by_id[entry["finding_id"]]["band_label"],
+                        "band": by_id[entry["finding_id"]]["band"],
                         "score": by_id[entry["finding_id"]]["score"],
                     }
                     for entry in payload["top_priorities"]

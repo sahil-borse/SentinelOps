@@ -146,7 +146,7 @@ def brief_schema_v2() -> dict[str, Any]:
 
 def _row_line(row: dict[str, Any]) -> str:
     return (
-        f"- {row['id']} | rank {row['rank']} | band {row['band_label']}, "
+        f"- {row['id']} | rank {row['rank']} | band {row['band']}, "
         f"{row['score']:g} points | "
         f"{row['unit']} | {row['criticality']} | {row['severity']} | "
         f"{row['category']} | {row['timing_label']} | "

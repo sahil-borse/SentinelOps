@@ -9,9 +9,8 @@ reminder policy is printable. A weight nobody can read is a weight nobody can
 challenge, and a formula written up in a slide deck drifts from the one that
 runs.
 
-    Findings are ordered by severity band (Major, then Minor, then Observation;
-    a finding more than 365 days past its target counts one band higher), and
-    within a band by points = criticality + timing + recurrence + follow-ups.
+    Findings are ordered by severity band (Major, then Minor, then Observation),
+    and within a band by points = criticality + timing + recurrence + follow-ups.
 
 **Why severity gates rather than weighs.** Severity is the organising concept of
 audit practice: the auditor assigns it and the report is written around it. The
@@ -22,13 +21,14 @@ in HR that was 48 days late. Retuning the weights would only move the crossover.
 A band removes it: no amount of lateness, recurrence or chasing lifts a finding
 past one of higher severity.
 
-**The one cross-band adjustment, and its bound.** A finding more than
-`AGEING_PROMOTION_DAYS` past its target ranks in the band one above its own —
-one band only, never above Major, and inside that band it competes on points
-like everything else. The threshold is a year because a year is a full annual
-audit cycle: the finding has outlived the audit that raised it and will meet the
-next one still open. Nothing near section 5's range comes close — escalation is
-a week past target — so in the normal course no finding crosses a band.
+**Nothing crosses a band, however old.** For one revision a finding more than a
+year past target ranked one band higher. It came out: severity is assigned by
+the auditor and communicated in the audit report, and a ranking that lifts a
+Minor above a Major on age alone re-litigates that judgement. The only bounded
+alternative — landing at the bottom of the band above — changes nothing, since
+such a finding already heads its own band. Age past a year is surfaced instead
+as a separate chronic alert (`analytics.CHRONIC_DAYS`), beside the ranking and
+never in it; each row carries the flag so a reader can see it.
 
 **Criticality is points within a band.** Critical 30, high 20, medium 10, low 0:
 the spread the first version gave within the Major band, so findings raised as
@@ -49,12 +49,11 @@ from collections import Counter
 from datetime import date
 from typing import Any
 
+from .analytics import CHRONIC_DAYS, is_chronic
+
 #: Highest first. Auditor-assigned severity, or the model's suggestion where
 #: none is assigned — labelled as such on the row.
 SEVERITY_BANDS: tuple[str, ...] = ("Major", "Minor", "Observation")
-
-#: More than this many days past target: ranked one band higher, never more.
-AGEING_PROMOTION_DAYS = 365
 
 #: The unit's criticality, as points within a band.
 CRITICALITY_POINTS: dict[str, int] = {
@@ -81,10 +80,9 @@ FOLLOW_UP_POINTS = 3
 FOLLOW_UP_CAP = 10
 
 FORMULA = (
-    f"Findings are ordered by severity band ({', then '.join(SEVERITY_BANDS)}; a "
-    f"finding more than {AGEING_PROMOTION_DAYS} days past its target counts one "
-    f"band higher), and within a band by points = criticality + timing + "
-    f"recurrence + follow-ups."
+    f"Findings are ordered by severity band ({', then '.join(SEVERITY_BANDS)}), "
+    f"and within a band by points = criticality + timing + recurrence + "
+    f"follow-ups."
 )
 
 
@@ -103,14 +101,6 @@ def timing_label(days_past_target: int) -> str:
     if days_past_target < 0:
         return f"{-days_past_target}d to target"
     return "due today"
-
-
-def band_for(severity: str, days_past_target: int) -> str:
-    """The severity's own band, or one higher once it is more than a year late."""
-    position = SEVERITY_BANDS.index(severity)
-    if days_past_target > AGEING_PROMOTION_DAYS and position > 0:
-        position -= 1
-    return SEVERITY_BANDS[position]
 
 
 def order_key(row: dict[str, Any]) -> tuple:
@@ -135,20 +125,17 @@ def score(
             f"{sorted(CRITICALITY_POINTS)}"
         )
     days = (as_of - finding.target_date).days
-    band = band_for(severity, days)
     components = {
         "criticality": CRITICALITY_POINTS[criticality],
         "timing": timing_points(days),
         "recurrence": min(recurrence_links, RECURRENCE_LINK_CAP) * RECURRENCE_POINTS,
         "follow_ups": min(finding.follow_up_count, FOLLOW_UP_CAP) * FOLLOW_UP_POINTS,
     }
-    aged_up = band != severity
     return {
         "severity": severity,
         "severity_source": "assigned" if finding.severity else "suggested",
-        "band": band,
-        "aged_up": aged_up,
-        "band_label": f"{band} (raised {severity})" if aged_up else band,
+        "band": severity,
+        "chronic": is_chronic(days),
         "criticality": criticality,
         "days_past_target": days,
         "timing_label": timing_label(days),
@@ -162,12 +149,6 @@ def score(
 def explain(row: dict[str, Any]) -> str:
     """The band and the arithmetic behind the points, in one line."""
     components = row["components"]
-    head = f"{row['band']} band"
-    if row["aged_up"]:
-        head += (
-            f" (raised {row['severity']}; more than {AGEING_PROMOTION_DAYS}d past "
-            f"target)"
-        )
     parts = [
         f"{row['criticality']} {components['criticality']}",
         f"{row['timing_label']} {components['timing']}",
@@ -178,7 +159,7 @@ def explain(row: dict[str, Any]) -> str:
         )
     if components["follow_ups"]:
         parts.append(f"chased {row['follow_ups']}x {components['follow_ups']}")
-    return f"{head}: " + " + ".join(parts) + f" = {row['score']:g}"
+    return f"{row['band']} band: " + " + ".join(parts) + f" = {row['score']:g}"
 
 
 def rank(repo, people, as_of: date) -> list[dict[str, Any]]:
@@ -260,11 +241,8 @@ def formula_table() -> str:
     return "\n".join([
         FORMULA,
         "",
-        f"  bands         {' > '.join(SEVERITY_BANDS)}; points never lift a finding "
-        f"past a higher band",
-        f"  aged up       more than {AGEING_PROMOTION_DAYS} days past target (a full "
-        f"annual audit cycle): one band higher, never more, never above "
-        f"{SEVERITY_BANDS[0]}",
+        f"  bands         {' > '.join(SEVERITY_BANDS)}; nothing lifts a finding "
+        f"past a higher band, however old",
         "  criticality   "
         + " / ".join(f"{name} {points}" for name, points in CRITICALITY_POINTS.items()),
         f"  timing        {TIMING_AT_TARGET} on the target date; +1 a day past it, "
@@ -277,4 +255,6 @@ def formula_table() -> str:
         "",
         f"  points within a band run 0 to {highest}; ties go to the earlier target "
         f"date, then the id",
+        f"  chronic       more than {CHRONIC_DAYS} days past target: flagged "
+        f"separately for PA/InfoSec; does not change the order",
     ])

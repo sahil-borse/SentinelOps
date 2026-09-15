@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from sentinelops import priority
+from sentinelops import analytics, priority
 from sentinelops.directory import load as load_directory
 from sentinelops.repositories import repositories
 from sentinelops.synth import generate_corpus, seed_database
@@ -44,8 +44,8 @@ def _score(**kwargs):
     return _row(**kwargs)["score"]
 
 
-def _worst(severity, days_past=priority.AGEING_PROMOTION_DAYS):
-    """Every point a finding of this severity can carry, short of ageing up."""
+def _worst(severity, days_past=2000):
+    """Every point a finding of this severity can carry, years past target."""
     return _row(severity=severity, criticality="critical", links=10,
                 follow_ups=50, days_past=days_past, name=f"FND-WORST-{severity}")
 
@@ -78,17 +78,17 @@ def test_the_order_is_one_printable_sentence():
     assert sentence.endswith(".") and sentence.count(". ") == 0
     assert priority.formula_table().splitlines()[0] == sentence
     for term in ("severity band", "criticality", "timing", "recurrence",
-                 "follow-ups", f"{priority.AGEING_PROMOTION_DAYS} days"):
+                 "follow-ups"):
         assert term in sentence
 
 
-def test_the_table_prints_every_weight_and_the_threshold():
+def test_the_table_prints_every_weight_and_the_chronic_rule():
     table = priority.formula_table()
     for name, points in priority.CRITICALITY_POINTS.items():
         assert f"{name} {points}" in table
     assert " > ".join(priority.SEVERITY_BANDS) in table
-    assert f"more than {priority.AGEING_PROMOTION_DAYS} days past target" in table
-    assert "one band higher, never more" in table
+    assert f"more than {analytics.CHRONIC_DAYS} days past target" in table
+    assert "does not change the order" in table
 
 
 def test_timing_climbs_to_the_target_and_keeps_climbing_past_it():
@@ -114,11 +114,12 @@ def test_each_input_moves_the_points_the_documented_way():
 # --- severity gates ---------------------------------------------------------------
 
 def test_no_amount_of_points_lifts_a_finding_past_a_higher_band():
-    """Every point there is, a year late to the day, still ranks below the
-    mildest finding of the band above."""
+    """Every point there is, years past target and chronic, still ranks below
+    the mildest finding of the band above."""
     pairs = (("Minor", "Major"), ("Observation", "Minor"), ("Observation", "Major"))
     for lower, higher in pairs:
         worst, mildest = _worst(lower), _mildest(higher)
+        assert worst["chronic"] and not mildest["chronic"]
         assert worst["score"] > mildest["score"], "the points alone would invert them"
         assert priority.order_key(mildest) < priority.order_key(worst), (lower, higher)
 
@@ -132,28 +133,30 @@ def test_the_case_that_exposed_the_old_weights():
     assert priority.order_key(major) < priority.order_key(observation)
 
 
-def test_ageing_up_starts_after_a_full_year_and_moves_one_band_only():
-    limit = priority.AGEING_PROMOTION_DAYS
-    assert _row(severity="Minor", days_past=limit)["band"] == "Minor"
-    over = _row(severity="Minor", days_past=limit + 1)
-    assert over["band"] == "Major" and over["aged_up"]
-    assert over["band_label"] == "Major (raised Minor)"
-    assert _row(severity="Observation", days_past=2000)["band"] == "Minor", (
-        "one band, however old"
-    )
-    major = _row(severity="Major", days_past=2000)
-    assert major["band"] == "Major" and not major["aged_up"]
+def test_a_finding_is_ranked_in_its_own_severity_however_old():
+    """Age never re-litigates the auditor's severity."""
+    for severity in priority.SEVERITY_BANDS:
+        for days in (0, analytics.CHRONIC_DAYS, analytics.CHRONIC_DAYS + 1, 2000):
+            assert _row(severity=severity, days_past=days)["band"] == severity
 
 
-def test_an_aged_up_finding_competes_on_points_inside_its_new_band():
-    aged = _row(severity="Minor", criticality="low", days_past=400, name="FND-AGED")
-    busy_major = _worst("Major", days_past=30)
+def test_chronic_starts_after_a_full_year_and_is_a_flag_not_a_position():
+    limit = analytics.CHRONIC_DAYS
+    assert not _row(days_past=limit)["chronic"]
+    assert _row(days_past=limit + 1)["chronic"]
+
+    chronic_minor = _row(severity="Minor", criticality="critical", links=3,
+                         follow_ups=10, days_past=400, name="FND-CHRONIC")
     quiet_major = _mildest("Major")
-    minor = _worst("Minor")
-    order = sorted([minor, quiet_major, aged, busy_major], key=priority.order_key)
-    assert [r["id"] for r in order] == [
-        busy_major["id"], aged["id"], quiet_major["id"], minor["id"]
-    ]
+    plain_minor = _row(severity="Minor", criticality="critical", links=3,
+                       follow_ups=10, days_past=200, name="FND-PLAIN")
+    assert chronic_minor["score"] == plain_minor["score"], (
+        "past the timing cap, a year and seven months score alike"
+    )
+    order = sorted([chronic_minor, plain_minor, quiet_major], key=priority.order_key)
+    assert order[0]["id"] == quiet_major["id"]
+    # the tie between the two Minors goes to the earlier target date, as for any tie
+    assert [r["id"] for r in order[1:]] == ["FND-CHRONIC", "FND-PLAIN"]
 
 
 def test_a_suggested_severity_is_used_and_labelled_as_suggested():
@@ -187,11 +190,16 @@ def test_the_ranking_is_the_formula_applied(seeded, ranked):
     for row in ranked:
         assert sum(row["components"].values()) == row["score"]
         assert row["explain"].endswith(f"= {row['score']:g}")
-        assert row["aged_up"] == (row["band"] != row["severity"])
-        assert row["aged_up"] == (
-            row["days_past_target"] > priority.AGEING_PROMOTION_DAYS
-            and row["severity"] != priority.SEVERITY_BANDS[0]
-        )
+        assert row["band"] == row["severity"]
+        assert row["chronic"] == analytics.is_chronic(row["days_past_target"])
+
+
+def test_the_chronic_alert_lists_exactly_the_chronic_rows(seeded, ranked):
+    alert = analytics.chronic_findings(repositories(seeded), AS_OF)
+    assert alert, "the corpus has a finding open more than a year at today"
+    assert sorted(r["id"] for r in alert) == sorted(
+        row["id"] for row in ranked if row["chronic"]
+    )
 
 
 def test_the_same_state_ranks_the_same_way_twice(seeded, ranked):

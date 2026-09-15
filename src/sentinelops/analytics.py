@@ -48,6 +48,12 @@ RECENT_MONTHS = 3
 #: A change smaller than this between the two quarters' averages is flat.
 RECENT_FLAT_BAND = 1.0
 
+#: More than this many days past target and an open finding is chronic. A year
+#: is a full annual audit cycle: the finding has outlived the audit that raised
+#: it. Chronic findings are surfaced to PA/InfoSec on their own and never folded
+#: into the priority order, which is severity first — the auditor's judgement.
+CHRONIC_DAYS = 365
+
 
 def _units(repo) -> dict[str, str]:
     return {u.id: u.name for u in repo["units"].list()}
@@ -662,3 +668,30 @@ def named_metrics(p: dict[str, Any]) -> dict[str, Any]:
     for category, row in recurring_block["by_gap_category"]["categories"].items():
         metrics[f"recurring_category:{category}"] = row["findings"]
     return metrics
+
+
+def is_chronic(days_past_target: int) -> bool:
+    return days_past_target > CHRONIC_DAYS
+
+
+def chronic_findings(repo, as_of: date) -> list[dict[str, Any]]:
+    """Open findings more than `CHRONIC_DAYS` past target, the oldest first."""
+    units = _units(repo)
+    rows = []
+    for finding in repo["findings"].list():
+        if finding.status != "open":
+            continue
+        days = (as_of - finding.target_date).days
+        if not is_chronic(days):
+            continue
+        rows.append({
+            "id": finding.id,
+            "unit": units.get(finding.auditable_unit_id, finding.auditable_unit_id),
+            "severity": _severity(finding),
+            "target_date": finding.target_date.isoformat(),
+            "days_past_target": days,
+            "follow_ups": finding.follow_up_count,
+            "owner_identity": finding.owner_identity,
+            "description": finding.description,
+        })
+    return sorted(rows, key=lambda r: (-r["days_past_target"], r["id"]))

@@ -180,6 +180,29 @@ cost[3].metric("Cost", f"${meter['cost_usd']:.4f}")
 cost[4].metric("Decided without a model", f"{meter['zero_model_share']:.0%}",
                help="Findings reached by rule at S2 rather than by a model at S3.")
 
+# ------------------------------------------------------------ chronic alert --
+# A finding stays open until the auditor is satisfied, and some stay open a very
+# long time. Past a year they are called out here for PA/InfoSec, on their own:
+# the priority order is severity first and does not re-rank them for age.
+if actor["role"] == "pa_infosec":
+    chronic = service.chronic_findings(conn)
+    if chronic["findings"]:
+        st.error(
+            f"**Chronic findings: {len(chronic['findings'])} open more than "
+            f"{chronic['threshold_days']} days past target.** Flagged on their "
+            "own; the priority order is not changed by it."
+        )
+        st.dataframe(
+            [
+                {"Finding": r["id"], "Unit": r["unit"], "Severity": r["severity"],
+                 "Days past target": r["days_past_target"],
+                 "Target": r["target_date"], "Chased": r["follow_ups"],
+                 "Owner": r["owner"]}
+                for r in chronic["findings"]
+            ],
+            use_container_width=True, hide_index=True,
+        )
+
 st.divider()
 
 # ------------------------------------------------------- status and queues --
@@ -592,9 +615,10 @@ with pattern[1]:
         st.markdown("**The ranking**")
         st.dataframe(
             [
-                {"Rank": r["rank"], "Finding": r["id"], "Band": r["band_label"],
+                {"Rank": r["rank"], "Finding": r["id"], "Band": r["band"],
                  "Points": r["score"], "Unit": r["unit"],
-                 "Timing": r["timing_label"]}
+                 "Timing": r["timing_label"],
+                 "Chronic": "yes" if r["chronic"] else ""}
                 for r in written.ranked[:10]
             ],
             use_container_width=True, hide_index=True, height=240,

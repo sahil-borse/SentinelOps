@@ -120,7 +120,8 @@ def main(out_dir: Path | None = None) -> None:
     _rule(f"RANKED OPEN FINDINGS AT {today} (top 10 of {len(brief.ranked)})")
     for row in brief.ranked[:10]:
         print(f"  {row['rank']:>2}. {row['id']:<40} {row['unit']:<12} "
-              f"{row['band_label']:<22} {row['score']:>4g} pts")
+              f"{row['band']:<12} {'chronic' if row['chronic'] else '':<8} "
+              f"{row['score']:>4g} pts")
         print(f"      {row['explain']}")
 
     _rule("PRIORITISATION BRIEF")

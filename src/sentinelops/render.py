@@ -86,6 +86,11 @@ def _rows_by_id(brief) -> dict[str, dict[str, Any]]:
     return {row["id"]: row for row in brief.ranked}
 
 
+def _timing(row: dict[str, Any]) -> str:
+    """The timing, with the chronic flag beside it. The flag never moves a row."""
+    return row["timing_label"] + (", chronic" if row.get("chronic") else "")
+
+
 def _cites_text(claim: dict[str, Any], metrics: dict[str, Any]) -> str:
     parts = list(claim["finding_ids"])
     parts += [f"{name} = {metrics.get(name)}" for name in claim["metrics"]]
@@ -123,7 +128,7 @@ def brief_markdown(brief) -> str:
             row = rows[item["finding_id"]]
             out.append(
                 f"{item['rank']}. **{item['finding_id']}** — {row['unit']}, "
-                f"{row['band_label']}, {row['timing_label']} ({item['score']:g} points)"
+                f"{row['band']}, {_timing(row)} ({item['score']:g} points)"
             )
             out.append(f"   {item['reason']}")
             out.append("")
@@ -143,8 +148,8 @@ def brief_markdown(brief) -> str:
             "|---:|---|---|---|---|---:|"]
     for row in brief.ranked[:10]:
         out.append(
-            f"| {row['rank']} | {row['id']} | {row['unit']} | {row['band_label']} | "
-            f"{row['timing_label']} | {row['score']:g} |"
+            f"| {row['rank']} | {row['id']} | {row['unit']} | {row['band']} | "
+            f"{_timing(row)} | {row['score']:g} |"
         )
     out += ["", "## How the order is built", "", "```text",
             priority.formula_table(), "```", ""]
@@ -175,7 +180,7 @@ def brief_html(brief) -> str:
             body.append(
                 f"<li value=\"{item['rank']}\"><span class=\"chip\">"
                 f"{_e(item['finding_id'])}</span> {_e(row['unit'])} · "
-                f"{_e(row['band_label'])} · {_e(row['timing_label'])} · "
+                f"{_e(row['band'])} · {_e(_timing(row))} · "
                 f"{item['score']:g} points<span class=\"reason\">{_e(item['reason'])}</span>"
                 f"<span class=\"cites\">{_e(row['explain'])}</span></li>"
             )
@@ -207,7 +212,7 @@ def brief_html(brief) -> str:
         body.append(
             f"<tr><td class=\"num\">{row['rank']}</td><td><span class=\"chip\">"
             f"{_e(row['id'])}</span></td><td>{_e(row['unit'])}</td>"
-            f"<td>{_e(row['band_label'])}</td><td>{_e(row['timing_label'])}</td>"
+            f"<td>{_e(row['band'])}</td><td>{_e(_timing(row))}</td>"
             f"<td class=\"num\">{row['score']:g}</td></tr>"
         )
     body.append("</table></div>")

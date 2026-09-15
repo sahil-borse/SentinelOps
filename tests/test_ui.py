@@ -393,8 +393,33 @@ def test_every_required_control_is_present_on_the_screen():
         "Verify audit chain",
         "Cost",
         "+1 month",
+        "Chronic findings",
     ):
         assert control in app, f"missing from the dashboard: {control}"
+
+
+def test_chronic_findings_are_the_open_ones_more_than_a_year_past_target(conn, corpus):
+    """The PA/InfoSec alert: its own list, from the record, at the current date."""
+    from sentinelops.analytics import CHRONIC_DAYS
+    from sentinelops.stages.trigger import run_cycle
+    from sentinelops.synth.calendar import SIMULATED_TODAY
+
+    seed_database(conn, corpus)
+    run_cycle(conn, SIMULATED_TODAY)
+    assert service.current_date(conn) == SIMULATED_TODAY
+
+    alert = service.chronic_findings(conn)
+    assert alert["threshold_days"] == CHRONIC_DAYS == 365
+    expected = sorted(
+        f.id for f in repositories(conn)["findings"].list()
+        if f.status == "open"
+        and (SIMULATED_TODAY - f.target_date).days > CHRONIC_DAYS
+    )
+    assert expected, "the corpus has a finding open more than a year at today"
+    assert sorted(r["id"] for r in alert["findings"]) == expected
+    days = [r["days_past_target"] for r in alert["findings"]]
+    assert days == sorted(days, reverse=True)
+    assert all(r["owner"] for r in alert["findings"])
 
 
 # --- the app actually renders ----------------------------------------------

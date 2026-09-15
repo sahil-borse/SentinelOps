@@ -372,6 +372,21 @@ def brief(conn, *, client=None):
     return intel.prioritisation_brief(conn, current_date(conn), client=client)
 
 
+def chronic_findings(conn) -> dict[str, Any]:
+    """Open findings more than a year past target, for PA/InfoSec.
+
+    Beside the priority order, never in it: the order is severity first, and a
+    finding's age does not overrule the auditor's severity.
+    """
+    from .. import analytics, directory
+
+    people = directory.load(conn)
+    rows = analytics.chronic_findings(repositories(conn), current_date(conn))
+    for row in rows:
+        row["owner"] = people.name(row.pop("owner_identity"))
+    return {"threshold_days": analytics.CHRONIC_DAYS, "findings": rows}
+
+
 def priority_formula() -> str:
     """The priority score's formula and weights, for the brief panel to print."""
     from .. import priority
