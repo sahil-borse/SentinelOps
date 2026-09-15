@@ -547,9 +547,10 @@ div[class*="st-key-inbox_table"] [data-testid="stDataFrame"], div[class*="st-key
 [data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarContent"] { padding-left: 0; padding-right: 0; overflow-x: hidden; }
 [data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavItems"] { padding-left: 0; padding-right: 0; }
 [data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavLinkContainer"] { display: flex; justify-content: center; }
-[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavLink"] { width: 40px; height: 36px; margin: 2px auto; padding: 0; justify-content: center; border-radius: 9px; }
-[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavLink"] > span:first-child { margin: 0; }
-[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavLink"]::after { position: absolute; top: -3px; right: -7px; min-width: 17px; height: 17px; padding: 0 4px; font-size: 9.5px; line-height: 17px; border: 2px solid $n0; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavLink"] { width: 46px; height: 44px; margin: 3px auto; padding: 0; justify-content: center; align-items: center; border-radius: 10px; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavLink"] > span:first-child { margin: 0; display: flex; align-items: center; justify-content: center; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavLink"] [data-testid="stIconMaterial"] { font-size: 24px !important; width: 24px; height: 24px; line-height: 24px; }
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarNavLink"]::after { position: absolute; top: 1px; right: 0; min-width: 20px; height: 20px; padding: 0 5px; font-size: 10.5px; line-height: 16px; border: 2px solid $n0; }
 [data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"] { display: none; }
 
 .so-topbar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid $n200; }
