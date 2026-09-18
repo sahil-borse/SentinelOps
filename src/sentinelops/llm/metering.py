@@ -11,19 +11,18 @@ import sqlite3
 import time
 from datetime import datetime
 
+from .models import price_for
 from .protocol import LlmResponse
-
-# USD per 1M tokens, per tier. Placeholder rates until slice 6 picks models.
-PRICING: dict[str, tuple[float, float, float]] = {
-    #  tier        input   output  cached_input
-    "prescreen": (0.15, 0.60, 0.075),
-    "assess": (2.50, 10.00, 1.25),
-    "fake": (0.0, 0.0, 0.0),
-}
 
 
 def cost_usd(tier: str, response: LlmResponse) -> float:
-    rate_in, rate_out, rate_cached = PRICING.get(tier, PRICING["assess"])
+    """What this call cost at the published rates of the model that answered it.
+
+    The rates come from `models.price_for`, so changing a stage's model changes
+    what the meter charges. They were placeholder numbers until slice 19 put a
+    real provider behind the boundary.
+    """
+    rate_in, rate_cached, rate_out = price_for(tier)
     uncached_in = max(response.input_tokens - response.cached_tokens, 0)
     return (
         uncached_in * rate_in

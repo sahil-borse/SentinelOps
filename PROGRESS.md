@@ -164,3 +164,29 @@
   - the audit pack
 
   It asserts that no audit event and no notification stamp written during the run falls outside the stretch; a wall-clock stamp would be today's real date, after it. It found no leak. A second test appends an entry outside the clock and confirms the check catches it.
+- Slice 19 (2026-09-18): the pipeline ran against a real provider. The run completed, but its accuracy cannot be measured, and further spending was stopped at the owner's decision.
+  **A model per stage, as config.** `llm/models.py` maps each metered stage to a model and its published price: gpt-4.1-mini for assessment, classification, taxonomy and recurrence, and gpt-4.1 for the brief and the audit report. `SENTINELOPS_MODEL_<STAGE>` changes one stage without touching code, and the meter prices from the same table. The key is read from `.env`, which is gitignored.
+  **Spend, all of it.** About $1.40 of the $10 cap, every line recorded in `data/real/spend.json`:
+  - $0.776 in the saved run: 1,386 calls (assessment 906, recurrence 420, triage 60). The metered rows and the budget's own count agree exactly.
+  - At least $0.6045 lost in two runs that saved nothing. The first died on an exception its handler did not catch, with the database in memory. A resume was killed when its session ended, and section eight checkpointed only on finishing.
+  - $0.0124 on 26 naive-baseline calls, stopped once the defect below was found.
+  - $0.0048 on a smoke test and prompt probes.
+  **Why nothing can be quoted.** Every one of the 453 assessments the model judged was refused as unreadable. `assessment_v2` names three of the seven fields its schema requires, and the schema is validated locally but never sent to the provider. gpt-4.1-mini answered each criterion in its own layout, with quotations copied verbatim, and the pipeline refused the answers rather than guess at them. The refusal is the design working; the prompt is the defect. `FakeModelClient` always answers in the canonical shape, so no stub run could have found it. Everything downstream inherits it: the refusals raised 439 findings where the stub raised 113, so recurrence and severity agreement ran over the wrong population. `results.md` has a new section, generated from the run's files, saying which figures survive:
+  - the taxonomy: 6 categories against the stub's 9, derived from audit descriptions the defect never touched
+  - the metering reconciliation
+  - the chain: 14,869 events verified
+
+  The pack builds from that run's audit log alone and verifies. It was not written over the tracked pack, which still comes from the stub run.
+  **Found and fixed:**
+  - Triage told the model to answer "keyed by its id", and it did. `triage_v2` shows the exact shape; probed against the model at batch sizes 3 and 1.
+  - Recurrence never named its `recurrences` wrapper. `recurrence_v2` does; probed.
+  - Recurrence's flat 500-token ceiling could not hold an answer about a full 12-finding shortlist, and real shortlists average 11.4. It is now sized to the shortlist.
+  - A triage batch returned with findings missing is halved and asked again, down to one finding. A finding unanswered on its own still refuses.
+  - Section eight's stages built their own clients, which would have spent outside the budget; they are now handed the metered one. During a paid run the provider factory points at a provider that does not exist, so any fallback fails instead of spending.
+  - Paid runs checkpoint every 25 calls and save on any exception, and `resume` finishes a stopped run without repaying for it. The baseline journals each paid answer, so an interrupted baseline resumes free.
+
+  New tests cover the budget stop, the checkpoints, the journal, the reconciliation, baseline sampling and its cache key, the section-eight client, the split retry, the recurrence token ceiling, and that every prompt names the wrapper key its schema requires.
+  **Open, not changed:**
+  - The assessment prompt. The fix is the one triage and recurrence got. It was not made, because it could not be checked against the model without spending.
+  - There is no real naive baseline, brief or audit report. The brief and report prompts have never been sent to a real model.
+  - The API key was pasted into the conversation and should be rotated.

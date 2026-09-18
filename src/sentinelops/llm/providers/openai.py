@@ -23,8 +23,6 @@ from ..env import load_env
 from ..protocol import LlmError, LlmRequest, LlmResponse
 
 API_KEY_VAR = "OPENAI_API_KEY"
-MODEL_VAR = "SENTINELOPS_MODEL"
-DEFAULT_MODEL = "gpt-4o-mini"
 
 #: Nothing may run longer than this or cost more than max_tokens allows.
 REQUEST_TIMEOUT_SECONDS = 60
@@ -41,8 +39,11 @@ def _api_key() -> str:
     return key
 
 
-def model_name() -> str:
-    return os.environ.get(MODEL_VAR, DEFAULT_MODEL)
+def model_name(tier: str = "assess") -> str:
+    """Which model answers this stage. The table lives in `llm.models`."""
+    from ..models import model_for
+
+    return model_for(tier)
 
 
 def _usage(response: Any) -> tuple[int, int, int]:
@@ -77,7 +78,7 @@ class OpenAIClient:
             ) from exc
 
         client = OpenAI(api_key=_api_key(), timeout=REQUEST_TIMEOUT_SECONDS)
-        model = model_name()
+        model = model_name(request.tier)
 
         # System first and unchanged, so the cached prefix is identical on every
         # call and two areas submitting the same evidence get the same context.

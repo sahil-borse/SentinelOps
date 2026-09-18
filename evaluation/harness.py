@@ -81,8 +81,14 @@ def _require_matching_truth(corpus, truth: dict[str, Any]) -> None:
         )
 
 
-def _section_eight(conn) -> dict[str, Any]:
-    """Section 8's figures over the finished run. Deterministic, no model."""
+def _section_eight(conn, *, client=None) -> dict[str, Any]:
+    """Section 8's figures over the finished run. The analytics use no model.
+
+    The client is threaded through rather than left to default. These three
+    stages do call a model, and a stage that builds its own client is a stage
+    outside whatever cap the caller is holding — which, on a paid run, is the
+    difference between a budget and a hope.
+    """
     from sentinelops import analytics
     from sentinelops.stages import intelligence, taxonomy
 
@@ -92,16 +98,21 @@ def _section_eight(conn) -> dict[str, Any]:
     # rather than being reported as empty. The taxonomy has to come first: it is
     # read off the findings this run produced, and classification has no
     # fallback list to fall back to.
-    taxonomy.derive(conn, as_of)
-    intelligence.classify(conn, as_of)
-    intelligence.detect_recurrence(conn, as_of)
+    taxonomy.derive(conn, as_of, client=client)
+    intelligence.classify(conn, as_of, client=client)
+    intelligence.detect_recurrence(conn, as_of, client=client)
     return analytics.portfolio(
         conn, as_of, window=(CYCLE_DATES[0], as_of)
     )
 
 
-def run_pipeline(conn, corpus, *, client=None) -> dict[str, Any]:
-    """S0 through S4, once per cycle date, then close the loop."""
+def run_pipeline(conn, corpus, *, client=None, on_cycle=None) -> dict[str, Any]:
+    """S0 through S4, once per cycle date, then close the loop.
+
+    `on_cycle` is called after each cycle with no arguments. It exists so a run
+    that costs real money can be checkpointed to disk as it goes: an in-memory
+    database that dies at cycle sixteen has to be paid for all over again.
+    """
     from sentinelops.synth import seed_database
 
     seed_database(conn, corpus)
@@ -126,6 +137,8 @@ def run_pipeline(conn, corpus, *, client=None) -> dict[str, Any]:
         # remediation is picked up on the cycle after it is filed, not all at
         # the end — otherwise time-to-resolution measures the harness
         remediated += len(reassess_all(conn, as_of, client=client))
+        if on_cycle is not None:
+            on_cycle()
     return {
         "screened": screened, "assessed": assessed, "remediated": remediated,
         "reminders": reminders, "escalations": escalations,
@@ -137,12 +150,29 @@ def evaluate(
     results_path: Path = RESULTS_PATH,
 ) -> tuple[Evaluation, str]:
     corpus = generate_corpus() if seed is None else generate_corpus(seed=seed)
+    conn = connect(":memory:")
+    run_stats = run_pipeline(conn, corpus, client=client)
+    return score(
+        conn, corpus, run_stats=run_stats, client=client,
+        force_baseline=force_baseline, results_path=results_path,
+    )
+
+
+def score(
+    conn, corpus, *, run_stats: dict[str, Any], client=None,
+    force_baseline: bool = False, results_path: Path = RESULTS_PATH,
+    baseline_result=None, baseline_note: str = "",
+) -> tuple[Evaluation, str]:
+    """Score a finished run and write `results.md`.
+
+    Separate from `evaluate` so a run that cost real money can be scored from
+    the database it produced, rather than replayed a second time to be measured.
+    `baseline_result` is for the same reason: the naive baseline is run and
+    cached by the caller when the budget allows, and passed in here.
+    """
     truth = metrics_module.load_ground_truth(corpus.year)
     _require_matching_truth(corpus, truth)
     truth_rows = metrics_module.truth_by_instance(truth)
-
-    conn = connect(":memory:")
-    run_stats = run_pipeline(conn, corpus, client=client)
 
     # Scored on the original judgement, not the state after remediation — see
     # `metrics.first_verdicts`.
@@ -158,7 +188,7 @@ def evaluate(
         "gap_detection": metrics_module.score_gap_detection(verdicts, truth_rows),
         # Kept so two runs can be compared verdict by verdict, not only in total.
         "first_verdicts": dict(sorted(verdicts.items())),
-        "analytics": _section_eight(conn),
+        "analytics": _section_eight(conn, client=client),
         "recurrence": metrics_module.score_recurrence(conn, truth),
         "chain": repositories(conn)["audit"].verify_chain(),
         "audit_events": len(repositories(conn)["audit"].read_all()),
@@ -166,12 +196,16 @@ def evaluate(
     # Refuse, rather than score, a run that left due obligations unscheduled.
     metrics_module.require_scheduled(pipeline["missed"])
 
-    baseline_result, was_cached = baseline_module.run(
-        corpus, client=client, force=force_baseline
-    )
+    if baseline_result is None:
+        baseline_result, was_cached = baseline_module.run(
+            corpus, client=client, force=force_baseline
+        )
+    else:
+        was_cached = True
     baseline = {
         "result": baseline_result,
         "cached": was_cached,
+        "note": baseline_note,
         "gap_detection": metrics_module.score_gap_detection(
             baseline_result.verdicts, truth_rows
         ),

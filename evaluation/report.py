@@ -16,6 +16,149 @@ from typing import Any
 from sentinelops.llm.providers.fake import MODEL as FAKE_MODEL
 from sentinelops.synth.calendar import SIMULATED_TODAY
 
+#: What slice 19's real-provider run left behind: the comparison columns and
+#: the spend ledger. Read, never written, here.
+REAL_DIR = Path(__file__).resolve().parents[1] / "data" / "real"
+
+
+def _real_run_section() -> str:
+    """Slice 19's real-provider run: what it can say, and what it cannot.
+
+    Generated from the files the run left behind rather than written by hand,
+    so it regenerates with the rest of this document and cannot drift from the
+    ledger. With no such files there was no real run, and it says nothing.
+    """
+    import json
+
+    real_path = REAL_DIR / "metrics_real.json"
+    fake_path = REAL_DIR / "metrics_fake.json"
+    spend_path = REAL_DIR / "spend.json"
+    if not (real_path.exists() and fake_path.exists() and spend_path.exists()):
+        return ""
+    r = json.loads(real_path.read_text(encoding="utf-8"))
+    f = json.loads(fake_path.read_text(encoding="utf-8"))
+    spend = json.loads(spend_path.read_text(encoding="utf-8"))
+
+    rg, fg = r["gap_detection"], f["gap_detection"]
+    rr, fr = r["recurrence"], f["recurrence"]
+    rs, fs = r["severity"], f["severity"]
+    refused = r["citations"].get("unreadable_reply", 0)
+    judged = refused + r["citations"].get("assessments_rechecked", 0)
+    supplier = "REC-AUDIT-SUPPLIER-FILES"
+    r_supplier = next((g for g in r["planted_groups"] if g["id"] == supplier), None)
+    f_supplier = next((g for g in f["planted_groups"] if g["id"] == supplier), None)
+    tokens = r["tokens"]
+    stages = {s["tier"]: s for s in tokens["by_stage"]}
+    cycles = r["cycles"]
+    models = ", ".join(r["models"])
+
+    saved = sum(
+        spend.get(k, {}).get("cost_usd", 0.0)
+        for k in ("replay", "replay_stopped", "resume")
+    )
+    lost = sum(
+        v.get("cost_usd_at_least", 0.0) for k, v in spend.items() if k.endswith("_lost")
+    )
+    baseline_spent = spend.get("baseline_stopped", {}).get("cost_usd", 0.0)
+    probes = spend.get("probes", {}).get("cost_usd", 0.0)
+    total = saved + lost + baseline_spent + probes
+
+    def pairs(group) -> str:
+        return f"{group['pairs_found']}/{group['pairs']} pairs" if group else "n/a"
+
+    def trio(g) -> str:
+        return f"{_pct(g['precision'])} / {_pct(g['recall'])} / {_pct(g['fpr'])}"
+
+    rows = [
+        ("Gap detection: precision / recall / FPR", trio(fg), trio(rg),
+         f"**No.** {refused} of {judged} model verdicts were refused as unreadable, "
+         "so the real column scores the refusal rule, not the model"),
+        ("Taxonomy categories", str(f["taxonomy"]["count"]),
+         str(r["taxonomy"]["count"]),
+         "**Yes.** Derived from the seeded audit descriptions alone, which the "
+         "defect never touched"),
+        ("Recurrence: recall / precision",
+         f"{_pct(fr['recall'])} / {_pct(fr['precision'])}",
+         f"{_pct(rr['recall'])} / {_pct(rr['precision'])}",
+         "**No.** Scored on the audit track, but the candidates came from a "
+         "findings population the refusals had inflated"),
+        ("Supplier-files set (the stub's blind spot)", pairs(f_supplier),
+         pairs(r_supplier), "Suggestive only, for the same reason"),
+        ("Severity suggestion agrees with auditor",
+         f"{fs['agreed']}/{fs['compared']}", f"{rs['agreed']}/{rs['compared']}",
+         "**No.** Compared over findings the refusals raised"),
+        ("Assessments flagged for human review",
+         str(f["review"]["flagged"]), str(r["review"]["flagged"]),
+         "Only as a count of refusals"),
+        ("Citations failing verification", "0", "0",
+         "**No.** No model citation was kept to check"),
+        ("Adversarial document", f["adversarial"].get("verdict", "n/a"),
+         "refused unread",
+         "**No.** Refused before it was judged; resistance to the injection is "
+         "untested"),
+        ("Metering against the budget's own count", "n/a", "exact",
+         "**Yes.** Rows, tokens and cost all agree"),
+        ("Audit chain", "verified", "verified, "
+         f"{r['chain'].split('checked=')[1].split(',')[0]} events", "**Yes.**"),
+    ]
+    table = _table(
+        [tuple(row) for row in rows],
+        ("Figure", "FakeModelClient", models, "Quotable?"),
+    )
+
+    shape = (
+        '`{"criteria": {"1": {"verdict": ..., "cited_spans": [...]}}, '
+        '"overall_verdict": ...}`'
+    )
+    assess = stages.get("assess", {})
+    recur = stages.get("recurrence", {})
+    return f"""## Slice 19: the real-provider run, attempted and not measurable
+
+> **No accuracy figure in this document comes from a language model.** The
+> pipeline was run against `{models}` and completed, but its accuracy cannot be
+> measured. Every figure above and below this section is still the stub's.
+
+**What went wrong.** Every one of the {refused} assessments the model judged
+was refused as unreadable. The assessment prompt (`assessment_v2`) names three
+of the seven fields its schema requires, and the schema is validated locally
+but never sent to the provider. The model answered each criterion in its own
+layout, {shape}, with quotations copied verbatim, and the pipeline refused them
+rather than guess at them. That refusal is the design working; the prompt is the
+defect. `FakeModelClient` always answers in the canonical shape, so no stub run
+could have found it. The figures downstream inherit it: each refusal was
+flagged for review and treated as a failed check, and the findings that raised
+became the population recurrence and severity agreement were measured over.
+
+{table}
+
+**The bill is real, but it is the bill of a failing run.** {tokens['calls']:,}
+calls and {tokens['total_tokens']:,} tokens for the full replay, ${tokens['cost_usd']:.4f};
+{tokens['calls'] / cycles:.1f} calls and ${tokens['cost_usd'] / cycles:.4f} per
+cycle over {cycles} cycles. Assessment made {assess.get('calls', 0)} calls because
+each of {refused} unreadable replies was retried once; recurrence made
+{recur.get('calls', 0)} over a findings population the refusals had inflated. A
+working prompt would cost roughly half. Token counts are read from the response
+objects.
+
+**Everything slice 19 spent, from `data/real/spend.json`:** ${saved:.4f} in the
+saved run; at least ${lost:.4f} in two runs that saved nothing, the first
+because an exception escaped a handler over an in-memory database, the second
+because its session ended before a stage that checkpointed only on finishing;
+${baseline_spent:.4f} on 26 naive-baseline calls, stopped once their answers were
+found unreadable for the same reason; ${probes:.4f} on probes. About
+${total:.2f} in all, of a $10 cap. **There is no real naive baseline**: it was
+stopped, and nothing was cached.
+
+**Defects the run found.** Triage's prompt described a different shape from its
+schema, and recurrence's never named its wrapper key; both are fixed
+(`triage_v2`, `recurrence_v2`) and were probed against the model. Recurrence's
+flat 500-token ceiling could not hold an answer about a full shortlist; it is
+now sized to the shortlist. **The assessment prompt is not fixed.** The change
+is the one triage and recurrence got, but it could not be checked against the
+model without spending, and spending stopped at the owner's decision.
+
+"""
+
 
 
 def _recurrence_lines(analytics: dict) -> str:
@@ -139,7 +282,19 @@ def write_results(evaluation, corpus, truth: dict[str, Any], path: Path) -> str:
         "> architecture. Re-run with `SENTINELOPS_LLM_PROVIDER=openai` before quoting any\n"
         "> absolute accuracy number.\n"
         if is_fake else
-        f"> Runs used model `{result.model}`.\n"
+        "> **These runs used a real provider.** One model per stage, read back from\n"
+        "> the run's own metering rows rather than from config at the time of\n"
+        "> writing, so this says what actually answered:\n>\n"
+        + "".join(
+            f"> - `{row['tier']}` → `{row['model']}` · {row['calls']} calls ·"
+            f" {row['input_tokens'] + row['output_tokens']:,} tokens ·"
+            f" ${row['cost_usd']:.4f}\n"
+            for row in p["tokens"].get("by_stage", [])
+        )
+        + ">\n"
+        f"> The naive baseline ran on `{result.model}`, the same model as the\n"
+        "> assessment stage, so the difference between the two paths remains\n"
+        "> attributable to architecture rather than to model choice.\n"
     )
 
     # No wall-clock stamp. Two runs on one seed must produce the same bytes, and
@@ -150,7 +305,7 @@ Corpus seed `{evaluation.seed}` · fingerprint `{evaluation.corpus_fingerprint[:
 {evaluation.cycles} scheduled cycles to the vantage point {SIMULATED_TODAY}
 
 {model_warning}
-## Headline
+{_real_run_section()}## Headline
 
 {headline_table(evaluation)}
 
@@ -250,7 +405,7 @@ figure would be meaningless, which is why they exist.
 
 Baseline on the same corpus and model: precision {_pct(baseline_gap.precision)},
 recall {_pct(baseline_gap.recall)}, FPR {_pct(baseline_gap.false_positive_rate)}
-over {baseline_gap.total} scored instances.
+over {baseline_gap.total} scored instances. {b.get("note", "")}
 
 ### 5. Zero-model-call share — {_pct(p['zero_model']['share'])}
 

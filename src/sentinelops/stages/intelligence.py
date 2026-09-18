@@ -48,7 +48,7 @@ from ..llm.prompts.brief import (
 from ..llm.prompts.brief import PROMPT_VERSION as BRIEF_PROMPT_VERSION
 from ..llm.prompts.recurrence import (
     MAX_CANDIDATES,
-    RECURRENCE_SYSTEM_V1,
+    RECURRENCE_SYSTEM_V2,
     recurrence_schema_v1,
     recurrence_user_v1,
 )
@@ -56,7 +56,7 @@ from ..llm.prompts.recurrence import PROMPT_VERSION as RECURRENCE_PROMPT_VERSION
 from ..llm.prompts.triage import (
     BATCH_SIZE,
     SEVERITIES,
-    TRIAGE_SYSTEM_V1,
+    TRIAGE_SYSTEM_V2,
     triage_schema_v1,
     triage_user_v1,
 )
@@ -68,7 +68,27 @@ from ..llm.protocol import LlmError, LlmRequest
 #: hundred tokens to explain itself is not a classification.
 TRIAGE_TOKENS_PER_FINDING = 160
 TRIAGE_MAX_TOKENS = 260
-RECURRENCE_MAX_TOKENS = 500
+
+#: Recurrence answers scale with the shortlist. The schema allows one entry per
+#: candidate — up to `MAX_CANDIDATES` — each carrying a reason of up to 300
+#: characters, which a flat 500 cannot hold. `FakeModelClient` answered briefly
+#: and usually with no links at all, so the ceiling was never tested; a real
+#: model filled the shortlist, the reply was truncated, and truncation is a
+#: fatal `LlmError` that ended a replay 1,016 paid calls in. Sized to what was
+#: actually asked, the way triage already sizes its batch.
+RECURRENCE_BASE_TOKENS = 140
+RECURRENCE_TOKENS_PER_CANDIDATE = 95
+RECURRENCE_MAX_TOKENS = (
+    RECURRENCE_BASE_TOKENS + RECURRENCE_TOKENS_PER_CANDIDATE * MAX_CANDIDATES
+)
+
+
+def recurrence_max_tokens(candidates: int) -> int:
+    """Room for an answer about every candidate offered, and no more."""
+    return (
+        RECURRENCE_BASE_TOKENS
+        + RECURRENCE_TOKENS_PER_CANDIDATE * max(candidates, 1)
+    )
 
 #: Below this the suggestion is recorded but marked for a human to look at, the
 #: same threshold discipline S3 uses on its verdicts.
@@ -86,6 +106,10 @@ class TriageReport:
     model_calls: int = 0
     by_category: dict[str, int] = field(default_factory=dict)
     batches: int = 0
+    #: Times a batch came back missing answers and had to be halved and asked
+    #: again. Zero against the stub; not zero against a real model, which is
+    #: worth recording rather than absorbing.
+    split_retries: int = 0
     taxonomy_version: str = ""
 
     def summary(self) -> str:
@@ -194,24 +218,74 @@ def classify(conn, as_of: date, *, client=None, limit: int | None = None):
 
     with simulated_clock(datetime.combine(as_of, time(7, 0))):
         for group in taxonomy.batches(pending, BATCH_SIZE):
-            answers, response = _ask_triage(
-                conn, model_client,
-                [_finding_context(repo, people, f) for f in group],
-                names, definitions,
-            )
-            report.model_calls += 1
-            report.batches += 1
-            for finding in group:
-                _record_triage(
-                    repo, people, finding, answers[finding.id], response, report,
-                )
+            for finding, answer, response in _triage_group(
+                conn, model_client, repo, people, group, names, definitions, report
+            ):
+                _record_triage(repo, people, finding, answer, response, report)
     return report
+
+
+class UnansweredFindings(ValueError):
+    """A batch came back without an answer for some of the findings in it.
+
+    Its own type rather than a bare `ValueError`, so the one batch failure that
+    is recoverable can be retried while the two that are not — an answer about a
+    finding we never sent, a category outside the derived taxonomy — stay
+    immediately fatal. Both of those mean the model has misunderstood the task;
+    this one usually means it just ran out of attention.
+    """
+
+    def __init__(self, message: str, missing: list[str]) -> None:
+        super().__init__(message)
+        self.missing = missing
+
+
+def _triage_group(conn, client, repo, people, group, names, definitions, report):
+    """Ask about a batch, halving it if the model leaves findings unanswered.
+
+    `FakeModelClient` answers for every finding in every batch, every time. A
+    real model does not: gpt-4.1-mini returned a batch omitting eight findings
+    and killed a replay that had already made 900 paid calls, because the
+    invariant below is fatal and nothing retried.
+
+    Both of the old behaviours are wrong here. Dropping the unanswered findings
+    silently is what `_ask_triage` exists to prevent — they would sit there
+    looking unclassifiable when they were merely unasked. Failing the whole run
+    throws away everything already paid for. So the batch is halved and asked
+    again, down to single findings.
+
+    A finding still unanswered when asked *on its own* is a genuine refusal and
+    raises. The guarantee is unchanged: nothing is ever recorded against a
+    finding without an answer about that finding.
+    """
+    report.model_calls += 1
+    report.batches += 1
+    try:
+        answers, response = _ask_triage(
+            conn, client,
+            [_finding_context(repo, people, f) for f in group],
+            names, definitions,
+        )
+    except UnansweredFindings:
+        if len(group) == 1:
+            raise
+        report.split_retries += 1
+        half = len(group) // 2
+        answered = []
+        for part in (group[:half], group[half:]):
+            answered.extend(
+                _triage_group(
+                    conn, client, repo, people, part, names, definitions, report
+                )
+            )
+        return answered
+    return [(finding, answers[finding.id], response) for finding in group]
 
 
 def _ask_triage(conn, client, contexts: list[dict[str, Any]], names, definitions):
     """One call, many findings. Returns the answers keyed by finding id."""
     request = LlmRequest(
-        system=TRIAGE_SYSTEM_V1,
+        system=TRIAGE_SYSTEM_V2,
         messages=[{"role": "user", "content": triage_user_v1(contexts, definitions)}],
         response_schema=triage_schema_v1(names),
         max_tokens=TRIAGE_TOKENS_PER_FINDING * len(contexts),
@@ -247,10 +321,11 @@ def _ask_triage(conn, client, contexts: list[dict[str, Any]], names, definitions
 
     missing = sorted(asked - set(answers))
     if missing:
-        raise ValueError(
+        raise UnansweredFindings(
             f"triage returned no answer for {', '.join(missing)}; a batch that "
             f"silently drops findings leaves them looking unclassifiable when "
-            f"they are only unanswered"
+            f"they are only unanswered",
+            missing,
         )
     return answers, response
 
@@ -460,7 +535,7 @@ def _ask_recurrence(conn, client, finding: Finding, candidates, units):
         }
 
     request = LlmRequest(
-        system=RECURRENCE_SYSTEM_V1,
+        system=RECURRENCE_SYSTEM_V2,
         messages=[{
             "role": "user",
             "content": recurrence_user_v1(
@@ -468,7 +543,7 @@ def _ask_recurrence(conn, client, finding: Finding, candidates, units):
             ),
         }],
         response_schema=recurrence_schema_v1(),
-        max_tokens=RECURRENCE_MAX_TOKENS,
+        max_tokens=recurrence_max_tokens(len(candidates)),
         tier="recurrence",
     )
     with TokenMeter(

@@ -3,6 +3,7 @@
 import pytest
 
 from sentinelops.llm import get_client
+from sentinelops.llm import models
 from sentinelops.llm.metering import TokenMeter, cost_usd
 from sentinelops.llm.parsing import extract_json, validate, with_retries
 from sentinelops.llm.prompts import (
@@ -148,7 +149,36 @@ def test_token_meter_writes_counts_from_the_response(conn):
     )
     assert row["model"] == "test-model" and row["latency_ms"] == 321
     assert row["cost_usd"] == pytest.approx(cost_usd("assess", response))
-    assert row["cost_usd"] == pytest.approx((600 * 2.5 + 400 * 1.25 + 200 * 10) / 1e6)
+    rate_in, rate_cached, rate_out = models.price_for("assess")
+    assert row["cost_usd"] == pytest.approx(
+        (600 * rate_in + 400 * rate_cached + 200 * rate_out) / 1e6
+    ), "charged at the published rates of the model that answered"
+
+
+def test_every_metered_stage_names_a_model_and_a_price():
+    """The stage-to-model choice is config, and every stage that spends has one."""
+    for tier in ("assess", "triage", "recurrence", "brief", "report"):
+        assert tier in models.MODELS
+        assert models.model_for(tier) in models.PRICES
+        assert all(rate > 0 for rate in models.price_for(tier))
+    assert models.price_for("fake") == (0.0, 0.0, 0.0)
+    assert "gpt" in models.table()
+
+
+def test_a_stages_model_is_changeable_without_touching_code(monkeypatch):
+    monkeypatch.setenv("SENTINELOPS_MODEL_BRIEF", "gpt-4.1-nano")
+    assert models.model_for("brief") == "gpt-4.1-nano"
+    assert models.price_for("brief") == models.PRICES["gpt-4.1-nano"]
+    monkeypatch.delenv("SENTINELOPS_MODEL_BRIEF")
+    monkeypatch.setenv("SENTINELOPS_MODEL", "gpt-4o-mini")
+    assert models.model_for("assess") == "gpt-4o-mini"
+
+
+def test_the_reading_stages_run_on_a_cheaper_model_than_the_writing_ones():
+    """Four of section 2's uses read a document; two write what a person sends on."""
+    writing = models.price_for("brief")[0]
+    for reading in ("assess", "triage", "recurrence"):
+        assert models.price_for(reading)[0] < writing
 
 
 def test_token_meter_writes_nothing_when_the_call_fails(conn):
@@ -173,6 +203,66 @@ def test_token_meter_copies_counts_and_never_measures_the_text(conn):
         meter.record(response)
     row = conn.execute("SELECT * FROM token_usage").fetchone()
     assert (row["input_tokens"], row["output_tokens"]) == (12, 3)
+
+
+# --- a prompt and its schema must agree on the shape -----------------------
+
+def test_the_triage_prompt_shows_the_shape_its_schema_requires():
+    """The defect that killed a paid replay, catchable without a provider.
+
+    Triage V1 told the model to answer "keyed by its id" and labelled the
+    fields CATEGORY and SUGGESTED SEVERITY, while its schema required
+    `{"findings": [{"id", "category", "suggested_severity", ...}]}`. The schema
+    is validated locally but **never sent to the provider**, so nothing
+    reconciled the two — and `FakeModelClient` always returned the canonical
+    shape, so the disagreement could not surface until a real model read the
+    words. It returned correct classifications the schema then rejected, at
+    every batch size, 900 paid calls into a replay.
+    """
+    import json as _json
+
+    from sentinelops.llm.prompts.triage import (
+        TRIAGE_SHAPE,
+        TRIAGE_SYSTEM_V2,
+        triage_schema_v1,
+    )
+
+    categories = ("access_not_revoked", "training_not_completed")
+    schema = triage_schema_v1(categories)
+    example = _json.loads(
+        TRIAGE_SHAPE.replace("<the id exactly as given>", "FND-1")
+        .replace("<one category id from the list>", categories[0])
+        .replace("Major|Minor|Observation", "Major")
+        .replace("<one sentence>", "because the access was left live")
+    )
+    assert validate(example, schema), "the prompt's own example must validate"
+    assert TRIAGE_SHAPE in TRIAGE_SYSTEM_V2, "the shape is shown, not described"
+
+
+def test_every_prompt_names_the_wrapper_key_its_schema_requires():
+    """A wrapper the prompt never mentions is a wrapper the model must guess.
+
+    Triage V1 guessed wrong. Recurrence V1 had the identical defect — its
+    schema requires a `recurrences` key that its prompt never named — and it is
+    the stage that runs straight after classification, so it would have killed
+    the *next* replay. Checked for every prompt rather than for the two that
+    were caught.
+    """
+    from sentinelops.llm.prompts.brief import BRIEF_SYSTEM_V3, brief_schema_v2
+    from sentinelops.llm.prompts.recurrence import (
+        RECURRENCE_SYSTEM_V2,
+        recurrence_schema_v1,
+    )
+    from sentinelops.llm.prompts.triage import TRIAGE_SYSTEM_V2, triage_schema_v1
+
+    cases = [
+        ("triage", TRIAGE_SYSTEM_V2, triage_schema_v1(("a_category",))),
+        ("recurrence", RECURRENCE_SYSTEM_V2, recurrence_schema_v1()),
+        ("brief", BRIEF_SYSTEM_V3, brief_schema_v2()),
+    ]
+    for name, system, schema in cases:
+        for key in schema["required"]:
+            assert key in system, f"the {name} prompt never names {key!r}"
 
 
 def test_metering_module_does_not_measure_length_anywhere():

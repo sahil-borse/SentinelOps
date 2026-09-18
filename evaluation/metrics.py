@@ -394,6 +394,29 @@ def token_usage(conn) -> dict[str, Any]:
         " COALESCE(SUM(cached_tokens),0) cached,"
         " COALESCE(SUM(cost_usd),0) cost FROM token_usage"
     ).fetchone()
+    # Per stage as well as in total, because from slice 19 the stages do not all
+    # run on the same model, and "what did this cost" is not answerable from a
+    # single sum once that is true. Read from the rows the meter wrote, so it
+    # reports what answered rather than what is configured now.
+    by_stage = [
+        {
+            "tier": r["tier"],
+            "model": r["model"],
+            "calls": r["calls"],
+            "input_tokens": r["input"],
+            "output_tokens": r["output"],
+            "cached_tokens": r["cached"],
+            "cost_usd": round(r["cost"], 4),
+        }
+        for r in conn.execute(
+            "SELECT tier, model, COUNT(*) calls,"
+            " COALESCE(SUM(input_tokens),0) input,"
+            " COALESCE(SUM(output_tokens),0) output,"
+            " COALESCE(SUM(cached_tokens),0) cached,"
+            " COALESCE(SUM(cost_usd),0) cost FROM token_usage"
+            " GROUP BY tier, model ORDER BY tier, model"
+        )
+    ]
     return {
         "calls": row["calls"],
         "input_tokens": row["input"],
@@ -401,6 +424,7 @@ def token_usage(conn) -> dict[str, Any]:
         "cached_tokens": row["cached"],
         "total_tokens": row["input"] + row["output"],
         "cost_usd": round(row["cost"], 4),
+        "by_stage": by_stage,
     }
 
 

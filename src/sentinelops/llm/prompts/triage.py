@@ -38,8 +38,10 @@ from __future__ import annotations
 
 from typing import Any
 
-#: Travels onto every finding this prompt classifies.
-PROMPT_VERSION = "triage_v1"
+#: Travels onto every finding this prompt classifies. Bumped in slice 19: V1's
+#: wording produced the wrong JSON shape from a real model, and a recorded
+#: `triage_v1` must keep meaning the prompt that produced it.
+PROMPT_VERSION = "triage_v2"
 
 #: How many findings travel in one classification call. Large enough that the
 #: catalogue is amortised, small enough that one unreadable reply does not cost
@@ -48,6 +50,9 @@ BATCH_SIZE = 8
 
 SEVERITIES: tuple[str, ...] = ("Major", "Minor", "Observation")
 
+#: V1, kept because findings classified before slice 19 record `triage_v1` and
+#: a version that cannot be read back is not a version. Do not send it: against
+#: a real model it produces the wrong shape — see V2.
 TRIAGE_SYSTEM_V1 = (
     "You classify compliance audit findings. You are given a numbered list of "
     "findings, each written in an auditor's own words, with context about the "
@@ -82,6 +87,73 @@ TRIAGE_SYSTEM_V1 = (
     "the category. Do not restate the finding. Do not recommend actions.\n"
     "\n"
     "Return JSON only, matching the schema you are given."
+)
+
+
+#: The shape, stated once and quoted into the prompt, so the words the model
+#: reads and the schema it is validated against cannot drift apart.
+TRIAGE_SHAPE = (
+    '{"findings": [{"id": "<the id exactly as given>", '
+    '"category": "<one category id from the list>", '
+    '"suggested_severity": "Major|Minor|Observation", '
+    '"confidence": 0.0, "rationale": "<one sentence>"}]}'
+)
+
+#: V2. V1 told the model to answer "keyed by its id" and labelled the two
+#: outputs CATEGORY and SUGGESTED SEVERITY, and `gpt-4.1-mini` did exactly that:
+#: it returned `{"FND-...": {"CATEGORY": ..., "SUGGESTED_SEVERITY": ...}}` —
+#: correct classifications in a shape the schema rejects, at every batch size
+#: including one. `FakeModelClient` had always returned the canonical shape, so
+#: nothing caught it until a real provider ran, and it killed a replay 900 paid
+#: calls in.
+#:
+#: The schema is validated locally but never sent to the provider, so the prompt
+#: is the only thing that fixes the shape. It now states it literally, in the
+#: field names the schema actually requires.
+TRIAGE_SYSTEM_V2 = (
+    "You classify compliance audit findings. You are given a list of findings, "
+    "each written in an auditor's own words, with context about the unit it was "
+    "raised against.\n"
+    "\n"
+    "Return a single JSON object with one key, \"findings\", whose value is an "
+    "array with one entry per finding you were given, in the order given. Every "
+    "entry has exactly these five keys, lowercase: id, category, "
+    "suggested_severity, confidence, rationale. Do not key the object by "
+    "finding id, do not uppercase the keys, and do not nest the entries under "
+    "anything else.\n"
+    "\n"
+    f"{TRIAGE_SHAPE}\n"
+    "\n"
+    "Answer every finding you are given. Return an entry for each one even "
+    "where you are unsure — say so with a low confidence rather than omitting "
+    "it. `id` is copied exactly as given.\n"
+    "\n"
+    "For each finding decide two things.\n"
+    "\n"
+    "`category`. Choose exactly one category id from the list you are given. "
+    "Choose on what went wrong, not on what kind of document is involved: a "
+    "register that was never reviewed and a manual that was never reviewed are "
+    "both overdue periodic reviews. If two categories both fit, choose the one "
+    "describing the failure closest to the actual risk — access left active is "
+    "access_not_revoked even when it was found during a recertification.\n"
+    "\n"
+    "`suggested_severity`. Major, Minor or Observation. Major is a failure with "
+    "realised or immediate exposure — access that was live, data that was "
+    "reachable, a control that did not run at all on something critical. Minor "
+    "is a real failure with the exposure contained or hypothetical. Observation "
+    "is a weakness worth fixing where nothing was actually found wrong. Weigh "
+    "what the unit does: the same lapse is more serious where personal data or "
+    "payments are involved.\n"
+    "\n"
+    "Your severity is a SUGGESTION. A human auditor assigns the severity that "
+    "counts and may disagree with you; say what you actually think rather than "
+    "hedging towards the middle.\n"
+    "\n"
+    "`confidence` is a number between 0 and 1. `rationale` is one sentence "
+    "naming the words in the finding that decided the category. Do not restate "
+    "the finding. Do not recommend actions.\n"
+    "\n"
+    "Return JSON only, in exactly the shape above."
 )
 
 

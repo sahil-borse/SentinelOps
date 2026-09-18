@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import date
@@ -68,6 +69,12 @@ class BaselineResult:
     cached_tokens: int = 0
     characters_sent: int = 0
     wall_seconds: float = 0.0
+    # Set only when the budget would not cover the whole baseline. Recorded on
+    # the result, in the cache key and in results.md, because a sampled figure
+    # and a full one are not the same measurement.
+    sample_size: int | None = None
+    sample_seed: int | None = None
+    sample_method: str = ""
     verdicts: dict[str, str] = field(default_factory=dict)
     failures: int = 0
 
@@ -76,20 +83,36 @@ class BaselineResult:
         return self.input_tokens + self.output_tokens
 
 
-def cache_path(fingerprint: str, model: str) -> Path:
-    key = hashlib.sha256(f"{fingerprint}|{model}|{PROMPT_VERSION}".encode())
+def cache_path(
+    fingerprint: str, model: str, sample: int | None = None,
+    sample_seed: int | None = None,
+) -> Path:
+    """Where this run's result lives.
+
+    The sample is part of the key. Without it a sampled run would be served
+    later to a caller asking for the full baseline, which is the quietest way
+    to publish a partial measurement as a complete one.
+    """
+    suffix = "" if not sample else f"|sample={sample}@{sample_seed}"
+    key = hashlib.sha256(f"{fingerprint}|{model}|{PROMPT_VERSION}{suffix}".encode())
     return CACHE_DIR / f"baseline_{key.hexdigest()[:16]}.json"
 
 
-def load_cached(fingerprint: str, model: str) -> BaselineResult | None:
-    path = cache_path(fingerprint, model)
+def load_cached(
+    fingerprint: str, model: str, sample: int | None = None,
+    sample_seed: int | None = None,
+) -> BaselineResult | None:
+    path = cache_path(fingerprint, model, sample, sample_seed)
     if not path.exists():
         return None
     return BaselineResult(**json.loads(path.read_text(encoding="utf-8")))
 
 
 def save(result: BaselineResult) -> Path:
-    path = cache_path(result.corpus_fingerprint, result.model)
+    path = cache_path(
+        result.corpus_fingerprint, result.model, result.sample_size,
+        result.sample_seed,
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(asdict(result), indent=2, sort_keys=True) + "\n",
                     encoding="utf-8")
@@ -104,6 +127,33 @@ def instance_key(control_id: str, area_id: str, period: str) -> str:
     )
 
 
+def _select(
+    corpus, sample: int | None, sample_seed: int
+) -> set[tuple[str, str, str]] | None:
+    """Which (control, unit, period) instances this run will walk.
+
+    `None` means all of them, which is the only honest default. A sample is
+    drawn over the *whole* considered population, the no-evidence instances
+    included, so a sampled run stays a scale model of the full one rather than
+    a run over a different, evidence-richer corpus — the skip rate is part of
+    what the baseline is measuring.
+    """
+    if sample is None:
+        return None
+    instances = [
+        (control.id, area.id, period.label)
+        for control in sorted(corpus.controls, key=lambda c: c.id)
+        for area in sorted(corpus.areas, key=lambda a: a.id)
+        for period in periods_for(
+            control.frequency, corpus.year, corpus.through,
+            last_month=corpus.last_month,
+        )
+    ]
+    if sample >= len(instances):
+        return None  # a sample of everything is not a sample
+    return set(random.Random(sample_seed).sample(instances, sample))
+
+
 def run(
     corpus,
     *,
@@ -111,18 +161,26 @@ def run(
     year: int = 2026,
     force: bool = False,
     model: str | None = None,
+    sample: int | None = None,
+    sample_seed: int = 19,
 ) -> tuple[BaselineResult, bool]:
     """Run the naive path once, or return what it cost last time.
 
     Returns (result, was_cached). The cache key covers the corpus fingerprint,
-    the model and the prompt version, so a changed corpus recomputes and an
-    unchanged one never does.
+    the model, the prompt version and the sample, so a changed corpus
+    recomputes, an unchanged one never does, and a sampled run is never handed
+    back to a caller that asked for the whole thing.
+
+    `sample` exists for one reason: a budget that will not cover the full
+    baseline. It is recorded on the result and reported in `results.md`.
     """
     client = client or get_client()
     model = model or type(client).__name__
+    selected = _select(corpus, sample, sample_seed)
+    drawn = len(selected) if selected is not None else None
 
     if not force:
-        cached = load_cached(corpus.fingerprint(), model)
+        cached = load_cached(corpus.fingerprint(), model, drawn, sample_seed)
         if cached is not None:
             return cached, True
 
@@ -131,6 +189,17 @@ def run(
         model=model,
         prompt_version=PROMPT_VERSION,
     )
+    if selected is not None:
+        result.sample_size = drawn
+        result.sample_seed = sample_seed
+        result.sample_method = (
+            f"Run on a random sample of {drawn} of the (control, unit, period) "
+            f"instances the naive path would consider, drawn without replacement "
+            f"by `random.Random({sample_seed}).sample` over the instance list in "
+            f"sorted order, because the remaining budget would not cover the "
+            f"whole baseline. Its token and cost figures are for the sample, not "
+            f"the full run."
+        )
     schema = assessment_schema_v2()
     submissions = {
         (s.control_id, s.auditable_unit_id, s.period): s
@@ -147,6 +216,10 @@ def run(
                 control.frequency, corpus.year, corpus.through,
                 last_month=corpus.last_month,
             ):
+                if selected is not None and (
+                    control.id, area.id, period.label
+                ) not in selected:
+                    continue
                 result.instances_considered += 1
                 submission = submissions.get((control.id, area.id, period.label))
                 if submission is None:

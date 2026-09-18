@@ -40,14 +40,29 @@ from __future__ import annotations
 
 from typing import Any
 
-#: Travels onto every recurrence link this prompt proposes.
-PROMPT_VERSION = "recurrence_v1"
+#: Travels onto every recurrence link this prompt proposes. Bumped in slice 19
+#: alongside the wrapper fix below, so a recorded `recurrence_v1` keeps meaning
+#: the prompt that produced it.
+PROMPT_VERSION = "recurrence_v2"
 
 #: A shortlist longer than this is a sign the category filter is too coarse, and
 #: it is also more than a reader would act on. Oldest-first is deliberate: the
 #: first occurrence is the one a reader most wants to be pointed at.
 MAX_CANDIDATES = 12
 
+#: The shape, stated once and quoted into the prompt, so the words the model
+#: reads and the schema it is validated against cannot drift apart.
+RECURRENCE_SHAPE = (
+    '{"recurrences": [{"finding_id": "<an id from the shortlist>", '
+    '"confidence": 0.0, "reason": "<one sentence>"}]}'
+)
+
+#: V1, kept because links proposed before slice 19 record `recurrence_v1`. Do
+#: not send it: it never names the `recurrences` wrapper its own schema
+#: requires, leaving the model to guess the key — the same defect that made
+#: triage V1 return correct answers in a shape the schema rejected, and which
+#: cost a replay 900 paid calls. The schema is validated locally and never sent
+#: to the provider, so the prompt is the only thing that fixes the shape.
 RECURRENCE_SYSTEM_V1 = (
     "You decide whether a compliance finding is a recurrence of an earlier "
     "one.\n"
@@ -73,6 +88,43 @@ RECURRENCE_SYSTEM_V1 = (
     "failure, not the shared category.\n"
     "\n"
     "Return JSON only, matching the schema you are given."
+)
+
+
+RECURRENCE_SYSTEM_V2 = (
+    "You decide whether a compliance finding is a recurrence of an earlier "
+    "one.\n"
+    "\n"
+    "You are given one finding and a shortlist of earlier findings from other "
+    "units or other periods that share its gap category. Decide which of the "
+    "earlier ones — if any — describe the SAME underlying failure.\n"
+    "\n"
+    "Return a single JSON object with one key, \"recurrences\", whose value is "
+    "an array holding one entry per match. Every entry has exactly these three "
+    "keys, lowercase: finding_id, confidence, reason. Return "
+    "{\"recurrences\": []} when nothing matches — an empty array, never a "
+    "missing key and never a bare list.\n"
+    "\n"
+    f"{RECURRENCE_SHAPE}\n"
+    "\n"
+    "The same failure means the same thing went wrong, not that the same words "
+    "were used and not that the same control was involved. Access left with "
+    "people who had left, whether they were employees, contractors or a "
+    "third-party integration, is one failure described three ways. A review "
+    "that was skipped and a review that was performed but not evidenced are "
+    "two different failures even though both concern the same review.\n"
+    "\n"
+    "Be strict. A false recurrence sends somebody to read an unrelated finding "
+    "and teaches them to ignore the signal. Returning nothing is the right "
+    "answer whenever the shortlist holds nothing that genuinely matches; most "
+    "findings are not recurrences.\n"
+    "\n"
+    "`finding_id` must be an id from the shortlist, copied exactly. Never "
+    "invent one. `confidence` is a number between 0 and 1. `reason` is one "
+    "sentence naming what the two have in common — the shared failure, not the "
+    "shared category.\n"
+    "\n"
+    "Return JSON only, in exactly the shape above."
 )
 
 

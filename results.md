@@ -17,6 +17,62 @@ Corpus seed `20260831` · fingerprint `d180c3f6c453433d` ·
 > architecture. Re-run with `SENTINELOPS_LLM_PROVIDER=openai` before quoting any
 > absolute accuracy number.
 
+## Slice 19: the real-provider run, attempted and not measurable
+
+> **No accuracy figure in this document comes from a language model.** The
+> pipeline was run against `gpt-4.1-mini-2025-04-14` and completed, but its accuracy cannot be
+> measured. Every figure above and below this section is still the stub's.
+
+**What went wrong.** Every one of the 453 assessments the model judged
+was refused as unreadable. The assessment prompt (`assessment_v2`) names three
+of the seven fields its schema requires, and the schema is validated locally
+but never sent to the provider. The model answered each criterion in its own
+layout, `{"criteria": {"1": {"verdict": ..., "cited_spans": [...]}}, "overall_verdict": ...}`, with quotations copied verbatim, and the pipeline refused them
+rather than guess at them. That refusal is the design working; the prompt is the
+defect. `FakeModelClient` always answers in the canonical shape, so no stub run
+could have found it. The figures downstream inherit it: each refusal was
+flagged for review and treated as a failed check, and the findings that raised
+became the population recurrence and severity agreement were measured over.
+
+| Figure | FakeModelClient | gpt-4.1-mini-2025-04-14 | Quotable? |
+|---|---|---|---|
+| Gap detection: precision / recall / FPR | 95.2% / 93.8% / 0.6% | 100.0% / 32.8% / 0.0% | **No.** 453 of 453 model verdicts were refused as unreadable, so the real column scores the refusal rule, not the model |
+| Taxonomy categories | 9 | 6 | **Yes.** Derived from the seeded audit descriptions alone, which the defect never touched |
+| Recurrence: recall / precision | 50.0% / 75.0% | 66.7% / 40.0% | **No.** Scored on the audit track, but the candidates came from a findings population the refusals had inflated |
+| Supplier-files set (the stub's blind spot) | 0/3 pairs | 1/3 pairs | Suggestive only, for the same reason |
+| Severity suggestion agrees with auditor | 38/86 | 137/412 | **No.** Compared over findings the refusals raised |
+| Assessments flagged for human review | 1 | 453 | Only as a count of refusals |
+| Citations failing verification | 0 | 0 | **No.** No model citation was kept to check |
+| Adversarial document | gap | refused unread | **No.** Refused before it was judged; resistance to the injection is untested |
+| Metering against the budget's own count | n/a | exact | **Yes.** Rows, tokens and cost all agree |
+| Audit chain | verified | verified, 14869 events | **Yes.** |
+
+**The bill is real, but it is the bill of a failing run.** 1,386
+calls and 1,469,222 tokens for the full replay, $0.7760;
+86.6 calls and $0.0485 per
+cycle over 16 cycles. Assessment made 906 calls because
+each of 453 unreadable replies was retried once; recurrence made
+420 over a findings population the refusals had inflated. A
+working prompt would cost roughly half. Token counts are read from the response
+objects.
+
+**Everything slice 19 spent, from `data/real/spend.json`:** $0.7760 in the
+saved run; at least $0.6045 in two runs that saved nothing, the first
+because an exception escaped a handler over an in-memory database, the second
+because its session ended before a stage that checkpointed only on finishing;
+$0.0124 on 26 naive-baseline calls, stopped once their answers were
+found unreadable for the same reason; $0.0048 on probes. About
+$1.40 in all, of a $10 cap. **There is no real naive baseline**: it was
+stopped, and nothing was cached.
+
+**Defects the run found.** Triage's prompt described a different shape from its
+schema, and recurrence's never named its wrapper key; both are fixed
+(`triage_v2`, `recurrence_v2`) and were probed against the model. Recurrence's
+flat 500-token ceiling could not hold an answer about a full shortlist; it is
+now sized to the shortlist. **The assessment prompt is not fixed.** The change
+is the one triage and recurrence got, but it could not be checked against the
+model without spending, and spending stopped at the owner's decision.
+
 ## Headline
 
 | Metric | Manual (simulated) | SentinelOps | Difference |
@@ -127,7 +183,7 @@ figure would be meaningless, which is why they exist.
 
 Baseline on the same corpus and model: precision 92.5%,
 recall 61.3%, FPR 0.7%
-over 684 scored instances.
+over 684 scored instances. 
 
 ### 5. Zero-model-call share — 29.6%
 

@@ -140,6 +140,84 @@ def test_a_batch_that_drops_a_finding_is_refused(seeded, categories):
     assert "no answer for" in str(refused.value)
 
 
+def test_a_batch_the_model_ignores_is_split_and_asked_again(seeded, categories):
+    """The failure that killed a paid replay, and the recovery from it.
+
+    `gpt-4.1-mini` returned a classification batch with an answer for none of
+    its eight findings. Refusing was right — those findings must not be
+    recorded unanswered — but refusing *fatally* threw away 900 calls already
+    paid for. The batch is now halved and asked again, down to single findings,
+    and only a finding still unanswered on its own is a real refusal.
+    """
+    class Overwhelmed:
+        """Answers one finding at a time, and ignores anything larger."""
+
+        def __init__(self):
+            self.asked = []
+
+        def complete(self, request):
+            asked = _ids_in(request)
+            self.asked.append(len(asked))
+            if len(asked) > 1:
+                return _batch_reply([])
+            return _batch_reply([{
+                "id": asked[0],
+                "category": categories[0],
+                "suggested_severity": "Minor",
+                "confidence": 0.9,
+                "rationale": "asked on its own",
+            }])
+
+    client = Overwhelmed()
+    report = intelligence.classify(seeded, AS_OF, client=client)
+
+    repo = repositories(seeded)
+    assert report.classified, "the findings were classified, not abandoned"
+    assert all(f.gap_category for f in repo["findings"].list())
+    assert report.split_retries > 0, "the split is recorded, not absorbed"
+    assert 1 in client.asked, "it narrowed all the way to single findings"
+    assert max(client.asked) > 1, "and only after trying a real batch first"
+
+
+def test_a_finding_unanswered_on_its_own_still_refuses(seeded, categories):
+    """The retry must not become a way of giving up quietly.
+
+    Splitting is only a recovery from inattention. A model that will not answer
+    about a single finding has refused, and that has to surface rather than
+    leave the finding silently uncategorised.
+    """
+    class Silent:
+        def complete(self, request):
+            return _batch_reply([])
+
+    with pytest.raises(ValueError) as refused:
+        intelligence.classify(seeded, AS_OF, client=Silent(), limit=1)
+    assert "no answer for" in str(refused.value)
+
+
+def test_a_recurrence_answer_has_room_for_every_candidate_offered():
+    """A truncated reply is a fatal error, so the ceiling must fit the ask.
+
+    `RECURRENCE_MAX_TOKENS` was a flat 500 while the schema allows one entry per
+    candidate — up to `MAX_CANDIDATES` — each carrying a reason of up to 300
+    characters. The stub answered briefly and usually found no links at all, so
+    the ceiling was never reached. A real model filled the shortlist, the reply
+    was cut off mid-JSON, and the resulting `LlmError` ended a replay 1,016 paid
+    calls in.
+    """
+    from sentinelops.llm.prompts.recurrence import MAX_CANDIDATES
+    from sentinelops.stages.intelligence import recurrence_max_tokens
+
+    # 300 characters of reason is roughly 75 tokens, before the id and number.
+    per_entry = 300 // 4
+    assert recurrence_max_tokens(MAX_CANDIDATES) >= MAX_CANDIDATES * per_entry
+    assert recurrence_max_tokens(1) < recurrence_max_tokens(MAX_CANDIDATES)
+    assert recurrence_max_tokens(0) > 0, "an empty answer still needs room"
+    assert recurrence_max_tokens(MAX_CANDIDATES) > 500, (
+        "the flat ceiling that truncated a real model's answer"
+    )
+
+
 def test_an_answer_about_a_finding_we_never_sent_is_refused(seeded, categories):
     """Otherwise a stray id would be filed against whichever finding it matched."""
     class Confused:
