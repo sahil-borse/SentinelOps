@@ -606,6 +606,26 @@ div[class*="st-key-inbox_table"] [data-testid="stDataFrame"], div[class*="st-key
 .so-cite { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11.5px; background: $n100; border: 1px solid $n200; border-radius: 6px; padding: 0 6px; margin: 4px 4px 0 0; display: inline-block; color: $n700; }
 .so-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 900px) { .so-pair { grid-template-columns: 1fr; } }
+.so-link { background: $n0; border: 1px solid $n200; border-radius: 12px; padding: 12px 16px; margin: 0 0 12px; }
+.so-link-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid $n100; }
+.so-link-gap { font-size: 12.5px; font-weight: 650; color: $n900; }
+.so-link-units { font-size: 12.5px; color: $n500; }
+.so-link-body { display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr); gap: 12px; align-items: start; }
+.so-link-arrow { align-self: center; justify-self: center; color: $accent; font-size: 20px; font-weight: 700; }
+.so-link-side .so-row { margin: 2px 0 8px; }
+.so-link-desc { color: $n700; font-size: 13.5px; line-height: 1.6; }
+.so-link-why { margin-top: 12px; padding: 8px 12px; background: $n50; border-radius: 8px; font-size: 12.5px; color: $n500; line-height: 1.5; }
+.so-link-why b { color: $n700; font-weight: 650; }
+.so-table-wrap { border: 1px solid $n200; border-radius: 10px; overflow: hidden; margin: 4px 0 8px; }
+.so-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.so-table th { text-align: left; font-size: 12px; font-weight: 650; color: $n500; padding: 8px 12px; border-bottom: 1px solid $n200; background: $n50; }
+.so-table td { padding: 9px 12px; border-bottom: 1px solid $n100; color: $n900; vertical-align: top; }
+.so-table tr:last-child td { border-bottom: 0; }
+.so-table .so-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.so-table .so-nowrap, .so-table th { white-space: nowrap; }
+.so-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.so-tag { background: $n100; border-radius: 6px; padding: 1px 8px; font-size: 12.5px; color: $n700; white-space: nowrap; }
+@media (max-width: 900px) { .so-link-body { grid-template-columns: 1fr; } .so-link-arrow { transform: rotate(90deg); justify-self: start; } }
 .so-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: $n500; margin: 0 0 4px; }
 .so-read { background: $n50; border: 1px solid $n200; border-radius: 10px; padding: 10px 12px; }
 .so-read-value { font-size: 18px; font-weight: 650; color: $n900; margin: 1px 0; }
@@ -1590,26 +1610,75 @@ def recurrence_for(record: dict[str, Any]) -> str:
     for later in record["later"]:
         blocks.append(recurrence_pair(
             later["finding"], later["unit"], finding, record["unit"]))
-    return "".join(f'<div class="so-item">{block}</div>' for block in blocks)
+    return "".join(blocks)
+
+
+def tags(values) -> str:
+    """Short values that wrap onto as many lines as they need."""
+    return ('<div class="so-tags">'
+            + "".join(f'<span class="so-tag">{_e(v)}</span>' for v in values) + "</div>")
+
+
+def wrapping_table(header: list[str], rows: list[list[str]], numeric=frozenset(),
+                   nowrap=frozenset()) -> str:
+    """A table whose cells wrap. Cell values are HTML the caller has escaped.
+
+    For the few tables whose cells hold lists. `st.dataframe` never wraps a
+    cell, so a category spanning seven units and four quarters was cut off at
+    the column edge however wide the column was made.
+    """
+    def cls(i: int) -> str:
+        names = [n for n, on in (("so-num", i in numeric), ("so-nowrap", i in nowrap)) if on]
+        return f' class="{" ".join(names)}"' if names else ""
+
+    head = "".join(f"<th{cls(i)}>{_e(h)}</th>" for i, h in enumerate(header))
+    body = "".join(
+        "<tr>" + "".join(f"<td{cls(i)}>{cell}</td>" for i, cell in enumerate(row)) + "</tr>"
+        for row in rows
+    )
+    return (f'<div class="so-table-wrap"><table class="so-table"><thead><tr>{head}'
+            f"</tr></thead><tbody>{body}</tbody></table></div>")
 
 
 def recurrence_pair(new, new_unit: str, earlier, earlier_unit: str, reason: str = "") -> str:
+    """One suggested link, as a card of its own.
+
+    The earlier finding sits on the left and the one that resembles it on the
+    right, so the card reads the way time does. It used to be two unframed
+    columns with the newer finding first: the eye read backwards, and one link
+    ran into the next with only a line of grey text between them.
+    """
     months = max((new.raised_at - earlier.raised_at).days // 30, 0)
+    category = (new.gap_category or earlier.gap_category or "").replace("_", " ")
+    apart = "Same month" if months == 0 else f"{plural(months, 'month')} apart"
+    where = (f"{_e(earlier_unit)} → {_e(new_unit)}" if earlier_unit != new_unit
+             else f"{_e(new_unit)}, a later period")
 
     def side(title: str, finding, unit: str) -> str:
         return (
-            f'<div>{label(title)}<div class="so-row"><span class="so-id">{_e(finding.id)}</span>'
+            f'<div class="so-link-side">{label(title)}'
+            f'<div class="so-row"><span class="so-id">{_e(finding.id)}</span>'
             f'{severity_badge(finding.severity or finding.suggested_severity)}'
-            f'<span class="so-muted">{_e(unit)} · raised {_e(fmt_date(finding.raised_at))}</span></div>'
-            f'{quote(finding.description)}</div>'
+            f'<span class="so-muted">{_e(unit)} · {_e(fmt_date(finding.raised_at))}</span></div>'
+            f'<div class="so-link-desc">{_e(finding.description)}</div></div>'
         )
 
-    earlier_title = f"Earlier occurrence · {plural(months, 'month')} before"
-    return (
-        f'<div class="so-pair">{side("New occurrence", new, new_unit)}'
-        f'{side(earlier_title, earlier, earlier_unit)}</div>'
-        + (f'<div class="so-muted">Why they were linked: {_e(reason)}</div>' if reason else "")
+    head = (
+        '<div class="so-link-head">'
+        + (badge(category, "outline") if category else "")
+        + f'<span class="so-link-gap">{_e(apart)}</span>'
+        + f'<span class="so-link-units">{where}</span></div>'
     )
+    body = (
+        '<div class="so-link-body">'
+        + side("Earlier", earlier, earlier_unit)
+        + '<div class="so-link-arrow" aria-hidden="true">→</div>'
+        + side("Recurs as", new, new_unit)
+        + "</div>"
+    )
+    why = (f'<div class="so-link-why"><b>Why linked</b> · {_e(reason)}</div>'
+           if reason else "")
+    return f'<div class="so-link">{head}{body}{why}</div>'
 
 
 def chronic_list(alert: dict[str, Any]) -> str:
