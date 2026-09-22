@@ -38,7 +38,7 @@ from ..llm import TokenMeter, get_client
 from .. import analytics, priority
 from ..llm.parsing import validate
 from ..llm.prompts.brief import (
-    BRIEF_SYSTEM_V3,
+    BRIEF_SYSTEM_V4,
     MAX_TOKENS as BRIEF_MAX_TOKENS,
     REASON_MAX,
     TOP_N,
@@ -725,7 +725,7 @@ def prioritisation_brief(conn, as_of: date, *, client=None) -> Brief:
         return brief
 
     request = LlmRequest(
-        system=BRIEF_SYSTEM_V3,
+        system=BRIEF_SYSTEM_V4,
         messages=[{
             "role": "user",
             "content": brief_user_v3(

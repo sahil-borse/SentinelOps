@@ -269,8 +269,18 @@ def _reconcile(conn, budget: Budget, since_id: int = 0) -> dict[str, Any]:
     }
 
 
-def replay(budget_usd: float) -> int:
-    """The full replay to the vantage point, against the provider."""
+def replay(
+    budget_usd: float, per_cycle: int | None = None,
+    recurrence_limit: int | None = None,
+) -> int:
+    """The replay to the vantage point, against the provider.
+
+    `per_cycle` and `recurrence_limit` cap the work for a smoke run: enough
+    calls down every path to prove the application works against a real
+    provider, without paying for the whole corpus. A capped run's accuracy
+    figures are meaningless and must not be quoted — it is a test that the
+    machinery works, not a measurement of how well it judges.
+    """
     budget = Budget(limit_usd=budget_usd)
     client = MeteredClient(budget)
     _guard_provider()
@@ -288,9 +298,12 @@ def replay(budget_usd: float) -> int:
         # it is produced, not at the end.
         stats = harness.run_pipeline(
             conn, corpus, client=client, on_cycle=lambda: _save(conn, RUN_DB),
+            per_cycle_limit=per_cycle,
         )
         _save(conn, RUN_DB)
-        harness._section_eight(conn, client=client)
+        harness._section_eight(
+            conn, client=client, recurrence_limit=recurrence_limit,
+        )
     except BaseException as stopped:  # noqa: BLE001 — see above
         # Deliberately everything. Whatever went wrong, the money is already
         # spent, and a run that is not saved is spent twice.
@@ -570,6 +583,10 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     replay_parser = sub.add_parser("replay")
     replay_parser.add_argument("--budget", type=float, required=True)
+    replay_parser.add_argument("--per-cycle", type=int, default=None,
+                               help="assess at most this many instances a cycle")
+    replay_parser.add_argument("--recurrence-limit", type=int, default=None,
+                               help="ask about at most this many findings")
     baseline_parser = sub.add_parser("baseline")
     baseline_parser.add_argument("--budget", type=float, required=True)
     baseline_parser.add_argument("--sample", type=int, default=None)
@@ -583,7 +600,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "replay":
-        return replay(args.budget)
+        return replay(args.budget, args.per_cycle, args.recurrence_limit)
     if args.command == "baseline":
         return baseline(args.budget, args.sample, args.seed)
     if args.command == "resume":

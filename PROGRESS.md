@@ -190,3 +190,19 @@
   - The assessment prompt. The fix is the one triage and recurrence got. It was not made, because it could not be checked against the model without spending.
   - There is no real naive baseline, brief or audit report. The brief and report prompts have never been sent to a real model.
   - The API key was pasted into the conversation and should be rotated.
+- Slice 19b (2026-09-22): the remaining prompts state their shape, and the model tier works end to end against a real provider.
+  **A stub dry run cannot find this class of defect.** Both demo paths ran clean on `FakeModelClient` — as they had all along, while the real run was refusing every verdict. The stub always answers in the canonical shape, so a contract that exists only on our side passes every stub test. What finds them is one real call per prompt, about a cent each.
+  **Four more prompts had the defect that killed the first replay**, each found by probing rather than by reading:
+  - `assessment_v2` named three of the seven fields its schema requires → `assessment_v3` states the shape.
+  - `review_v1` named neither `rationale` nor `confidence`, and a real model returned an answer missing both → `review_v2`.
+  - `brief_v3` named its three sections but never showed an entry, and pattern entries came back with no `statement` key, so the validator withheld the whole brief → `brief_v4`.
+  - `audit_report_v1` named neither `summary` nor `cited_finding_ids` → `audit_report_v2`, version `audit_report_v3`.
+
+  The brief's token ceiling was then too low for its own schema: five priorities and six cited claims need ~965 tokens and the ceiling was 900, so a full brief was truncated and the call failed outright — the same way recurrence's flat ceiling failed. Raised to 1,600, with the arithmetic in the comment and a test.
+  **Verified against gpt-4.1-mini, one call each:** an assessment returned `compliant`, decided by `s3_model`, with three citations that resolve; a round review returned `satisfies` with none unresolved; a brief was published through the citation validator with 12 findings and 9 metrics cited; a report summary of 992 characters cited three findings. Probes cost $0.069 in total.
+  **A capped run then exercised the pipeline**: `replay --per-cycle 8 --recurrence-limit 50`, which assesses a few instances a cycle instead of every one due, so every path is paid for a little rather than the corpus paid for in full. It recorded 164 model assessments with **none refused**, against 453 of 453 refused before, alongside 174 instances settled by rule with no model call. It stopped in classification on a model answering `observation` — a severity word — where a gap category belonged, at 171 calls and $0.099, checkpointed.
+  **Guards, so this class fails a test rather than a replay:** the wrapper-key test now covers all six prompts, not the two that were caught; the brief has a ceiling test beside recurrence's. `tests/test_assess.py`'s interpolation test forbade `{` outright, which the fix necessarily introduces — it now forbids a format *field* (`{0}`, `{name}`) and permits the literal JSON example, which is the point of the fix.
+  **Open, not changed:**
+  - An enum value outside the taxonomy is fatal. It should be retried like a missing answer, and the finding left unclassified and recorded if the model insists, rather than ending a paid run.
+  - No complete measured run exists, so every accuracy figure in `results.md` is still the stub's, and is labelled as such.
+  - The API key was pasted into the conversation and should be rotated.

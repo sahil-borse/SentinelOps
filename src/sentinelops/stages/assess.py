@@ -36,7 +36,7 @@ from ..entities import CheckInstance, ControlDefinition, Evidence, Assessment
 from ..llm import TokenMeter, get_client
 from ..llm.parsing import extract_json, validate
 from ..llm.prompts.assessment import (
-    ASSESSMENT_SYSTEM_V2,
+    ASSESSMENT_SYSTEM_V3,
     PROMPT_VERSION,
     assessment_schema_v2,
     assessment_user_v2,
@@ -168,7 +168,7 @@ def build_request(
     chunks = chunk_document(evidence.content)
     selected = retrieve(chunks, control.criteria_text, limit)
     request = LlmRequest(
-        system=ASSESSMENT_SYSTEM_V2,
+        system=ASSESSMENT_SYSTEM_V3,
         messages=[
             {
                 "role": "user",

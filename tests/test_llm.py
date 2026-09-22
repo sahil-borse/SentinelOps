@@ -248,21 +248,53 @@ def test_every_prompt_names_the_wrapper_key_its_schema_requires():
     the *next* replay. Checked for every prompt rather than for the two that
     were caught.
     """
-    from sentinelops.llm.prompts.brief import BRIEF_SYSTEM_V3, brief_schema_v2
+    from sentinelops.llm.prompts.assessment import (
+        ASSESSMENT_SYSTEM_V3,
+        assessment_schema_v2,
+    )
+    from sentinelops.llm.prompts.audit_report import (
+        AUDIT_REPORT_SYSTEM_V2,
+        audit_report_schema_v1,
+    )
+    from sentinelops.llm.prompts.brief import BRIEF_SYSTEM_V4, brief_schema_v2
     from sentinelops.llm.prompts.recurrence import (
         RECURRENCE_SYSTEM_V2,
         recurrence_schema_v1,
     )
+    from sentinelops.llm.prompts.review import REVIEW_SYSTEM_V2, review_schema_v1
     from sentinelops.llm.prompts.triage import TRIAGE_SYSTEM_V2, triage_schema_v1
 
+    # All six, not the two that were caught. Every one of these prompts has to
+    # name what its schema requires, because the schema itself never reaches
+    # the provider.
     cases = [
         ("triage", TRIAGE_SYSTEM_V2, triage_schema_v1(("a_category",))),
         ("recurrence", RECURRENCE_SYSTEM_V2, recurrence_schema_v1()),
-        ("brief", BRIEF_SYSTEM_V3, brief_schema_v2()),
+        ("brief", BRIEF_SYSTEM_V4, brief_schema_v2()),
+        ("assessment", ASSESSMENT_SYSTEM_V3, assessment_schema_v2()),
+        ("review", REVIEW_SYSTEM_V2, review_schema_v1()),
+        ("audit report", AUDIT_REPORT_SYSTEM_V2, audit_report_schema_v1()),
     ]
     for name, system, schema in cases:
         for key in schema["required"]:
             assert key in system, f"the {name} prompt never names {key!r}"
+
+
+def test_the_brief_ceiling_can_hold_a_brief_its_schema_would_accept():
+    """A ceiling below the schema's own maximum is a truncation waiting to happen.
+
+    Truncation is a fatal error, not a short answer. The brief's 900-token
+    ceiling was set when its entries were thinner; once the prompt asked for a
+    `statement` on every cited claim, a full brief no longer fit and the call
+    failed outright — the same way recurrence's flat ceiling failed against a
+    full shortlist.
+    """
+    from sentinelops.llm.prompts.brief import MAX_TOKENS, REASON_MAX
+
+    # 4 characters to a token, as a working approximation.
+    priorities = 5 * (REASON_MAX // 4 + 15)
+    claims = 6 * (300 // 4 + 35)
+    assert MAX_TOKENS >= priorities + claims
 
 
 def test_metering_module_does_not_measure_length_anywhere():

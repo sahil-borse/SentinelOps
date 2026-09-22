@@ -8,7 +8,7 @@ import pytest
 from sentinelops.synth.calendar import SIMULATED_TODAY
 from sentinelops.entities import ControlDefinition, Evidence
 from sentinelops.llm.prompts.assessment import (
-    ASSESSMENT_SYSTEM_V2,
+    ASSESSMENT_SYSTEM_V3,
     EVIDENCE_CLOSE,
     EVIDENCE_OPEN,
     PROMPT_VERSION,
@@ -143,13 +143,25 @@ def test_the_system_prompt_is_constant_and_first(corpus):
     control = corpus.controls[0]
     a, _, _ = build_request(control, _evidence("first document"))
     b, _, _ = build_request(control, _evidence("an entirely different document"))
-    assert a.system == b.system == ASSESSMENT_SYSTEM_V2
+    assert a.system == b.system == ASSESSMENT_SYSTEM_V3
 
 
 def test_the_system_prompt_has_no_interpolation():
-    assert "{" not in ASSESSMENT_SYSTEM_V2
-    assert "%s" not in ASSESSMENT_SYSTEM_V2
-    assert "format(" not in ASSESSMENT_SYSTEM_V2
+    """No placeholder anything could fill at call time.
+
+    This used to forbid `{` outright. Since slice 19 the prompt shows the
+    literal JSON shape it wants back — `{"verdict": ...}` — because the schema
+    is validated locally and never sent to the provider, so the prompt is the
+    only place the shape is stated. Those braces are the point. What must not
+    appear is a *format field*: `{}`, `{0}`, `{verdict}` — something a stray
+    `.format()` or f-string could substitute into per call, which would break
+    the constant prefix the provider cache depends on.
+    """
+    import re
+
+    assert not re.search(r"\{[A-Za-z0-9_]*\}", ASSESSMENT_SYSTEM_V3)
+    assert "%s" not in ASSESSMENT_SYSTEM_V3
+    assert "format(" not in ASSESSMENT_SYSTEM_V3
 
 
 def test_the_prompt_never_names_the_process_area(corpus):
@@ -171,8 +183,8 @@ def test_evidence_sits_inside_delimiters_labelled_untrusted(corpus):
     assert body.index("CRITERIA") < body.index(EVIDENCE_OPEN)
     inside = body.split(EVIDENCE_OPEN, 1)[1].split(EVIDENCE_CLOSE, 1)[0]
     assert "Some submitted content." in inside
-    assert "untrusted" in ASSESSMENT_SYSTEM_V2.lower()
-    assert "never instruction" in ASSESSMENT_SYSTEM_V2
+    assert "untrusted" in ASSESSMENT_SYSTEM_V3.lower()
+    assert "never instruction" in ASSESSMENT_SYSTEM_V3
 
 
 def test_max_tokens_is_capped(corpus):

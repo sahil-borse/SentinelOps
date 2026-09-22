@@ -38,11 +38,18 @@ from __future__ import annotations
 from typing import Any
 
 #: Travels onto the brief.
-PROMPT_VERSION = "brief_v3"
+PROMPT_VERSION = "brief_v4"
 
 #: Three short sections for somebody with fifteen minutes. A ceiling on the
-#: generation is cost discipline that costs nothing.
-MAX_TOKENS = 900
+#: generation is cost discipline — but it has to hold a brief the schema would
+#: accept, or it is not a ceiling, it is a truncation. The arithmetic: five
+#: top_priorities at a finding id plus a reason of up to REASON_MAX characters
+#: (~55 tokens each), and six cited claims — three patterns, three focus
+#: statements — at a statement of up to 300 characters plus its finding_ids and
+#: metrics (~110 tokens each), which is ~935 tokens before the JSON wrapper.
+#: At 900 a full brief was cut off mid-object and the whole call failed, which
+#: is how the recurrence ceiling failed too.
+MAX_TOKENS = 1600
 
 #: How many ranked findings go into the call. The tail of a long queue adds
 #: tokens and nothing else.
@@ -98,6 +105,74 @@ BRIEF_SYSTEM_V3 = (
     "is genuinely quiet, say so briefly rather than inflating it.\n"
     "\n"
     "Return JSON only, matching the schema you are given."
+)
+
+
+#: The shape, stated once and quoted into the prompt.
+BRIEF_SHAPE = (
+    '{"top_priorities": [{"finding_id": "FND-...", "reason": "<one line>"}], '
+    '"emerging_patterns": [{"statement": "<one sentence>", '
+    '"finding_ids": ["FND-..."], "metrics": ["<metric name>"]}], '
+    '"recommended_focus": [{"statement": "<one sentence>", '
+    '"finding_ids": ["FND-..."], "metrics": ["<metric name>"]}]}'
+)
+
+#: V4. V3 named its three sections but never showed what an entry looks like,
+#: and a real model returned pattern entries with no `statement` key — which
+#: the validator could only treat as an uncited claim, withholding the whole
+#: brief. The sections were right and the thinking was right; the entries were
+#: shaped differently from the schema nobody had shown it.
+BRIEF_SYSTEM_V4 = (
+    "You write a short prioritisation brief for a compliance team. You are given "
+    "METRICS in two scopes, and a list of open findings already RANKED by a "
+    "deterministic priority order: severity band first, then points. The ranking "
+    "is not yours to change.\n"
+    "\n"
+    "SHAPE. Return one JSON object with exactly three keys: top_priorities, "
+    "emerging_patterns, recommended_focus. Every entry in top_priorities has "
+    "the keys finding_id and reason. Every entry in emerging_patterns and in "
+    "recommended_focus has the keys statement, finding_ids and metrics — a "
+    "statement without that key cannot be checked and withholds the brief. Use "
+    "no other keys.\n"
+    "\n"
+    f"{BRIEF_SHAPE}\n"
+    "\n"
+    "1. top_priorities: the 3 to 5 findings from the ranked list that most need "
+    "attention this cycle. For each, give its finding_id and a reason of one "
+    f"line, at most {REASON_MAX} characters, saying in plain words why it is "
+    "urgent — severity, how long past target, how often chased, whether it "
+    "keeps recurring. Do not just repeat the score arithmetic.\n"
+    "\n"
+    "2. emerging_patterns: up to 3 patterns across the portfolio, such as a "
+    "unit carrying disproportionate weight, a gap category recurring across "
+    "units, or the trend turning. Return an empty array if there is no real "
+    "pattern; do not manufacture one.\n"
+    "\n"
+    "3. recommended_focus: 1 to 3 statements of where the team's attention "
+    "would go furthest this cycle.\n"
+    "\n"
+    "CITATIONS. Every entry in emerging_patterns and recommended_focus carries "
+    "finding_ids and metrics: the ids of findings it rests on, and the names of "
+    "metrics it rests on, copied exactly from the METRICS. At least one of the "
+    "two must be non-empty. A statement may mention a finding id in square "
+    "brackets, like [FND-3], only if that id is also in its finding_ids. Never "
+    "cite an id that is not in the ranked list or a metric that is not given. "
+    "An uncited or unresolvable claim causes the whole brief to be rejected.\n"
+    "\n"
+    "SCOPE OF A FIGURE. PORTFOLIO metrics describe every open finding, or the "
+    "whole corpus window where their description says so. LISTED metrics, whose "
+    f"names begin {LISTED_PREFIX}, count only the ranked findings you are shown. "
+    "A number in a statement must be the value of a metric that statement cites, "
+    "in the same scope: a count among the listed findings cites a "
+    f"{LISTED_PREFIX} metric, and a figure about the whole portfolio cites a "
+    "portfolio metric. Never state a count over the listed findings and cite a "
+    "portfolio metric for it, or the reverse.\n"
+    "\n"
+    "LIMITS. This brief is advisory. Do not assign or revise severities, set or "
+    "move dates, change owners, or rewrite agreed action plans. If the portfolio "
+    "is genuinely quiet, say so briefly rather than inflating it.\n"
+    "\n"
+    "Return JSON only, in exactly the shape above."
 )
 
 

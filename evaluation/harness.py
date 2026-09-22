@@ -81,7 +81,9 @@ def _require_matching_truth(corpus, truth: dict[str, Any]) -> None:
         )
 
 
-def _section_eight(conn, *, client=None) -> dict[str, Any]:
+def _section_eight(
+    conn, *, client=None, recurrence_limit: int | None = None,
+) -> dict[str, Any]:
     """Section 8's figures over the finished run. The analytics use no model.
 
     The client is threaded through rather than left to default. These three
@@ -100,13 +102,15 @@ def _section_eight(conn, *, client=None) -> dict[str, Any]:
     # fallback list to fall back to.
     taxonomy.derive(conn, as_of, client=client)
     intelligence.classify(conn, as_of, client=client)
-    intelligence.detect_recurrence(conn, as_of, client=client)
+    intelligence.detect_recurrence(conn, as_of, client=client, limit=recurrence_limit)
     return analytics.portfolio(
         conn, as_of, window=(CYCLE_DATES[0], as_of)
     )
 
 
-def run_pipeline(conn, corpus, *, client=None, on_cycle=None) -> dict[str, Any]:
+def run_pipeline(
+    conn, corpus, *, client=None, on_cycle=None, per_cycle_limit: int | None = None,
+) -> dict[str, Any]:
     """S0 through S4, once per cycle date, then close the loop.
 
     `on_cycle` is called after each cycle with no arguments. It exists so a run
@@ -125,8 +129,14 @@ def run_pipeline(conn, corpus, *, client=None, on_cycle=None) -> dict[str, Any]:
         run_cycle(conn, as_of)
         screen = prescreen(conn, as_of)
         screened += screen.considered
-        if screen.to_assess:
-            report = assess(conn, screen.to_assess, as_of, client=client)
+        # `per_cycle_limit` is for a smoke run against a paid provider: assess a
+        # few instances a cycle rather than every one due. The rest stay
+        # pending and are offered again next cycle, so nothing is marked
+        # examined that was not. A run using it measures that the path works,
+        # never how accurate it is.
+        due = screen.to_assess[:per_cycle_limit] if per_cycle_limit else screen.to_assess
+        if due:
+            report = assess(conn, due, as_of, client=client)
             assessed += len(report.assessed)
         flag_stage(conn, as_of)
         # the chase runs every cycle, because a measurement of follow-up that

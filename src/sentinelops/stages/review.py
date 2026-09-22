@@ -37,7 +37,7 @@ from ..llm.parsing import extract_json, validate
 from ..llm.prompts.review import (
     MAX_TOKENS,
     PROMPT_VERSION,
-    REVIEW_SYSTEM_V1,
+    REVIEW_SYSTEM_V2,
     VERDICTS,
     review_schema_v1,
     review_user_v1,
@@ -158,7 +158,7 @@ def evaluate(
         key=lambda r: r.round_number,
     )
     request = LlmRequest(
-        system=REVIEW_SYSTEM_V1,
+        system=REVIEW_SYSTEM_V2,
         messages=[{
             "role": "user",
             "content": review_user_v1(

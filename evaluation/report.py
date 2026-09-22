@@ -30,9 +30,17 @@ def _real_run_section() -> str:
     """
     import json
 
-    real_path = REAL_DIR / "metrics_real.json"
+    # The *_invalid files are the completed real run this section describes.
+    # They were set aside under that name when a later, capped run reused the
+    # working paths, so the account below keeps describing the run it was
+    # written about rather than silently picking up a different one.
+    real_path = REAL_DIR / "metrics_real_invalid.json"
+    spend_path = REAL_DIR / "spend_invalid.json"
+    if not real_path.exists():
+        real_path = REAL_DIR / "metrics_real.json"
+    if not spend_path.exists():
+        spend_path = REAL_DIR / "spend.json"
     fake_path = REAL_DIR / "metrics_fake.json"
-    spend_path = REAL_DIR / "spend.json"
     if not (real_path.exists() and fake_path.exists() and spend_path.exists()):
         return ""
     r = json.loads(real_path.read_text(encoding="utf-8"))
@@ -153,9 +161,22 @@ stopped, and nothing was cached.
 schema, and recurrence's never named its wrapper key; both are fixed
 (`triage_v2`, `recurrence_v2`) and were probed against the model. Recurrence's
 flat 500-token ceiling could not hold an answer about a full shortlist; it is
-now sized to the shortlist. **The assessment prompt is not fixed.** The change
-is the one triage and recurrence got, but it could not be checked against the
-model without spending, and spending stopped at the owner's decision.
+now sized to the shortlist.
+
+**Since that run.** The same defect was found in all four remaining prompts and
+fixed: assessment, evidence-round review, the prioritisation brief and the audit
+report summary now state the shape their schemas require (`assessment_v3`,
+`review_v2`, `brief_v4`, `audit_report_v3`), and the brief's token ceiling was
+raised to hold a brief its own schema would accept. Each was then verified
+against the provider one call at a time: an assessment returned `compliant` with
+three citations that resolve, a round review returned `satisfies` with none
+unresolved, a brief was **published** through the citation validator, and a
+report summary of 992 characters cited three findings. A capped run afterwards
+recorded 164 model assessments with **none refused**, against 453 of 453 refused
+before, and stopped later on a model answering with a severity word where a gap
+category belonged — a refusal working as designed, and fatal where it should
+retry. **No complete measured run exists**, so every accuracy figure in this
+document is still the stub's.
 
 """
 

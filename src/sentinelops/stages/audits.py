@@ -33,7 +33,7 @@ from ..entities import Finding, ScheduledAudit
 from ..llm import get_client
 from ..llm.prompts.triage import BATCH_SIZE as TRIAGE_BATCH_SIZE
 from ..llm.prompts.audit_report import (
-    AUDIT_REPORT_SYSTEM_V1,
+    AUDIT_REPORT_SYSTEM_V2,
     PROMPT_VERSION,
     audit_report_schema_v1,
     audit_report_user_v1,
@@ -497,7 +497,7 @@ def _draft_summary(
 
     model_client = client or get_client()
     request = LlmRequest(
-        system=AUDIT_REPORT_SYSTEM_V1,
+        system=AUDIT_REPORT_SYSTEM_V2,
         messages=[{
             "role": "user",
             "content": audit_report_user_v1(

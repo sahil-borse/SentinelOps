@@ -90,7 +90,7 @@ def test_a_round_is_assessed_against_the_finding_and_the_action_plan(ctx):
     assert assessment.submission_id == submission.id
     assert assessment.check_instance_id == "", "a round has no check instance"
     assert assessment.verdict in review.VERDICTS
-    assert assessment.prompt_version == "review_v1"
+    assert assessment.prompt_version == "review_v2"
     assert assessment.assessed_at.date() == AS_OF, "simulated time"
 
 

@@ -1,0 +1,92 @@
+{
+ "replay_stopped": {
+  "at": "2026-09-18T16:28:59",
+  "calls": 1016,
+  "input_tokens": 657341,
+  "output_tokens": 185064,
+  "cached_tokens": 0,
+  "cost_usd": 0.559,
+  "by_tier": {
+   "assess": {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "calls": 906,
+    "input": 499294,
+    "output": 143781,
+    "cached": 0,
+    "cost": 0.4298
+   },
+   "triage": {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "calls": 60,
+    "input": 102176,
+    "output": 38910,
+    "cached": 0,
+    "cost": 0.1031
+   },
+   "recurrence": {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "calls": 50,
+    "input": 55871,
+    "output": 2373,
+    "cached": 0,
+    "cost": 0.0261
+   }
+  },
+  "reason": "LlmError: response hit max_tokens (500) and was truncated"
+ },
+ "resume_lost": {
+  "calls_at_least": 225,
+  "cost_usd_at_least": 0.1757,
+  "reason": "session ended mid-run; _section_eight saved only on finishing, so none of these calls reached run.db. Figures are the last progress line the budget printed, so the true cost is this or slightly more."
+ },
+ "replay_lost": {
+  "calls_at_least": 900,
+  "cost_usd_at_least": 0.4288,
+  "reason": "first replay: ValueError from triage (the V1 prompt asked for a shape its schema rejects) escaped a handler that caught only BudgetExceeded and LlmError; the database was in memory and was never written."
+ },
+ "resume": {
+  "at": "2026-09-18T17:08:07",
+  "calls": 370,
+  "input_tokens": 592458,
+  "output_tokens": 34359,
+  "cached_tokens": 249984,
+  "cost_usd": 0.217,
+  "by_tier": {
+   "recurrence": {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "calls": 370,
+    "input": 592458,
+    "output": 34359,
+    "cached": 249984,
+    "cost": 0.217
+   }
+  },
+  "reconciliation": {
+   "metered_rows": 370,
+   "budget_calls": 370,
+   "rows_match_calls": true,
+   "metered_input": 592458,
+   "budget_input": 592458,
+   "tokens_match": true,
+   "metered_cost": 0.217,
+   "budget_cost": 0.217,
+   "models_seen": [
+    "gpt-4.1-mini-2025-04-14"
+   ],
+   "unexpected_models": [
+    "gpt-4.1-mini-2025-04-14"
+   ]
+  },
+  "calls_already_paid_for": 1016
+ },
+ "baseline_stopped": {
+  "calls": 26,
+  "cost_usd": 0.0124,
+  "reason": "stopped by hand once all 26 answers were found unreadable: the baseline uses the same assessment prompt, which never states its output shape. Not cached; the answers are kept in baseline_responses.jsonl."
+ },
+ "probes": {
+  "calls": 9,
+  "cost_usd": 0.0048,
+  "reason": "smoke test (2 calls) and three prompt-shape probes of triage and recurrence"
+ }
+}

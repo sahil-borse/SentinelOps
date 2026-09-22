@@ -21,7 +21,7 @@ from __future__ import annotations
 from typing import Any
 
 #: Travels onto the audit report it produces.
-PROMPT_VERSION = "audit_report_v2"
+PROMPT_VERSION = "audit_report_v3"
 
 AUDIT_REPORT_SYSTEM_V1 = (
     "You draft the summary paragraph of an internal audit report. You are given "
@@ -45,6 +45,48 @@ AUDIT_REPORT_SYSTEM_V1 = (
     "is the one thing a reader cannot see from the table underneath.\n"
     "\n"
     "Return JSON only, matching the schema you are given."
+)
+
+
+#: The shape, stated once and quoted into the prompt.
+AUDIT_REPORT_SHAPE = (
+    '{"summary": "<3 to 5 sentences, each citing [FND-...]>", '
+    '"cited_finding_ids": ["FND-..."]}'
+)
+
+#: V2. V1 never named either key its schema requires — not `summary`, not
+#: `cited_finding_ids` — leaving the model to invent both, with the schema
+#: validated locally and never sent to the provider. The same defect that
+#: refused every assessment in a paid replay.
+AUDIT_REPORT_SYSTEM_V2 = (
+    "You draft the summary paragraph of an internal audit report. You are given "
+    "structured facts about one audit and the findings raised by it. Write only "
+    "what those facts support.\n"
+    "\n"
+    "SHAPE. Return one JSON object with exactly two keys: summary, a single "
+    "string holding the whole paragraph, and cited_finding_ids, an array of "
+    "every finding id the paragraph cites. No other keys, no nesting, no "
+    "per-sentence objects.\n"
+    "\n"
+    f"{AUDIT_REPORT_SHAPE}\n"
+    "\n"
+    "RULES.\n"
+    "1. Every sentence cites the finding ids it rests on, in square brackets, "
+    "like [FND-12] or [FND-12, FND-19]. That includes a sentence stating a "
+    "count: cite the findings counted. A sentence with no citation causes the "
+    "summary to be rejected.\n"
+    "2. Never introduce a finding id that does not appear in the facts.\n"
+    "3. Do not recommend, instruct, or assign. The agreed action plans are "
+    "already recorded against each finding and are not yours to restate or "
+    "improve.\n"
+    "4. Do not assign or revise severities. They were set by the auditor.\n"
+    "5. Three to five sentences. Plain professional English, no headings, no "
+    "bullet points, no closing pleasantries.\n"
+    "6. If the findings show a pattern — the same gap category across several "
+    "units, or a unit carrying most of the weight — say so and cite it. That "
+    "is the one thing a reader cannot see from the table underneath.\n"
+    "\n"
+    "Return JSON only, in exactly the shape above."
 )
 
 

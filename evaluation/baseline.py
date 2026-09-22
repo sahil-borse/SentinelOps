@@ -42,7 +42,7 @@ from typing import Any
 from sentinelops.llm import get_client
 from sentinelops.llm.parsing import extract_json, validate
 from sentinelops.llm.prompts.assessment import (
-    ASSESSMENT_SYSTEM_V2,
+    ASSESSMENT_SYSTEM_V3,
     PROMPT_VERSION,
     assessment_schema_v2,
     assessment_user_v2,
@@ -236,7 +236,7 @@ def run(
 
                 # No retrieval: the whole document, plus the whole criteria.
                 request = LlmRequest(
-                    system=ASSESSMENT_SYSTEM_V2,
+                    system=ASSESSMENT_SYSTEM_V3,
                     messages=[
                         {
                             "role": "user",

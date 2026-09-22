@@ -69,9 +69,22 @@ stopped, and nothing was cached.
 schema, and recurrence's never named its wrapper key; both are fixed
 (`triage_v2`, `recurrence_v2`) and were probed against the model. Recurrence's
 flat 500-token ceiling could not hold an answer about a full shortlist; it is
-now sized to the shortlist. **The assessment prompt is not fixed.** The change
-is the one triage and recurrence got, but it could not be checked against the
-model without spending, and spending stopped at the owner's decision.
+now sized to the shortlist.
+
+**Since that run.** The same defect was found in all four remaining prompts and
+fixed: assessment, evidence-round review, the prioritisation brief and the audit
+report summary now state the shape their schemas require (`assessment_v3`,
+`review_v2`, `brief_v4`, `audit_report_v3`), and the brief's token ceiling was
+raised to hold a brief its own schema would accept. Each was then verified
+against the provider one call at a time: an assessment returned `compliant` with
+three citations that resolve, a round review returned `satisfies` with none
+unresolved, a brief was **published** through the citation validator, and a
+report summary of 992 characters cited three findings. A capped run afterwards
+recorded 164 model assessments with **none refused**, against 453 of 453 refused
+before, and stopped later on a model answering with a severity word where a gap
+category belonged — a refusal working as designed, and fatal where it should
+retry. **No complete measured run exists**, so every accuracy figure in this
+document is still the stub's.
 
 ## Headline
 
@@ -84,7 +97,7 @@ model without spending, and spending stopped at the owner's decision.
 | Gap-detection recall | 63.8% | 93.8% | - |
 | False-positive rate | 4.3% | 0.6% | - |
 | Resolved with zero model calls | n/a | 29.6% | - |
-| Tokens per audit cycle | 462,098 | 313,545 | 1.5x fewer |
+| Tokens per audit cycle | 578,090 | 390,462 | 1.5x fewer |
 | Findings raised / closed | n/a | 113 / 93 | mean 32.5 days to closure |
 
 ---
@@ -214,14 +227,14 @@ the generator varies every document, so no control ever files byte-identical
 evidence in two periods. The rule is implemented and tested; this corpus simply
 never triggers it.
 
-### 6. Tokens per audit cycle — 313,545 vs 462,098 (1.5x)
+### 6. Tokens per audit cycle — 390,462 vs 578,090 (1.5x)
 
 |  | Naive baseline | SentinelOps | Difference |
 |---|---|---|---|
 | Model calls | 683 | 453 | 1.5x fewer |
-| Input tokens | 419,903 | 284,297 |  |
+| Input tokens | 535,895 | 361,214 |  |
 | Output tokens | 42,195 | 29,248 |  |
-| Total tokens | 462,098 | 313,545 | 1.5x fewer |
+| Total tokens | 578,090 | 390,462 | 1.5x fewer |
 | Characters sent to model | 604,387 | - |  |
 
 **What the baseline is.** A competent naive implementation, not a strawman. It
