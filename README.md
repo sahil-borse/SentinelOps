@@ -1,4 +1,6 @@
 # SentinelOps
+python -m streamlit run src/sentinelops/ui/app.py
+
 
 Compliance checks that cannot be forgotten, judged the same way in every process
 area, with the audit trail written as it happens rather than assembled afterwards.
