@@ -796,6 +796,23 @@ def test_submitting_nothing_says_so(tmp_path, monkeypatch, app_cache_cleared):
     assert any("Nothing to submit" in element.value for element in app.error)
 
 
+def test_the_acting_identity_survives_an_in_page_switch():
+    """The identity is session state, not the selectbox's, and here is why.
+
+    My findings calls `st.switch_page` part-way through a run when an owner
+    picks a row. A value belonging to a widget key can be cleaned up by that
+    switch: the identity fell back to the default auditor, and the owner's
+    Finding detail page — not one of the auditor's — bounced her to Today.
+    Writing the key back to itself each run makes it ordinary session state,
+    which the switch leaves alone.
+
+    Checked as source because the harness switches pages by a different route
+    and never reproduced it; the browser did.
+    """
+    source = (SRC / "ui" / "app.py").read_text(encoding="utf-8")
+    assert 'st.session_state["acting_as"] = st.session_state["acting_as"]' in source
+
+
 def test_a_finding_opens_over_the_list_and_closes_by_its_own_button(
     tmp_path, monkeypatch, app_cache_cleared
 ):

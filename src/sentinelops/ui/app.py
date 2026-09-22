@@ -29,6 +29,14 @@ choices = view.identity_choices(conn)
 labels = {choice["id"]: choice["label"] for choice in choices}
 if st.session_state.get("acting_as") not in labels:
     st.session_state["acting_as"] = service.default_identity(conn)
+else:
+    # Written back to itself on purpose. A value bound to a widget key belongs to
+    # the widget, and Streamlit may clean it up when a page calls `st.switch_page`
+    # part-way through a run — which is what My findings does when an owner picks
+    # a row. The identity was lost, fell back to the default auditor, and the
+    # owner's Finding detail page, not being one of hers, sent her to Today.
+    # Reassigning it makes it ordinary session state, which survives the switch.
+    st.session_state["acting_as"] = st.session_state["acting_as"]
 
 # Not authentication — section 11 rules that out — an identity selector. Its job
 # is to make segregation of duties visible: pick someone and both the pages and
