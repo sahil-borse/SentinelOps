@@ -477,6 +477,13 @@ def _buttons(app):
     return {button.label for button in app.button}
 
 
+def _open_check_form(app):
+    """The scheduled-check form lives in a modal now, opened by its own button."""
+    next(b for b in app.button
+         if b.label == "File evidence for a scheduled check").click().run()
+    assert not app.exception, [e.message for e in app.exception]
+
+
 def _owner_with_checks(tmp_path):
     """A unit owner whose unit owes evidence on the demo database right now."""
     db = service.open_database(tmp_path / "demo.db")
@@ -558,6 +565,8 @@ def test_the_run_cycle_button_actually_runs_a_cycle(tmp_path, monkeypatch, app_c
     # the upload form exists once checks do, for the unit that owes the evidence
     _act_as(app, _owner_with_checks(tmp_path))
     _open(app, "owner_detail")
+    assert "Submit evidence" not in _buttons(app), "the form is not inline any more"
+    _open_check_form(app)
     assert "Submit evidence" in _buttons(app)
     assert any(u.label == "Evidence file" for u in app.get("file_uploader"))
 
@@ -758,6 +767,7 @@ def test_submitting_evidence_reports_back_on_screen(tmp_path, monkeypatch,
     next(b for b in app.button if b.label == "Run cycle now").click().run()
     _act_as(app, _owner_with_checks(tmp_path))
     _open(app, "owner_detail")
+    _open_check_form(app)
 
     next(t for t in app.text_area if t.label == "…or paste the evidence directly").set_value(
         "Quarterly review - corrected resubmission\n\n"
@@ -779,10 +789,74 @@ def test_submitting_nothing_says_so(tmp_path, monkeypatch, app_cache_cleared):
     next(b for b in app.button if b.label == "Run cycle now").click().run()
     _act_as(app, _owner_with_checks(tmp_path))
     _open(app, "owner_detail")
+    _open_check_form(app)
     next(b for b in app.button if b.label == "Submit evidence").click().run()
 
     assert not app.exception, [str(e) for e in app.exception]
     assert any("Nothing to submit" in element.value for element in app.error)
+
+
+def test_a_finding_opens_over_the_list_and_closes_by_its_own_button(
+    tmp_path, monkeypatch, app_cache_cleared
+):
+    """The finding is read in a modal over the list, not scrolled to below it.
+
+    Its own Close clears the selection *and* resets the table: a row selection
+    that survived the rerun would put the finding straight back on screen.
+    """
+    app = _dashboard(tmp_path, monkeypatch)
+    next(b for b in app.button if b.label == "Run cycle now").click().run()
+    db = service.open_database(tmp_path / "demo.db")
+    try:
+        finding = repositories(db)["findings"].list()[0]
+    finally:
+        db.close()
+
+    app.session_state["selected_finding"] = finding.id
+    _open(app, "findings")
+    assert finding.id in " ".join(m.value for m in app.markdown), "it opened"
+    assert "Close" in _buttons(app)
+
+    version = app.session_state["findings_table_version"] if (
+        "findings_table_version" in app.session_state) else 0
+    next(b for b in app.button if b.label == "Close").click().run()
+    assert not app.exception, [e.message for e in app.exception]
+    assert "selected_finding" not in app.session_state, "Close forgets the selection"
+    assert app.session_state["findings_table_version"] == version + 1, (
+        "and resets the table, so the row does not reopen it"
+    )
+    assert "Close" not in _buttons(app)
+
+
+def test_both_evidence_forms_open_in_modals_from_labelled_buttons(
+    tmp_path, monkeypatch, app_cache_cleared
+):
+    """Two forms, two destinations, and neither sits inline to be mistaken for the other.
+
+    Evidence answering a finding goes to an auditor; evidence for a scheduled
+    check goes through the pre-screen and assessment. They used to be two
+    near-identical forms on one page. Each now opens from its own labelled
+    button, and the scheduled one is reachable from My findings too, where an
+    owner looks first.
+    """
+    app = _dashboard(tmp_path, monkeypatch)
+    next(b for b in app.button if b.label == "Run cycle now").click().run()
+    _act_as(app, _owner_with_checks(tmp_path))
+
+    _open(app, "my_findings")
+    assert "Submit evidence" not in _buttons(app), "no form inline on My findings"
+    _open_check_form(app)
+    assert "Submit evidence" in _buttons(app), "the button opens the form"
+    next(b for b in app.button if b.label == "Cancel").click().run()
+    assert not app.exception, [e.message for e in app.exception]
+    assert "Submit evidence" not in _buttons(app), "Cancel closes it"
+
+    _open(app, "owner_detail")
+    labels = _buttons(app)
+    assert "Submit evidence" not in labels and "File evidence round" not in labels, (
+        "neither form sits inline on Finding detail"
+    )
+    assert "File evidence for a scheduled check" in labels
 
 
 def test_no_message_is_written_immediately_before_a_rerun():

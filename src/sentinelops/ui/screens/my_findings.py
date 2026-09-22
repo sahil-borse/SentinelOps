@@ -46,9 +46,14 @@ with st.container(key="card_mine"):
 with st.container(key="card_checks"):
     st.subheader("Evidence due from your unit")
     checks = view.owner_checks(conn, actor["unit"], today) if actor["unit"] else []
+    shell.post("upload")
     if checks:
-        st.caption("Compliance activities your unit owes evidence for. File it on "
-                   "Finding detail.")
+        st.caption("Scheduled compliance activities your unit owes evidence for. "
+                   "They are not findings: evidence here goes through the pre-screen "
+                   "and assessment rather than to an auditor.")
+        if st.button("File evidence for a scheduled check", type="primary",
+                     key="open_check_mine"):
+            shell.open_evidence_form("check@my_findings")
         st.dataframe(
             view.check_table(checks), hide_index=True, width="stretch", height=260,
             column_config={
@@ -62,3 +67,5 @@ with st.container(key="card_checks"):
             "Checks appear here once a cycle raises them for your unit's controls. "
             "None is waiting on you.",
         ))
+
+shell.evidence_forms(conn, actor=actor, today=today, where="my_findings")

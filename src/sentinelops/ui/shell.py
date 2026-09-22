@@ -321,3 +321,170 @@ def notification(conn, note: dict[str, Any], actor: dict[str, Any]) -> None:
         st.session_state["inbox_result"] = {"ok": ok, "message": message}
         st.session_state["inbox_table_version"] = st.session_state.get("inbox_table_version", 0) + 1
         st.rerun()
+
+
+# --- a finding, opened over the list -----------------------------------------
+
+@st.dialog("Finding", width="large", dismissible=False)
+def finding_popup(conn, finding_id: str, *, actor: dict[str, Any], today,
+                  version_key: str) -> None:
+    """One finding in full, opened over the list rather than below it.
+
+    Open for as long as `selected_finding` is set, which is also how other pages
+    deep-link a finding. Closes by its own button, which clears that and bumps
+    the table's version: a selection that survived the rerun would reopen it,
+    the same trap the inbox modal avoids the same way. An action taken inside —
+    closing the finding, re-assessing its check — reruns and reopens it showing
+    the new state, so the result of the action is the next thing on screen.
+    """
+    _, close_col = st.columns([5, 1])
+    if close_col.button("Close", width="stretch", key=f"finding_popup_close_{finding_id}"):
+        st.session_state.pop("selected_finding", None)
+        st.session_state[version_key] = st.session_state.get(version_key, 0) + 1
+        st.rerun()
+    finding_detail(conn, finding_id, actor=actor, today=today)
+
+
+# --- the two evidence forms, each in its own modal ---------------------------
+#
+# An owner files evidence for two different things, and they used to sit on one
+# page as two near-identical forms: evidence *answering a finding*, which goes
+# to an auditor, and evidence for *a scheduled check*, which goes through the
+# pre-screen and assessment. Each now opens from its own labelled button, so
+# the page says which is which before anything is filled in.
+
+EVIDENCE_TYPES = ["txt", "md", "json", "csv", "log"]
+
+
+def open_evidence_form(kind: str) -> None:
+    """Remember which evidence form is open, so it survives the reruns inside it.
+
+    A dialog drawn only on the run its button was pressed would vanish the
+    moment anything inside it was touched. The open form is parked in session
+    state instead and closes by its own Cancel or Submit, the way the
+    notification modal closes by its own buttons.
+    """
+    st.session_state["evidence_form"] = kind
+
+
+def _close_evidence_form() -> None:
+    st.session_state.pop("evidence_form", None)
+
+
+def evidence_forms(conn, *, actor, today, where: str, finding_id: str | None = None) -> None:
+    """Draw whichever evidence form is open on this page, if any.
+
+    Scoped to the page that opened it, so a form left open does not follow the
+    owner to the next page they visit.
+    """
+    kind = st.session_state.get("evidence_form")
+    if kind == f"check@{where}":
+        check_evidence(conn, actor, today)
+    elif finding_id and kind == f"finding:{finding_id}":
+        finding_evidence(conn, finding_id, actor)
+
+
+@st.dialog("File evidence for this finding", width="large", dismissible=False)
+def finding_evidence(conn, finding_id: str, actor: dict[str, Any]) -> None:
+    """One evidence round on one finding. An auditor answers it; filing closes nothing."""
+    st.caption(f"Answers **{finding_id}**. An auditor accepts it, or returns it with "
+               "what is still missing. Filing evidence does not close the finding.")
+    reference = st.text_input("Evidence reference", placeholder="e.g. HR-LEAVERS-2027-03.pdf",
+                              key=f"round_ref_{finding_id}")
+    uploaded = st.file_uploader("Evidence document", type=EVIDENCE_TYPES,
+                                key=f"round_file_{finding_id}")
+    pasted = st.text_area("…or paste the evidence", height=120, key=f"round_text_{finding_id}")
+    note = st.text_area("Note to the auditor", height=70, key=f"round_note_{finding_id}",
+                        placeholder="What changed, and where to look.")
+    cancel_col, file_col = st.columns(2)
+    if cancel_col.button("Cancel", width="stretch", key=f"round_cancel_{finding_id}"):
+        _close_evidence_form()
+        st.rerun()
+    if file_col.button("File evidence round", type="primary", width="stretch",
+                       key=f"round_submit_{finding_id}"):
+        text = (uploaded.getvalue().decode("utf-8", errors="replace")
+                if uploaded is not None else pasted)
+        ok, message = service.open_evidence_round(
+            conn, finding_id, by=actor["id"],
+            evidence_ref=reference or (uploaded.name if uploaded else ""),
+            evidence_text=text, note=note,
+        )
+        st.session_state["round_result"] = {"ok": ok, "message": message}
+        _close_evidence_form()
+        st.rerun()
+
+
+@st.dialog("File evidence for a scheduled check", width="large", dismissible=False)
+def check_evidence(conn, actor: dict[str, Any], today) -> None:
+    """Evidence for a compliance activity the unit owes, judged by the pipeline.
+
+    Files go into the same staging table as the generated corpus and through the
+    same pre-screen and assessment — nothing about an upload is a special case.
+    """
+    unit = view.unit_name(conn, actor["unit"]) or "your unit"
+    st.caption(f"A periodic obligation {unit} owes evidence for — not a finding. It goes "
+               "through the same pre-screen and assessment as every other submission.")
+    checks = view.owner_checks(conn, actor["unit"], today) if actor["unit"] else []
+    if not checks:
+        html(view.empty_state(
+            "No evidence due",
+            "Checks appear here once a cycle raises them for your unit's controls.",
+        ))
+        if st.button("Close", width="stretch", key="check_close"):
+            _close_evidence_form()
+            st.rerun()
+        return
+
+    labels = {c["id"]: f"{c['activity']} · {c['period']} · {view.due_phrase(c['days_past'])}"
+              for c in checks}
+    target = st.selectbox("Against check", list(labels), format_func=labels.get,
+                          key="upload_target")
+    chosen_type = st.selectbox(
+        "Document type", service.doc_types_for(conn, target),
+        format_func=lambda kind: kind.replace("_", " "),
+        help="The first entries are what this control accepts. Pick another to see "
+             "the wrong-type rule reject it before any model is asked.",
+    )
+    remediation = st.checkbox("This is remediation for an existing finding", True)
+    recheck = st.checkbox(
+        "Re-check it straight away", True,
+        help="Runs the pre-screen and, if the rules cannot decide it, the "
+             "assessment — the same path any other evidence takes.",
+    )
+    uploaded = st.file_uploader("Evidence file", type=EVIDENCE_TYPES,
+                                help="Plain text, markdown, JSON or CSV.")
+    typed = st.text_area("…or paste the evidence directly", height=120,
+                         placeholder="Paste a report here if you would rather not upload a file.")
+    cancel_col, submit_col = st.columns(2)
+    if cancel_col.button("Cancel", width="stretch", key="check_cancel"):
+        _close_evidence_form()
+        st.rerun()
+    if submit_col.button("Submit evidence", type="primary", width="stretch"):
+        content, name = "", "pasted.txt"
+        if uploaded is not None:
+            content = uploaded.getvalue().decode("utf-8", errors="replace")
+            name = uploaded.name
+        elif typed.strip():
+            content = typed
+        if not content.strip():
+            st.session_state["upload"] = {
+                "ok": False, "message": "Nothing to submit — upload a file or paste text.",
+            }
+        else:
+            with st.spinner("Filing the evidence and re-checking it…"):
+                submission = service.submit_evidence(
+                    conn, instance_id=target, filename=name, content=content,
+                    author=actor["name"], doc_type=chosen_type, as_of=today,
+                    is_remediation=remediation,
+                )
+                lines = [f"**{submission.id}** filed against {labels[target]} — "
+                         f"{len(content.encode()):,} bytes, {chosen_type.replace('_', ' ')}."]
+                if recheck:
+                    outcome = service.reassess(conn, target, today)
+                    lines.append(view.reassess_message(outcome) if outcome.new_assessment_id
+                                 else f"Not re-checked: {outcome.reason}")
+                else:
+                    lines.append("It will be judged on the next cycle.")
+            st.session_state["upload"] = {"ok": True, "message": "\n\n".join(lines)}
+        _close_evidence_form()
+        st.rerun()

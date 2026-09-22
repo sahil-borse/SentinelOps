@@ -51,10 +51,11 @@ if not shown:
     ))
 else:
     st.caption(f"Showing {len(shown)} of {view.plural(len(rows), 'finding')}. "
-               "Select a row to open it below.")
+               "Select a row to open it.")
+    version = st.session_state.get("findings_table_version", 0)
     picked = st.dataframe(
         view.findings_table(shown), hide_index=True, width="stretch", height=360,
-        key="findings_table", on_select="rerun", selection_mode="single-row",
+        key=f"findings_table_{version}", on_select="rerun", selection_mode="single-row",
         column_config={
             "Finding": st.column_config.TextColumn("Finding", width="medium"),
             "Severity": shell.SEVERITY_COLUMN,
@@ -68,13 +69,8 @@ else:
     if picked.selection.rows:
         st.session_state["selected_finding"] = shown[picked.selection.rows[0]]["id"]
 
+# The finding opens over the list, in a modal, rather than below it.
 selected = st.session_state.get("selected_finding")
 if selected:
-    shell.finding_detail(conn, selected, actor=actor, today=today)
-else:
-    shell.html(view.empty_state(
-        "No finding selected",
-        "Select a row above to see the finding in full: the evidence with its cited "
-        "passages highlighted, every round and the auditor's answers, recurrence, "
-        "and the audit timeline.",
-    ))
+    shell.finding_popup(conn, selected, actor=actor, today=today,
+                        version_key="findings_table_version")
