@@ -42,12 +42,12 @@ from ..llm.parsing import extract_json, validate
 from ..llm.prompts.taxonomy import (
     BATCH_SIZE,
     CONSOLIDATE_MAX_TOKENS,
-    CONSOLIDATE_SYSTEM_V1,
+    CONSOLIDATE_SYSTEM_V2,
     MAX_CATEGORIES,
     MIN_CATEGORIES,
     PROMPT_VERSION,
     PROPOSE_MAX_TOKENS,
-    PROPOSE_SYSTEM_V1,
+    PROPOSE_SYSTEM_V2,
     consolidate_schema_v1,
     consolidate_user_v1,
     propose_schema_v1,
@@ -127,7 +127,7 @@ def _ask(conn, client, request: LlmRequest, label: str) -> tuple[dict[str, Any],
 
 def _propose(conn, client, descriptions: list[str], report: TaxonomyReport):
     request = LlmRequest(
-        system=PROPOSE_SYSTEM_V1,
+        system=PROPOSE_SYSTEM_V2,
         messages=[{"role": "user", "content": propose_user_v1(descriptions)}],
         max_tokens=PROPOSE_MAX_TOKENS,
         response_schema=propose_schema_v1(),
@@ -143,7 +143,7 @@ def _propose(conn, client, descriptions: list[str], report: TaxonomyReport):
 
 def _consolidate(conn, client, proposals, report: TaxonomyReport):
     request = LlmRequest(
-        system=CONSOLIDATE_SYSTEM_V1,
+        system=CONSOLIDATE_SYSTEM_V2,
         messages=[{"role": "user", "content": consolidate_user_v1(proposals)}],
         max_tokens=CONSOLIDATE_MAX_TOKENS,
         response_schema=consolidate_schema_v1(),

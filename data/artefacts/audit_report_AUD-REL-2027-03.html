@@ -44,24 +44,26 @@ pre { background: #fff; border: 1px solid #dcd9cf; border-radius: 6px; padding: 
 <tr><th>Findings</th><td>3</td></tr>
 </table></div>
 <h2>Summary</h2>
-<p>This audit raised 3 finding(s) across 2 auditable unit(s) [FND-REL-2027-03-01, FND-REL-2027-03-02, FND-REL-2027-03-03]. The weight of the audit sits in 1 Major finding(s) [FND-REL-2027-03-01], which carry the shortest target dates. IT accounts for 2 of them [FND-REL-2027-03-02, FND-REL-2027-03-03]. The same gap category, change_not_authorised, appears more than once [FND-REL-2027-03-01, FND-REL-2027-03-02], which is the pattern worth attention here.</p>
-<div class="note">Drafted from the findings below (audit_report_v2); every statement cites the findings it rests on. Confirmed by P. Kaur before issue.</div>
+<p>The audit of the Coral first release identified three findings across Project Coral and IT, with issues spanning credential management, change validation, and record keeping [FND-REL-2027-03-01, FND-REL-2027-03-02, FND-REL-2027-03-03]. Project Coral was found to have shipped with a database account whose password had not been rotated since project inception and was shared between two services, indicating a significant credential management failure [FND-REL-2027-03-01]. Within IT, two changes related to the release were logged after deployment rather than being reviewed beforehand, repeating a previously observed gap in change validation [FND-REL-2027-03-02]. Additionally, IT&#x27;s post-incident review actions are tracked only within incident tickets, which do not persist after closure, reflecting a recurring issue with inadequate record keeping [FND-REL-2027-03-03].</p>
+<div class="note">Drafted from the findings below (audit_report_v3); every statement cites the findings it rests on. Confirmed by P. Kaur before issue.</div>
 <h2>Findings</h2>
 <div class="finding">
 <h3><span class="chip">FND-REL-2027-03-01</span> Major</h3>
-<div class="meta">Project Coral · category change_not_authorised · owner M. Dubois · target 2027-03-26</div>
+<div class="meta">Project Coral · category credential_management_failure · owner M. Dubois · target 2027-03-26</div>
 <p>The Coral release shipped with a database account whose password had not been rotated since the project began, and which is shared between two services.</p>
 <p><strong>Agreed action plan.</strong> Rotate the credential, split it per service, and bring both into the key rotation schedule.</p>
 </div>
 <div class="finding">
 <h3><span class="chip">FND-REL-2027-03-02</span> Minor</h3>
-<div class="meta">IT · category change_not_authorised · owner Y. Nakamura · target 2027-04-02</div>
+<div class="meta">IT · category lack_of_required_validation_or_approval · owner Y. Nakamura · target 2027-04-02</div>
 <p>Two changes deployed alongside the Coral release were recorded in the change log after the fact rather than reviewed before go-live.</p>
 <p><strong>Agreed action plan.</strong> Review both retrospectively and enforce the pre-deployment gate.</p>
+<p><strong>Recurrence.</strong> Resembles FND-REL-2026-07-01 (Project Atlas, raised 2026-07-10).</p>
 </div>
 <div class="finding">
 <h3><span class="chip">FND-REL-2027-03-03</span> Observation</h3>
-<div class="meta">IT · category incident_follow_up_incomplete · owner Y. Nakamura · target 2027-04-16</div>
+<div class="meta">IT · category unreliable_or_inadequate_record_keeping · owner Y. Nakamura · target 2027-04-16</div>
 <p>Post-incident reviews are completed but the actions arising from them are tracked in the incident ticket rather than anywhere that survives the ticket being closed.</p>
 <p><strong>Agreed action plan.</strong> Track post-incident actions in the same place as audit findings.</p>
+<p><strong>Recurrence.</strong> Resembles FND-INCIDENT-PM-IT-2026-02 (IT, raised 2026-03-28); FND-INCIDENT-PM-IT-2026-03 (IT, raised 2026-04-28); FND-INCIDENT-PM-IT-2026-04 (IT, raised 2026-05-28).</p>
 </div></main></body></html>

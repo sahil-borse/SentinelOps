@@ -5,30 +5,157 @@
   "reason": "smoke test, three prompt-shape probes of triage and recurrence, and three end-to-end probes of assessment, round review, brief and audit report while their prompts were being fixed"
  },
  "replay_stopped": {
-  "at": "2026-09-22T19:00:05",
-  "calls": 171,
-  "input_tokens": 125337,
-  "output_tokens": 30568,
+  "at": "2026-09-23T19:54:24",
+  "calls": 458,
+  "input_tokens": 332559,
+  "output_tokens": 78128,
   "cached_tokens": 0,
-  "cost_usd": 0.099,
+  "cost_usd": 0.258,
   "by_tier": {
    "assess": {
     "model": "gpt-4.1-mini-2025-04-14",
-    "calls": 164,
-    "input": 119344,
-    "output": 27458,
+    "calls": 453,
+    "input": 329828,
+    "output": 76343,
     "cached": 0,
-    "cost": 0.0917
+    "cost": 0.2541
    },
    "triage": {
     "model": "gpt-4.1-mini-2025-04-14",
-    "calls": 7,
-    "input": 5993,
-    "output": 3110,
+    "calls": 5,
+    "input": 2731,
+    "output": 1785,
     "cached": 0,
-    "cost": 0.0074
+    "cost": 0.0039
    }
   },
-  "reason": "ValueError: category 'observation' is outside the derived taxonomy"
+  "reason": "LlmError: response missing required keys: ['categories']"
+ },
+ "resume_stopped": {
+  "at": "2026-09-23T19:57:58",
+  "calls": 16,
+  "input_tokens": 20603,
+  "output_tokens": 8655,
+  "cached_tokens": 2688,
+  "cost_usd": 0.0213,
+  "by_tier": {
+   "triage": {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "calls": 16,
+    "input": 20603,
+    "output": 8655,
+    "cached": 2688,
+    "cost": 0.0213
+   }
+  },
+  "reason": "InvalidChoice: category 'reliable_or_inadequate_record_keeping' is outside the derived taxonomy"
+ },
+ "resume": {
+  "at": "2026-09-23T20:07:30",
+  "calls": 175,
+  "input_tokens": 198382,
+  "output_tokens": 21778,
+  "cached_tokens": 0,
+  "cost_usd": 0.1142,
+  "by_tier": {
+   "triage": {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "calls": 15,
+    "input": 23084,
+    "output": 9687,
+    "cached": 0,
+    "cost": 0.0247
+   },
+   "recurrence": {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "calls": 160,
+    "input": 175298,
+    "output": 12091,
+    "cached": 0,
+    "cost": 0.0895
+   }
+  },
+  "reconciliation": {
+   "metered_rows": 175,
+   "budget_calls": 175,
+   "rows_match_calls": true,
+   "metered_input": 198382,
+   "budget_input": 198382,
+   "tokens_match": true,
+   "metered_cost": 0.1142,
+   "budget_cost": 0.1142,
+   "models_seen": [
+    "gpt-4.1-mini-2025-04-14"
+   ],
+   "unexpected_models": []
+  },
+  "calls_already_paid_for": 474
+ },
+ "artefacts": {
+  "at": "2026-09-23T20:08:16",
+  "calls": 3,
+  "input_tokens": 4602,
+  "output_tokens": 1990,
+  "cached_tokens": 0,
+  "cost_usd": 0.022,
+  "by_tier": {
+   "brief": {
+    "model": "gpt-4.1-2025-04-14",
+    "calls": 1,
+    "input": 2870,
+    "output": 1499,
+    "cached": 0,
+    "cost": 0.0177
+   },
+   "triage": {
+    "model": "gpt-4.1-mini-2025-04-14",
+    "calls": 1,
+    "input": 1027,
+    "output": 235,
+    "cached": 0,
+    "cost": 0.0008
+   },
+   "report": {
+    "model": "gpt-4.1-2025-04-14",
+    "calls": 1,
+    "input": 705,
+    "output": 256,
+    "cached": 0,
+    "cost": 0.0035
+   }
+  },
+  "brief_published": true,
+  "brief_cited_findings": 11,
+  "brief_cited_metrics": 4,
+  "audit": "AUD-REL-2027-03",
+  "report_status": "issued 2027-04-15 by P. Kaur, after confirmation by P. Kaur on 2027-04-15",
+  "pack_events": 7779,
+  "pack_chain": {
+   "ok": true,
+   "broken_at": null,
+   "checked": 7779,
+   "reason": ""
+  }
+ },
+ "baseline": {
+  "at": "2026-09-23T20:46:33",
+  "calls": 0,
+  "input_tokens": 0,
+  "output_tokens": 0,
+  "cached_tokens": 0,
+  "cost_usd": 0.0,
+  "by_tier": {},
+  "cached_already": false,
+  "model": "gpt-4.1-mini",
+  "sample_size": null,
+  "sample_seed": null,
+  "note": "",
+  "instances": 1000,
+  "replayed_from_journal": 683
+ },
+ "capped_replay_stopped": {
+  "calls": 171,
+  "cost_usd": 0.099,
+  "reason": "a capped smoke run (--per-cycle 8) that proved the fixed prompts: 164 assessments accepted, none refused. It stopped in classification on a model answering with a severity word where a gap category belonged. Its ledger entry was later overwritten by the full replay, which uses the same phase name, and is restored here because it was paid for."
  }
 }

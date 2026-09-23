@@ -95,9 +95,13 @@ def test_the_taxonomy_is_closed_and_a_stray_label_is_refused(seeded):
                 "rationale": "made up",
             } for finding_id in _ids_in(request)])
 
-    with pytest.raises(ValueError) as refused:
-        intelligence.classify(seeded, AS_OF, client=Inventive(), limit=1)
-    assert "outside the derived taxonomy" in str(refused.value)
+    report = intelligence.classify(seeded, AS_OF, client=Inventive(), limit=1)
+    # Asked again with the permitted names restated, then left uncategorised.
+    # What must never happen is the label being written.
+    assert report.unclassifiable and not report.classified
+    known = taxonomy.names(seeded)
+    for finding in repositories(seeded)["findings"].list():
+        assert finding.gap_category in ("", *known)
 
 
 def test_a_stray_severity_is_refused_too(seeded, categories):
@@ -111,9 +115,10 @@ def test_a_stray_severity_is_refused_too(seeded, categories):
                 "rationale": "made up",
             } for finding_id in _ids_in(request)])
 
-    with pytest.raises(ValueError) as refused:
-        intelligence.classify(seeded, AS_OF, client=Inventive(), limit=1)
-    assert "outside the enum" in str(refused.value)
+    report = intelligence.classify(seeded, AS_OF, client=Inventive(), limit=1)
+    assert report.unclassifiable and not report.classified
+    for finding in repositories(seeded)["findings"].list():
+        assert finding.suggested_severity in ("", None, *SEVERITIES)
 
 
 def test_a_batch_that_drops_a_finding_is_refused(seeded, categories):
@@ -193,6 +198,129 @@ def test_a_finding_unanswered_on_its_own_still_refuses(seeded, categories):
     with pytest.raises(ValueError) as refused:
         intelligence.classify(seeded, AS_OF, client=Silent(), limit=1)
     assert "no answer for" in str(refused.value)
+
+
+def test_a_value_outside_the_taxonomy_is_asked_again_before_it_fails(seeded, categories):
+    """The refusal was right; being fatal was not.
+
+    `gpt-4.1-mini` answered `observation` — a severity — where a gap category
+    belonged, and a replay ended on one wrong word in one field of one finding.
+    A closed-set answer outside the set is now asked once more with the
+    permitted values restated, which is what a person would do.
+    """
+    class Slips:
+        """Wrong the first time, right once told what the set is."""
+
+        def __init__(self):
+            self.asked = []
+
+        def complete(self, request):
+            body = "".join(m["content"] for m in request.messages)
+            self.asked.append(body)
+            category = categories[0] if "CORRECTION" in body else "observation"
+            return _batch_reply([{
+                "id": finding_id,
+                "category": category,
+                "suggested_severity": "Minor",
+                "confidence": 0.9,
+                "rationale": "second time lucky",
+            } for finding_id in _ids_in(request)])
+
+    client = Slips()
+    report = intelligence.classify(seeded, AS_OF, client=client, limit=3)
+
+    assert report.classified, "the findings were classified, not abandoned"
+    assert report.invalid_retries == 1, "the retry is recorded, not absorbed"
+    assert len(client.asked) == 2, "asked twice: once wrong, once corrected"
+    assert "CORRECTION" in client.asked[1] and categories[0] in client.asked[1], (
+        "the second attempt restates the values it may choose from"
+    )
+    assert "observation" in client.asked[1], "and names what it got wrong"
+    assert report.model_calls == 2, "both calls are counted; both were paid for"
+
+
+def test_a_finding_that_cannot_be_classified_is_left_alone_and_named(seeded, categories):
+    """The label is refused; the finding is recorded; the run continues.
+
+    Killing the run was the old behaviour and it cost a paid replay over a
+    dropped prefix — `gpt-4.1-mini` answered
+    `reliable_or_inadequate_record_keeping` where the taxonomy held
+    `unreliable_or_inadequate_record_keeping`. Refusing the label is right.
+    Refusing to finish is not: the finding stays uncategorised, is named in the
+    report, and a later cycle asks again.
+    """
+    class Insists:
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, request):
+            self.calls += 1
+            return _batch_reply([{
+                "id": finding_id,
+                "category": "access control-ish",
+                "suggested_severity": "Minor",
+                "confidence": 0.9,
+                "rationale": "no",
+            } for finding_id in _ids_in(request)])
+
+    client = Insists()
+    report = intelligence.classify(seeded, AS_OF, client=client, limit=1)
+
+    assert client.calls == 2, "asked again before giving up, and only once"
+    assert report.unclassifiable, "the finding is named, not silently skipped"
+    assert not report.classified, "and nothing was recorded against it"
+    repo = repositories(seeded)
+    assert not repo["findings"].get(report.unclassifiable[0]).gap_category, (
+        "no label outside the taxonomy was ever written"
+    )
+
+
+def test_a_severity_outside_the_enum_is_retried_the_same_way(seeded, categories):
+    class Slips:
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, request):
+            self.calls += 1
+            body = "".join(m["content"] for m in request.messages)
+            severity = "Minor" if "CORRECTION" in body else "Catastrophic"
+            return _batch_reply([{
+                "id": finding_id,
+                "category": categories[0],
+                "suggested_severity": severity,
+                "confidence": 0.9,
+                "rationale": "fixed",
+            } for finding_id in _ids_in(request)])
+
+    client = Slips()
+    report = intelligence.classify(seeded, AS_OF, client=client, limit=2)
+    assert report.classified and client.calls == 2
+    assert report.invalid_retries == 1
+
+
+def test_a_stage_with_nothing_to_do_needs_no_client(seeded, monkeypatch):
+    """Doing nothing must not require a provider.
+
+    Both stages built their client before looking at whether there was any
+    work. Scoring a finished run re-enters them with every finding classified
+    and every candidate already examined, and constructing a client there fails
+    against the guard that stands in for a provider during a paid run — so the
+    run could be paid for and then not scored.
+    """
+    from sentinelops.llm import get_client
+    from sentinelops.llm.protocol import LlmError
+
+    intelligence.classify(seeded, AS_OF, client=get_client("fake"))
+    intelligence.detect_recurrence(seeded, AS_OF, client=get_client("fake"))
+
+    def explode(*args, **kwargs):
+        raise LlmError("no client may be built when there is nothing to ask")
+
+    monkeypatch.setattr(intelligence, "get_client", explode)
+    again = intelligence.classify(seeded, AS_OF)
+    assert again.model_calls == 0 and not again.classified
+    once_more = intelligence.detect_recurrence(seeded, AS_OF)
+    assert once_more.model_calls == 0
 
 
 def test_a_recurrence_answer_has_room_for_every_candidate_offered():

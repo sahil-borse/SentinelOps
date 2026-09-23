@@ -206,3 +206,23 @@
   - An enum value outside the taxonomy is fatal. It should be retried like a missing answer, and the finding left unclassified and recorded if the model insists, rather than ending a paid run.
   - No complete measured run exists, so every accuracy figure in `results.md` is still the stub's, and is labelled as such.
   - The API key was pasted into the conversation and should be rotated.
+- Slice 19c (2026-09-23): the retry defect fixed, and the first measured run against a real provider.
+  **The retry.** A closed-set field answered with a value outside the set now raises its own `InvalidChoice`, carrying the field and the values it may hold, and the batch is asked once more with them restated. The correction goes in the *user* message: the system prompt is a constant sent first and byte-identical on every call, and interpolating a correction into it would break the cached prefix for every other call in the run. A second invalid answer halves the batch to find which finding is at issue, and a finding that still cannot be named is left uncategorised and reported in `report.unclassifiable` rather than mislabelled — or, as before, fatal. `gpt-4.1-mini` wrote `reliable_or_inadequate_record_keeping` for a taxonomy holding `unreliable_or_inadequate_record_keeping`; a dropped prefix in one field of one finding had ended a run with 453 paid assessments behind it.
+  **An eighth and ninth prompt had the shape defect.** Both taxonomy prompts named neither the `categories` wrapper nor the keys inside it. They had *worked* in two earlier runs and failed on the third: an unstated shape is one a model guesses right much of the time, which is the worst version of this bug. The wrapper-key test covered six prompts and now covers all eight.
+  **Two stages needed a provider to do nothing.** `classify` and `detect_recurrence` built their client before checking whether there was any work, so scoring a finished run — every finding classified, every candidate examined — tried to construct one and failed against the guard that stands in for a provider during a paid run. Both are lazy now, with a test.
+  **The run.** 649 calls, 660,105 tokens, $0.3935: 453 assessments, 36 triage batches, 160 recurrence calls. Metered rows and the budget's own count agree exactly. 173 findings, all classified, none unclassifiable. The naive baseline ran on the same model with the corrected prompts — 683 calls, $0.3798 — and is cached. The brief published with 11 findings and 4 metrics cited, the audit report was generated, confirmed and issued, and the pack rebuilt from 7,779 events with the chain verified.
+  **Measured, against the stub, every figure marked quotable or not in `results.md`:**
+  - gap detection: precision 94.1%, recall 100.0%, FPR 0.8% (stub 95.2 / 93.8 / 0.6). TP 64, FP 4, TN 482, **FN 0**
+  - recurrence: recall 66.7%, precision 28.6% (stub 50.0 / 75.0). It asserts ten links where the stub asserts three: it reaches more of what was planted and more of what was not
+  - the supplier-files set, which the stub misses entirely: 1 of 3 pairs
+  - taxonomy: 7 categories derived, against the stub's 9
+  - flagged for human review: 35 of 652, against the stub's 1
+  - citations: 1,358 kept, **none failing re-check**; no verdict refused for an unreadable reply or an unresolved citation
+  - severity suggestion agrees with the auditor 77/146 (52.7%), against the stub's 38/86
+  - the adversarial document: **gap**, the injection not obeyed, flagged for review
+  - $0.0246 and 40.6 calls per cycle, against the stub's $0.0111 and 35.9 — the stub's dollars are the shape of a bill, not one
+
+  **Spend: $2.36 of the $10 cap**, every line in `data/real/spend.json`, including the runs that produced nothing.
+  **Open, not changed:**
+  - Recurrence precision fell by two thirds. It is not tuned back: a detector that links more finds more of what was planted and more of what was not, and both directions are reported.
+  - The API key was pasted into the conversation and should be rotated.

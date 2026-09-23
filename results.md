@@ -17,74 +17,65 @@ Corpus seed `20260831` · fingerprint `d180c3f6c453433d` ·
 > architecture. Re-run with `SENTINELOPS_LLM_PROVIDER=openai` before quoting any
 > absolute accuracy number.
 
-## Slice 19: the real-provider run, attempted and not measurable
+## The real-provider run
 
-> **No accuracy figure in this document comes from a language model.** The
-> pipeline was run against `gpt-4.1-mini-2025-04-14` and completed, but its accuracy cannot be
-> measured. Every figure above and below this section is still the stub's.
+The pipeline was replayed to the vantage point against `gpt-4.1-mini-2025-04-14`:
+649 calls, 660,105 tokens, $0.3935.
+Read back from the run's own metering rows, so this says what actually answered:
 
-**What went wrong.** Every one of the 453 assessments the model judged
-was refused as unreadable. The assessment prompt (`assessment_v2`) names three
-of the seven fields its schema requires, and the schema is validated locally
-but never sent to the provider. The model answered each criterion in its own
-layout, `{"criteria": {"1": {"verdict": ..., "cited_spans": [...]}}, "overall_verdict": ...}`, with quotations copied verbatim, and the pipeline refused them
-rather than guess at them. That refusal is the design working; the prompt is the
-defect. `FakeModelClient` always answers in the canonical shape, so no stub run
-could have found it. The figures downstream inherit it: each refusal was
-flagged for review and treated as a failed check, and the findings that raised
-became the population recurrence and severity agreement were measured over.
+> - `assess` → `gpt-4.1-mini-2025-04-14` · 453 calls · 406,171 tokens · $0.2541
+> - `recurrence` → `gpt-4.1-mini-2025-04-14` · 160 calls · 187,389 tokens · $0.0895
+> - `triage` → `gpt-4.1-mini-2025-04-14` · 36 calls · 66,545 tokens · $0.0500
+
+**What the accuracy figures are measured on has not changed.** They describe a
+*synthetic corpus with constructed failure modes* — the generator decided what
+counted as a gap and then wrote a document to embody it. Section 4's scope note
+applies to the real column exactly as it applies to the stub's.
 
 | Figure | FakeModelClient | gpt-4.1-mini-2025-04-14 | Quotable? |
 |---|---|---|---|
-| Gap detection: precision / recall / FPR | 95.2% / 93.8% / 0.6% | 100.0% / 32.8% / 0.0% | **No.** 453 of 453 model verdicts were refused as unreadable, so the real column scores the refusal rule, not the model |
-| Taxonomy categories | 9 | 6 | **Yes.** Derived from the seeded audit descriptions alone, which the defect never touched |
-| Recurrence: recall / precision | 50.0% / 75.0% | 66.7% / 40.0% | **No.** Scored on the audit track, but the candidates came from a findings population the refusals had inflated |
-| Supplier-files set (the stub's blind spot) | 0/3 pairs | 1/3 pairs | Suggestive only, for the same reason |
-| Severity suggestion agrees with auditor | 38/86 | 137/412 | **No.** Compared over findings the refusals raised |
-| Assessments flagged for human review | 1 | 453 | Only as a count of refusals |
-| Citations failing verification | 0 | 0 | **No.** No model citation was kept to check |
-| Adversarial document | gap | refused unread | **No.** Refused before it was judged; resistance to the injection is untested |
-| Metering against the budget's own count | n/a | exact | **Yes.** Rows, tokens and cost all agree |
-| Audit chain | verified | verified, 14869 events | **Yes.** |
+| Gap detection: precision / recall / FPR | 95.2% / 93.8% / 0.6% | 94.1% / 100.0% / 0.8% | **Yes**, on this corpus — see the scope note under section 4 |
+| Confusion (TP/FP/TN/FN) | 60/3/483/4 | 64/4/482/0 | **Yes**, on this corpus — see the scope note under section 4 |
+| Taxonomy categories derived | 9 | 7 | **Yes.** Read off the auditors' own descriptions, which no stage rewrites |
+| Recurrence: recall / precision | 50.0% / 75.0% | 66.7% / 28.6% | **Yes**, over 6 planted pairs on the audit track — a thin measurement, and thin either way |
+| The supplier-files set, which the stub misses entirely | 0/3 pairs | 1/3 pairs | **Yes.** Named because it is the case a keyword rule cannot reach: three findings sharing no vocabulary |
+| Assessments flagged for human review | 1 of 652 | 35 of 652 | **Yes.** A count of what the pipeline would not assert alone |
+| Citations failing verification, and discarded | 0 | 0 | **Yes.** Every kept citation re-checked against the evidence it was taken from, character for character |
+| Verdicts refused: reply unreadable / citation not in the evidence | 0 / 0 | 0 / 0 | **Yes.** The refusal rules, counted separately because they are different failures |
+| Severity suggestion agrees with the auditor | 38/86 (44.2%) | 77/146 (52.7%) | **Yes**, as a measure of the suggestion's usefulness — never a score the system should maximise, since the auditor assigns |
+| The adversarial document | gap | gap | **Yes.** One planted injection, so it is a demonstration rather than a rate |
+| Injection obeyed | no | no | **Yes**, for that one document |
+| Model calls, full replay | 575 | 649 | **Yes.** Counted, not estimated |
+| Tokens, full replay | 435,719 | 660,105 | Real column **yes** — read from each response object. Stub column **no**: its counts are proportional to the prompt, not a tokenizer's |
+| Cost, full replay | $0.1771 | $0.3935 | Real column **yes**, at the published rates in `llm/models.py`. Stub column **no** — the shape of a bill, not a bill |
+| Per cycle | 35.9 calls, $0.0111 | 40.6 calls, $0.0246 | **Yes**, over 16 cycles of this corpus |
+| Audit chain | verified | verified | **Yes.** Recomputed over every entry |
 
-**The bill is real, but it is the bill of a failing run.** 1,386
-calls and 1,469,222 tokens for the full replay, $0.7760;
-86.6 calls and $0.0485 per
-cycle over 16 cycles. Assessment made 906 calls because
-each of 453 unreadable replies was retried once; recurrence made
-420 over a findings population the refusals had inflated. A
-working prompt would cost roughly half. Token counts are read from the response
-objects.
+**Everything spent, from `data/real/spend.json`:** $1.98 across every
+attempt, of a $10 cap. That includes the runs that produced nothing: an early
+replay whose handler let an exception past it over an in-memory database, a
+resume killed with its session before the stage it was in had saved, and a
+naive baseline stopped once its answers were found unreadable. Those are on the
+ledger because they were paid for.
 
-**Everything slice 19 spent, from `data/real/spend.json`:** $0.7760 in the
-saved run; at least $0.6045 in two runs that saved nothing, the first
-because an exception escaped a handler over an in-memory database, the second
-because its session ended before a stage that checkpointed only on finishing;
-$0.0124 on 26 naive-baseline calls, stopped once their answers were
-found unreadable for the same reason; $0.0048 on probes. About
-$1.40 in all, of a $10 cap. **There is no real naive baseline**: it was
-stopped, and nothing was cached.
+**What the failures were.** Nearly all of them were one defect: a prompt that did
+not state the shape its schema required, with the schema validated locally and
+never sent to the provider. **All eight prompts had it**, and the last two —
+taxonomy's propose and consolidate — were found only after a replay had paid for
+453 assessments, because an unstated shape is one a model guesses right much of
+the time. `FakeModelClient` always answers in the canonical shape, so no stub run
+could have found any of them.
 
-**Defects the run found.** Triage's prompt described a different shape from its
-schema, and recurrence's never named its wrapper key; both are fixed
-(`triage_v2`, `recurrence_v2`) and were probed against the model. Recurrence's
-flat 500-token ceiling could not hold an answer about a full shortlist; it is
-now sized to the shortlist.
-
-**Since that run.** The same defect was found in all four remaining prompts and
-fixed: assessment, evidence-round review, the prioritisation brief and the audit
-report summary now state the shape their schemas require (`assessment_v3`,
-`review_v2`, `brief_v4`, `audit_report_v3`), and the brief's token ceiling was
-raised to hold a brief its own schema would accept. Each was then verified
-against the provider one call at a time: an assessment returned `compliant` with
-three citations that resolve, a round review returned `satisfies` with none
-unresolved, a brief was **published** through the citation validator, and a
-report summary of 992 characters cited three findings. A capped run afterwards
-recorded 164 model assessments with **none refused**, against 453 of 453 refused
-before, and stopped later on a model answering with a severity word where a gap
-category belonged — a refusal working as designed, and fatal where it should
-retry. **No complete measured run exists**, so every accuracy figure in this
-document is still the stub's.
+Two token ceilings were below what their own schemas permit, and truncation is
+fatal rather than short. A closed-set field answered with a value outside the set
+ended a run where it should have asked again: `gpt-4.1-mini` wrote
+`reliable_or_inadequate_record_keeping` for a taxonomy holding
+`unreliable_or_inadequate_record_keeping`. It is now asked once more with the
+permitted values restated, the batch is halved to find which finding is at issue,
+and one that still cannot be named is left uncategorised and reported rather than
+mislabelled or fatal. Two stages also built a client before checking whether they
+had any work, so scoring a finished run demanded a provider in order to do
+nothing. All are fixed, each with a test that fails without a provider.
 
 ## Headline
 
@@ -252,9 +243,11 @@ documents rather than relevant sections. The difference in tokens is therefore
 attributable to architecture rather than to prompt-wrangling — which is the only
 way this comparison is worth anything.
 
-Baseline results are cached to disk on first run
-(served from cache) and never
-recomputed, per section 5.
+Baseline results are cached to disk on first run and never recomputed, per
+section 5. Whether *this* run read that cache or filled it is deliberately not
+recorded here: it is a fact about the disk, not about the corpus or the seed,
+and reporting it made two runs on one seed produce different bytes — which the
+determinism test exists to forbid.
 
 **Where the 1.5x actually comes from.** Almost
 entirely from the pre-screen making 1.5x fewer calls

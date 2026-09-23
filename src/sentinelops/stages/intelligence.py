@@ -110,6 +110,14 @@ class TriageReport:
     #: again. Zero against the stub; not zero against a real model, which is
     #: worth recording rather than absorbing.
     split_retries: int = 0
+    #: Times a closed-set field came back with a value outside it and the batch
+    #: was asked again with the permitted values restated. Zero against the
+    #: stub, which only ever answers from the set it was given.
+    invalid_retries: int = 0
+    #: Findings the model would not name a permitted category for, even asked
+    #: on their own with the list restated. Left uncategorised rather than
+    #: mislabelled, and named here rather than lost.
+    unclassifiable: list[str] = field(default_factory=list)
     taxonomy_version: str = ""
 
     def summary(self) -> str:
@@ -212,6 +220,14 @@ def classify(conn, as_of: date, *, client=None, limit: int | None = None):
     if limit is not None:
         pending = pending[:limit]
 
+    if not pending:
+        # Nothing to classify, so no client is built. A stage that does no work
+        # must not need a provider to do it: scoring a finished run re-enters
+        # this function with everything already categorised, and building a
+        # client there fails against the guard that stands in for a provider
+        # during a paid run.
+        return report
+
     names = tuple(c.id for c in categories)
     definitions = {c.id: c.definition for c in categories}
     model_client = client or get_client()
@@ -240,6 +256,31 @@ class UnansweredFindings(ValueError):
         self.missing = missing
 
 
+class InvalidChoice(ValueError):
+    """The model answered a closed-set field with a value outside the set.
+
+    Its own type so it can be retried once with the permitted values restated.
+    `gpt-4.1-mini` answered `observation` — a severity — where a gap category
+    belonged, and the refusal, which is right, was fatal, which is not: it
+    ended a paid run over one wrong word in one field of one finding.
+    """
+
+    def __init__(self, message: str, field: str, value: Any, allowed) -> None:
+        super().__init__(message)
+        self.field = field
+        self.value = value
+        self.allowed = list(allowed)
+
+    def correction(self) -> str:
+        """What to tell the model it got wrong, in its own vocabulary."""
+        return (
+            f"CORRECTION. Your previous answer used {self.value!r} for "
+            f"{self.field}, which is not permitted. {self.field} must be exactly "
+            f"one of: {', '.join(self.allowed)}. Choose the closest one from that "
+            f"list and answer again for every finding, in the shape given above."
+        )
+
+
 def _triage_group(conn, client, repo, people, group, names, definitions, report):
     """Ask about a batch, halving it if the model leaves findings unanswered.
 
@@ -257,36 +298,70 @@ def _triage_group(conn, client, repo, people, group, names, definitions, report)
     A finding still unanswered when asked *on its own* is a genuine refusal and
     raises. The guarantee is unchanged: nothing is ever recorded against a
     finding without an answer about that finding.
+
+    A value outside a closed set is retried once with the permitted values
+    restated. Only a second invalid answer fails, and it fails cleanly: the
+    model has been told exactly what the set is and has still chosen something
+    else, which is a refusal rather than a slip.
     """
+    contexts = [_finding_context(repo, people, f) for f in group]
     report.model_calls += 1
     report.batches += 1
     try:
-        answers, response = _ask_triage(
-            conn, client,
-            [_finding_context(repo, people, f) for f in group],
-            names, definitions,
-        )
+        try:
+            answers, response = _ask_triage(conn, client, contexts, names, definitions)
+        except InvalidChoice as wrong:
+            report.model_calls += 1
+            report.invalid_retries += 1
+            answers, response = _ask_triage(
+                conn, client, contexts, names, definitions, insist=wrong.correction(),
+            )
     except UnansweredFindings:
         if len(group) == 1:
             raise
-        report.split_retries += 1
-        half = len(group) // 2
-        answered = []
-        for part in (group[:half], group[half:]):
-            answered.extend(
-                _triage_group(
-                    conn, client, repo, people, part, names, definitions, report
-                )
-            )
-        return answered
+        return _halve(conn, client, repo, people, group, names, definitions, report)
+    except InvalidChoice:
+        # Told the permitted values and still outside them. A batch carries up
+        # to eight findings and one of them is the problem, so halve to find it.
+        if len(group) > 1:
+            return _halve(conn, client, repo, people, group, names, definitions, report)
+        # On its own and still unclassifiable. The label is not recorded — that
+        # invariant is the point — but the finding is, and the run continues:
+        # `gpt-4.1-mini` once answered `reliable_or_inadequate_record_keeping`
+        # for a taxonomy holding `unreliable_or_inadequate_record_keeping`, and
+        # a dropped prefix in one field of one finding had ended a paid replay.
+        # It stays uncategorised, is reported here, and a later cycle asks again.
+        report.unclassifiable.append(group[0].id)
+        return []
     return [(finding, answers[finding.id], response) for finding in group]
 
 
-def _ask_triage(conn, client, contexts: list[dict[str, Any]], names, definitions):
-    """One call, many findings. Returns the answers keyed by finding id."""
+def _halve(conn, client, repo, people, group, names, definitions, report):
+    """Ask about each half separately, so one bad answer costs one finding."""
+    report.split_retries += 1
+    half = len(group) // 2
+    answered = []
+    for part in (group[:half], group[half:]):
+        answered.extend(
+            _triage_group(conn, client, repo, people, part, names, definitions, report)
+        )
+    return answered
+
+
+def _ask_triage(conn, client, contexts: list[dict[str, Any]], names, definitions,
+                insist: str = ""):
+    """One call, many findings. Returns the answers keyed by finding id.
+
+    `insist` is appended to the user message when a previous attempt answered a
+    closed-set field with something outside it, restating the permitted values.
+    It goes in the user half deliberately: the system prompt is a constant, sent
+    first and byte-identical on every call, and a correction interpolated into
+    it would break the cached prefix for every other call in the run.
+    """
+    body = triage_user_v1(contexts, definitions)
     request = LlmRequest(
         system=TRIAGE_SYSTEM_V2,
-        messages=[{"role": "user", "content": triage_user_v1(contexts, definitions)}],
+        messages=[{"role": "user", "content": f"{body}\n\n{insist}" if insist else body}],
         response_schema=triage_schema_v1(names),
         max_tokens=TRIAGE_TOKENS_PER_FINDING * len(contexts),
         tier="triage",
@@ -309,13 +384,15 @@ def _ask_triage(conn, client, contexts: list[dict[str, Any]], names, definitions
                 f"filed against one we did"
             )
         if entry.get("category") not in names:
-            raise ValueError(
+            raise InvalidChoice(
                 f"category {entry.get('category')!r} is outside the derived "
-                f"taxonomy"
+                f"taxonomy",
+                "category", entry.get("category"), names,
             )
         if entry.get("suggested_severity") not in SEVERITIES:
-            raise ValueError(
-                f"severity {entry.get('suggested_severity')!r} is outside the enum"
+            raise InvalidChoice(
+                f"severity {entry.get('suggested_severity')!r} is outside the enum",
+                "suggested_severity", entry.get("suggested_severity"), SEVERITIES,
             )
         answers[entry["id"]] = entry
 
@@ -496,8 +573,19 @@ def detect_recurrence(
     if limit is not None:
         findings = findings[:limit]
 
-    model_client = client or get_client()
     units = {u.id: u for u in repo["units"].list()}
+    # Built on the first call that is actually needed. Most findings are the
+    # first of their kind or were asked about already, and the skips are
+    # decided inside the loop — so a pass where nothing needs asking must not
+    # require a provider in order to discover that.
+    model_client = client
+
+    def ask(finding, candidates):
+        nonlocal model_client
+        if model_client is None:
+            model_client = get_client()
+        return _ask_recurrence(conn, model_client, finding, candidates, units)
+
     with simulated_clock(datetime.combine(as_of, time(7, 30))):
         for finding in findings:
             candidates = candidates_for(repo, finding)
@@ -512,9 +600,7 @@ def detect_recurrence(
                 report.skipped_already_examined += 1
                 continue
             report.examined.append(finding.id)
-            matches, response = _ask_recurrence(
-                conn, model_client, finding, candidates, units
-            )
+            matches, response = ask(finding, candidates)
             report.model_calls += 1
             _record_recurrence(
                 repo, people, finding, matches, candidates, response, report

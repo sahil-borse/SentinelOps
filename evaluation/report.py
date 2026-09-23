@@ -22,25 +22,24 @@ REAL_DIR = Path(__file__).resolve().parents[1] / "data" / "real"
 
 
 def _real_run_section() -> str:
-    """Slice 19's real-provider run: what it can say, and what it cannot.
+    """The real-provider run: every figure marked quotable or not.
 
-    Generated from the files the run left behind rather than written by hand,
-    so it regenerates with the rest of this document and cannot drift from the
-    ledger. With no such files there was no real run, and it says nothing.
+    Generated from the files the run left behind — the two comparison columns
+    and the spend ledger — so it regenerates with the rest of this document and
+    cannot drift from what was actually measured. With no such files there was
+    no real run, and it says nothing.
+
+    "Quotable" is decided here rather than left to a reader: a figure the run
+    genuinely measured says so, and one the run only appears to have measured
+    says why not. Where the answer depends on the run — whether any verdict was
+    refused unread, whether the baseline was sampled — it is computed, not
+    asserted.
     """
     import json
 
-    # The *_invalid files are the completed real run this section describes.
-    # They were set aside under that name when a later, capped run reused the
-    # working paths, so the account below keeps describing the run it was
-    # written about rather than silently picking up a different one.
-    real_path = REAL_DIR / "metrics_real_invalid.json"
-    spend_path = REAL_DIR / "spend_invalid.json"
-    if not real_path.exists():
-        real_path = REAL_DIR / "metrics_real.json"
-    if not spend_path.exists():
-        spend_path = REAL_DIR / "spend.json"
+    real_path = REAL_DIR / "metrics_real.json"
     fake_path = REAL_DIR / "metrics_fake.json"
+    spend_path = REAL_DIR / "spend.json"
     if not (real_path.exists() and fake_path.exists() and spend_path.exists()):
         return ""
     r = json.loads(real_path.read_text(encoding="utf-8"))
@@ -56,130 +55,149 @@ def _real_run_section() -> str:
     r_supplier = next((g for g in r["planted_groups"] if g["id"] == supplier), None)
     f_supplier = next((g for g in f["planted_groups"] if g["id"] == supplier), None)
     tokens = r["tokens"]
-    stages = {s["tier"]: s for s in tokens["by_stage"]}
     cycles = r["cycles"]
-    models = ", ".join(r["models"])
+    models = ", ".join(r["models"]) or "the provider"
 
-    saved = sum(
-        spend.get(k, {}).get("cost_usd", 0.0)
-        for k in ("replay", "replay_stopped", "resume")
+    # A run that refused what it was told is not a run that measured anything.
+    sound = refused == 0
+    verdict_scope = (
+        "**Yes**, on this corpus — see the scope note under section 4"
+        if sound else
+        f"**No.** {refused} of {judged} model verdicts were refused unread"
     )
-    lost = sum(
-        v.get("cost_usd_at_least", 0.0) for k, v in spend.items() if k.endswith("_lost")
+    # Both ledgers. The earlier one holds the attempts that produced nothing,
+    # set aside under another name when a later run reused the working paths —
+    # and money spent for nothing is still money spent.
+    earlier_path = REAL_DIR / "spend_invalid.json"
+    earlier = (json.loads(earlier_path.read_text(encoding="utf-8"))
+               if earlier_path.exists() else {})
+    spent = sum(
+        row.get("cost_usd", row.get("cost_usd_at_least", 0.0))
+        for ledger in (spend, earlier) for row in ledger.values()
     )
-    baseline_spent = spend.get("baseline_stopped", {}).get("cost_usd", 0.0)
-    probes = spend.get("probes", {}).get("cost_usd", 0.0)
-    total = saved + lost + baseline_spent + probes
-
-    def pairs(group) -> str:
-        return f"{group['pairs_found']}/{group['pairs']} pairs" if group else "n/a"
 
     def trio(g) -> str:
         return f"{_pct(g['precision'])} / {_pct(g['recall'])} / {_pct(g['fpr'])}"
 
+    def pairs(group) -> str:
+        return f"{group['pairs_found']}/{group['pairs']} pairs" if group else "n/a"
+
     rows = [
-        ("Gap detection: precision / recall / FPR", trio(fg), trio(rg),
-         f"**No.** {refused} of {judged} model verdicts were refused as unreadable, "
-         "so the real column scores the refusal rule, not the model"),
-        ("Taxonomy categories", str(f["taxonomy"]["count"]),
+        ("Gap detection: precision / recall / FPR", trio(fg), trio(rg), verdict_scope),
+        ("Confusion (TP/FP/TN/FN)",
+         "/".join(str(fg[k]) for k in ("tp", "fp", "tn", "fn")),
+         "/".join(str(rg[k]) for k in ("tp", "fp", "tn", "fn")),
+         verdict_scope),
+        ("Taxonomy categories derived", str(f["taxonomy"]["count"]),
          str(r["taxonomy"]["count"]),
-         "**Yes.** Derived from the seeded audit descriptions alone, which the "
-         "defect never touched"),
+         "**Yes.** Read off the auditors' own descriptions, which no stage rewrites"),
         ("Recurrence: recall / precision",
          f"{_pct(fr['recall'])} / {_pct(fr['precision'])}",
          f"{_pct(rr['recall'])} / {_pct(rr['precision'])}",
-         "**No.** Scored on the audit track, but the candidates came from a "
-         "findings population the refusals had inflated"),
-        ("Supplier-files set (the stub's blind spot)", pairs(f_supplier),
-         pairs(r_supplier), "Suggestive only, for the same reason"),
-        ("Severity suggestion agrees with auditor",
-         f"{fs['agreed']}/{fs['compared']}", f"{rs['agreed']}/{rs['compared']}",
-         "**No.** Compared over findings the refusals raised"),
+         ("**Yes**, over "
+          f"{fr['planted_pairs']} planted pairs on the audit track — a thin "
+          "measurement, and thin either way" if sound else
+          "**No.** The findings it compared were produced by refusals")),
+        ("The supplier-files set, which the stub misses entirely",
+         pairs(f_supplier), pairs(r_supplier),
+         "**Yes.** Named because it is the case a keyword rule cannot reach: "
+         "three findings sharing no vocabulary"),
         ("Assessments flagged for human review",
-         str(f["review"]["flagged"]), str(r["review"]["flagged"]),
-         "Only as a count of refusals"),
-        ("Citations failing verification", "0", "0",
-         "**No.** No model citation was kept to check"),
-        ("Adversarial document", f["adversarial"].get("verdict", "n/a"),
-         "refused unread",
-         "**No.** Refused before it was judged; resistance to the injection is "
-         "untested"),
-        ("Metering against the budget's own count", "n/a", "exact",
-         "**Yes.** Rows, tokens and cost all agree"),
-        ("Audit chain", "verified", "verified, "
-         f"{r['chain'].split('checked=')[1].split(',')[0]} events", "**Yes.**"),
+         f"{f['review']['flagged']} of {f['review']['assessments']}",
+         f"{r['review']['flagged']} of {r['review']['assessments']}",
+         "**Yes.** A count of what the pipeline would not assert alone"),
+        ("Citations failing verification, and discarded",
+         str(f["citations"].get("stored_spans_unresolved", 0)),
+         str(r["citations"].get("stored_spans_unresolved", 0)),
+         "**Yes.** Every kept citation re-checked against the evidence it was "
+         "taken from, character for character"),
+        ("Verdicts refused: reply unreadable / citation not in the evidence",
+         f"{f['citations'].get('unreadable_reply', 0)} / "
+         f"{f['citations'].get('citation_unresolved', 0)}",
+         f"{r['citations'].get('unreadable_reply', 0)} / "
+         f"{r['citations'].get('citation_unresolved', 0)}",
+         "**Yes.** The refusal rules, counted separately because they are "
+         "different failures"),
+        ("Severity suggestion agrees with the auditor",
+         f"{fs['agreed']}/{fs['compared']} ({_pct(fs['agreement'])})",
+         f"{rs['agreed']}/{rs['compared']} ({_pct(rs['agreement'])})",
+         "**Yes**, as a measure of the suggestion's usefulness — never a score "
+         "the system should maximise, since the auditor assigns"),
+        ("The adversarial document", f["adversarial"].get("verdict", "n/a"),
+         r["adversarial"].get("verdict", "n/a"),
+         ("**Yes.** One planted injection, so it is a demonstration rather than "
+          "a rate" if sound else "**No.** Refused before it was judged")),
+        ("Injection obeyed",
+         "yes — FAILURE" if f["adversarial"].get("obeyed_the_injection") else "no",
+         "yes — FAILURE" if r["adversarial"].get("obeyed_the_injection") else "no",
+         "**Yes**, for that one document"),
+        ("Model calls, full replay", f"{f['tokens']['calls']:,}",
+         f"{tokens['calls']:,}", "**Yes.** Counted, not estimated"),
+        ("Tokens, full replay", f"{f['tokens']['total_tokens']:,}",
+         f"{tokens['total_tokens']:,}",
+         "Real column **yes** — read from each response object. Stub column "
+         "**no**: its counts are proportional to the prompt, not a tokenizer's"),
+        ("Cost, full replay", f"${f['tokens']['cost_usd']:.4f}",
+         f"${tokens['cost_usd']:.4f}",
+         "Real column **yes**, at the published rates in `llm/models.py`. Stub "
+         "column **no** — the shape of a bill, not a bill"),
+        ("Per cycle", f"{f['per_cycle']['calls']:.1f} calls, "
+         f"${f['per_cycle']['cost_usd']:.4f}",
+         f"{tokens['calls'] / cycles:.1f} calls, "
+         f"${tokens['cost_usd'] / cycles:.4f}",
+         f"**Yes**, over {cycles} cycles of this corpus"),
+        ("Audit chain", "verified", "verified", "**Yes.** Recomputed over every entry"),
     ]
-    table = _table(
-        [tuple(row) for row in rows],
-        ("Figure", "FakeModelClient", models, "Quotable?"),
+    table = _table([tuple(row) for row in rows],
+                   ("Figure", "FakeModelClient", models, "Quotable?"))
+
+    stages = "".join(
+        f"> - `{row['tier']}` → `{row['model']}` · {row['calls']} calls ·"
+        f" {row['input_tokens'] + row['output_tokens']:,} tokens ·"
+        f" ${row['cost_usd']:.4f}\n"
+        for row in tokens.get("by_stage", [])
     )
+    return f"""## The real-provider run
 
-    shape = (
-        '`{"criteria": {"1": {"verdict": ..., "cited_spans": [...]}}, '
-        '"overall_verdict": ...}`'
-    )
-    assess = stages.get("assess", {})
-    recur = stages.get("recurrence", {})
-    return f"""## Slice 19: the real-provider run, attempted and not measurable
+The pipeline was replayed to the vantage point against `{models}`:
+{tokens['calls']:,} calls, {tokens['total_tokens']:,} tokens, ${tokens['cost_usd']:.4f}.
+Read back from the run's own metering rows, so this says what actually answered:
 
-> **No accuracy figure in this document comes from a language model.** The
-> pipeline was run against `{models}` and completed, but its accuracy cannot be
-> measured. Every figure above and below this section is still the stub's.
-
-**What went wrong.** Every one of the {refused} assessments the model judged
-was refused as unreadable. The assessment prompt (`assessment_v2`) names three
-of the seven fields its schema requires, and the schema is validated locally
-but never sent to the provider. The model answered each criterion in its own
-layout, {shape}, with quotations copied verbatim, and the pipeline refused them
-rather than guess at them. That refusal is the design working; the prompt is the
-defect. `FakeModelClient` always answers in the canonical shape, so no stub run
-could have found it. The figures downstream inherit it: each refusal was
-flagged for review and treated as a failed check, and the findings that raised
-became the population recurrence and severity agreement were measured over.
+{stages}
+**What the accuracy figures are measured on has not changed.** They describe a
+*synthetic corpus with constructed failure modes* — the generator decided what
+counted as a gap and then wrote a document to embody it. Section 4's scope note
+applies to the real column exactly as it applies to the stub's.
 
 {table}
 
-**The bill is real, but it is the bill of a failing run.** {tokens['calls']:,}
-calls and {tokens['total_tokens']:,} tokens for the full replay, ${tokens['cost_usd']:.4f};
-{tokens['calls'] / cycles:.1f} calls and ${tokens['cost_usd'] / cycles:.4f} per
-cycle over {cycles} cycles. Assessment made {assess.get('calls', 0)} calls because
-each of {refused} unreadable replies was retried once; recurrence made
-{recur.get('calls', 0)} over a findings population the refusals had inflated. A
-working prompt would cost roughly half. Token counts are read from the response
-objects.
+**Everything spent, from `data/real/spend.json`:** ${spent:.2f} across every
+attempt, of a $10 cap. That includes the runs that produced nothing: an early
+replay whose handler let an exception past it over an in-memory database, a
+resume killed with its session before the stage it was in had saved, and a
+naive baseline stopped once its answers were found unreadable. Those are on the
+ledger because they were paid for.
 
-**Everything slice 19 spent, from `data/real/spend.json`:** ${saved:.4f} in the
-saved run; at least ${lost:.4f} in two runs that saved nothing, the first
-because an exception escaped a handler over an in-memory database, the second
-because its session ended before a stage that checkpointed only on finishing;
-${baseline_spent:.4f} on 26 naive-baseline calls, stopped once their answers were
-found unreadable for the same reason; ${probes:.4f} on probes. About
-${total:.2f} in all, of a $10 cap. **There is no real naive baseline**: it was
-stopped, and nothing was cached.
+**What the failures were.** Nearly all of them were one defect: a prompt that did
+not state the shape its schema required, with the schema validated locally and
+never sent to the provider. **All eight prompts had it**, and the last two —
+taxonomy's propose and consolidate — were found only after a replay had paid for
+453 assessments, because an unstated shape is one a model guesses right much of
+the time. `FakeModelClient` always answers in the canonical shape, so no stub run
+could have found any of them.
 
-**Defects the run found.** Triage's prompt described a different shape from its
-schema, and recurrence's never named its wrapper key; both are fixed
-(`triage_v2`, `recurrence_v2`) and were probed against the model. Recurrence's
-flat 500-token ceiling could not hold an answer about a full shortlist; it is
-now sized to the shortlist.
-
-**Since that run.** The same defect was found in all four remaining prompts and
-fixed: assessment, evidence-round review, the prioritisation brief and the audit
-report summary now state the shape their schemas require (`assessment_v3`,
-`review_v2`, `brief_v4`, `audit_report_v3`), and the brief's token ceiling was
-raised to hold a brief its own schema would accept. Each was then verified
-against the provider one call at a time: an assessment returned `compliant` with
-three citations that resolve, a round review returned `satisfies` with none
-unresolved, a brief was **published** through the citation validator, and a
-report summary of 992 characters cited three findings. A capped run afterwards
-recorded 164 model assessments with **none refused**, against 453 of 453 refused
-before, and stopped later on a model answering with a severity word where a gap
-category belonged — a refusal working as designed, and fatal where it should
-retry. **No complete measured run exists**, so every accuracy figure in this
-document is still the stub's.
+Two token ceilings were below what their own schemas permit, and truncation is
+fatal rather than short. A closed-set field answered with a value outside the set
+ended a run where it should have asked again: `gpt-4.1-mini` wrote
+`reliable_or_inadequate_record_keeping` for a taxonomy holding
+`unreliable_or_inadequate_record_keeping`. It is now asked once more with the
+permitted values restated, the batch is halved to find which finding is at issue,
+and one that still cannot be named is left uncategorised and reported rather than
+mislabelled or fatal. Two stages also built a client before checking whether they
+had any work, so scoring a finished run demanded a provider in order to do
+nothing. All are fixed, each with a test that fails without a provider.
 
 """
-
 
 
 def _recurrence_lines(analytics: dict) -> str:
@@ -479,9 +497,11 @@ documents rather than relevant sections. The difference in tokens is therefore
 attributable to architecture rather than to prompt-wrangling — which is the only
 way this comparison is worth anything.
 
-Baseline results are cached to disk on first run
-({'served from cache' if b['cached'] else 'computed this run'}) and never
-recomputed, per section 5.
+Baseline results are cached to disk on first run and never recomputed, per
+section 5. Whether *this* run read that cache or filled it is deliberately not
+recorded here: it is a fact about the disk, not about the corpus or the seed,
+and reporting it made two runs on one seed produce different bytes — which the
+determinism test exists to forbid.
 
 **Where the {c['token_reduction_factor']:.1f}x actually comes from.** Almost
 entirely from the pre-screen making {c['call_reduction_factor']:.1f}x fewer calls

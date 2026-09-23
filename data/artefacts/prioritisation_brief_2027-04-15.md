@@ -1,46 +1,56 @@
 # Prioritisation brief — 2027-04-15
 
-Advisory; changes no state. 1 model call over the top 12 of 20 open findings, 44 section 8 metrics and 16 counts over the listed rows (brief_v3).
+Advisory; changes no state. 1 model call over the top 12 of 84 open findings, 41 section 8 metrics and 13 counts over the listed rows (brief_v4).
 
 ## Top priorities
 
-1. **FND-CHANGED-PROCESS-IT-2026-10** — IT, Major, 135d past target (195 points)
-   Major in IT (critical unit), 135d past target, chased 5x
+1. **FND-INCIDENT-PM-IT-2026-01** — IT, Major, 408d past target, chronic (210 points)
+   Critical IT post-mortem is 408 days overdue, has 5 recurrence links, and has required 16 chases; this is the oldest and most persistent open issue.
 
-2. **FND-IA-2026-H2-02** — Facilities, Major, 146d past target (138 points)
-   Major in Facilities (low unit), 146d past target, chased 6x
+2. **FND-INCIDENT-PM-IT-2026-09** — IT, Major, 166d past target (201 points)
+   Critical IT post-mortem is 166 days overdue with 5 recurrence links and 7 chases, indicating repeated failures to address record-keeping.
 
-3. **FND-QA-2027-Q1-01** — HR, Major, 48d past target (117 points)
-   Major in HR (high unit), 48d past target, chased 3x
+3. **FND-INCIDENT-PM-PRJ-ATLAS-2026-04** — Project Atlas, Major, 319d past target (200 points)
+   Critical Project Atlas post-mortem is 319 days overdue, with 2 recurrence links and 12 chases, showing persistent validation gaps.
+
+4. **FND-INCIDENT-PM-IT-2026-05** — IT, Major, 288d past target (190 points)
+   Critical IT post-mortem is 288 days overdue, has 1 recurrence link, and has been chased 13 times, highlighting ongoing record-keeping issues.
+
+5. **FND-CHANGED-PROCESS-IT-2026-10** — IT, Major, 135d past target (175 points)
+   Critical IT process review is 135 days overdue, with 1 recurrence link and 5 chases, risking unvalidated process changes.
 
 ## Emerging patterns
 
-- IT holds 6 of the most urgent findings.
-  _cites: FND-CHANGED-PROCESS-IT-2026-10; FND-BACKUP-VERIFY-IT-2027-02; FND-CHANGED-PROCESS-IT-2027-03; FND-CONTROLLED-DOCS-IT-2027-Q1; FND-FINDING-CLOSURE-IT-2027-Q1; listed_in_unit:IT = 6_
-- The access not revoked category appears 4 times among them.
-  _cites: FND-IA-2026-H2-02; FND-QA-2027-Q1-01; FND-FINDING-CLOSURE-IT-2027-Q1; FND-FINDING-CLOSURE-HR-2026-Q2; listed_category:access_not_revoked = 4_
+- IT unit accounts for 8 of the 12 highest-priority major findings, indicating a concentration of overdue and recurring issues in this area.
+  _cites: FND-INCIDENT-PM-IT-2026-01; FND-INCIDENT-PM-IT-2026-09; FND-INCIDENT-PM-IT-2026-05; FND-CHANGED-PROCESS-IT-2026-10; FND-INCIDENT-PM-IT-2026-12; FND-BACKUP-VERIFY-IT-2027-02; FND-CHANGED-PROCESS-IT-2027-03; FND-CONTROLLED-DOCS-IT-2027-Q1; listed_in_unit:IT = 8_
+- Lack of required validation or approval is the most common category among top findings, appearing in 6 of 12 cases.
+  _cites: FND-INCIDENT-PM-IT-2026-01; FND-INCIDENT-PM-PRJ-ATLAS-2026-04; FND-CHANGED-PROCESS-IT-2026-10; FND-INCIDENT-PM-IT-2026-12; FND-BACKUP-VERIFY-IT-2027-02; FND-CHANGED-PROCESS-IT-2027-03; listed_category:lack_of_required_validation_or_approval = 6_
+- 9 of the 12 listed major findings are past their target dates, showing a persistent challenge in timely closure.
+  _cites: FND-INCIDENT-PM-IT-2026-01; FND-INCIDENT-PM-IT-2026-09; FND-INCIDENT-PM-PRJ-ATLAS-2026-04; FND-INCIDENT-PM-IT-2026-05; FND-CHANGED-PROCESS-IT-2026-10; FND-INCIDENT-PM-IT-2026-12; FND-IA-2026-H2-02; FND-QA-2027-Q1-01; FND-BACKUP-VERIFY-IT-2027-02; listed_past_target = 9_
 
 ## Recommended focus
 
-- Start with the top of the ranking, in IT.
-  _cites: FND-CHANGED-PROCESS-IT-2026-10; overdue_90_plus = 6; oldest_overdue_days = 377_
-- Open findings are rising across the window, so new intake deserves as much attention as the backlog.
-  _cites: trend_direction = rising; trend_recent_direction = flat_
+- Prioritize overdue and recurring IT findings, as IT holds 8 of 12 major issues and most are past target dates.
+  _cites: FND-INCIDENT-PM-IT-2026-01; FND-INCIDENT-PM-IT-2026-09; FND-INCIDENT-PM-IT-2026-05; FND-CHANGED-PROCESS-IT-2026-10; FND-INCIDENT-PM-IT-2026-12; FND-BACKUP-VERIFY-IT-2027-02; FND-CHANGED-PROCESS-IT-2027-03; FND-CONTROLLED-DOCS-IT-2027-Q1; listed_in_unit:IT = 8; listed_past_target = 9_
+- Address systemic gaps in validation and approval processes, as this category appears in half of the top findings.
+  _cites: FND-INCIDENT-PM-IT-2026-01; FND-INCIDENT-PM-PRJ-ATLAS-2026-04; FND-CHANGED-PROCESS-IT-2026-10; FND-INCIDENT-PM-IT-2026-12; FND-BACKUP-VERIFY-IT-2027-02; FND-CHANGED-PROCESS-IT-2027-03; listed_category:lack_of_required_validation_or_approval = 6_
+- Focus on closing findings with multiple recurrence links, as 9 of 12 listed findings have recurrence, indicating repeated compliance failures.
+  _cites: FND-INCIDENT-PM-IT-2026-01; FND-INCIDENT-PM-IT-2026-09; FND-INCIDENT-PM-PRJ-ATLAS-2026-04; FND-INCIDENT-PM-IT-2026-05; FND-CHANGED-PROCESS-IT-2026-10; FND-INCIDENT-PM-IT-2026-12; FND-QA-2027-Q1-01; FND-CHANGED-PROCESS-IT-2027-03; FND-CONTROLLED-DOCS-IT-2027-Q1; listed_with_recurrence_links = 9_
 
 ## The ranking
 
 | rank | finding | unit | band | timing | points |
 |---:|---|---|---|---|---:|
-| 1 | FND-CHANGED-PROCESS-IT-2026-10 | IT | Major | 135d past target | 195 |
-| 2 | FND-IA-2026-H2-02 | Facilities | Major | 146d past target | 138 |
-| 3 | FND-QA-2027-Q1-01 | HR | Major | 48d past target | 117 |
-| 4 | FND-BACKUP-VERIFY-IT-2027-02 | IT | Major | 15d past target | 98 |
-| 5 | FND-CHANGED-PROCESS-IT-2027-03 | IT | Major | 3d to target | 87 |
-| 6 | FND-CONTROLLED-DOCS-IT-2027-Q1 | IT | Major | 3d to target | 87 |
-| 7 | FND-CONTROLLED-DOCS-PRJ-ATLAS-2027-Q1 | Project Atlas | Major | 3d to target | 87 |
-| 8 | FND-FINDING-CLOSURE-IT-2027-Q1 | IT | Major | 3d to target | 87 |
-| 9 | FND-REL-2027-03-01 | Project Coral | Major | 20d past target | 56 |
-| 10 | FND-FINDING-CLOSURE-HR-2026-Q2 | HR | Minor | 247d past target | 197 |
+| 1 | FND-INCIDENT-PM-IT-2026-01 | IT | Major | 408d past target, chronic | 210 |
+| 2 | FND-INCIDENT-PM-IT-2026-09 | IT | Major | 166d past target | 201 |
+| 3 | FND-INCIDENT-PM-PRJ-ATLAS-2026-04 | Project Atlas | Major | 319d past target | 200 |
+| 4 | FND-INCIDENT-PM-IT-2026-05 | IT | Major | 288d past target | 190 |
+| 5 | FND-CHANGED-PROCESS-IT-2026-10 | IT | Major | 135d past target | 175 |
+| 6 | FND-INCIDENT-PM-IT-2026-12 | IT | Major | 74d past target | 156 |
+| 7 | FND-IA-2026-H2-02 | Facilities | Major | 146d past target | 138 |
+| 8 | FND-QA-2027-Q1-01 | HR | Major | 48d past target | 127 |
+| 9 | FND-BACKUP-VERIFY-IT-2027-02 | IT | Major | 15d past target | 78 |
+| 10 | FND-CHANGED-PROCESS-IT-2027-03 | IT | Major | 3d to target | 67 |
 
 ## How the order is built
 

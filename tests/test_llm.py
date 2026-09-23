@@ -245,8 +245,13 @@ def test_every_prompt_names_the_wrapper_key_its_schema_requires():
     Triage V1 guessed wrong. Recurrence V1 had the identical defect — its
     schema requires a `recurrences` key that its prompt never named — and it is
     the stage that runs straight after classification, so it would have killed
-    the *next* replay. Checked for every prompt rather than for the two that
-    were caught.
+    the *next* replay.
+
+    **Every prompt, not the ones that were caught.** Both taxonomy prompts had
+    it too and were not in this list, so a replay died on the consolidation call
+    after paying for 453 assessments. That failure was intermittent — an
+    unstated shape is one the model guesses right some of the time — which is
+    exactly why it needs a test rather than a run.
     """
     from sentinelops.llm.prompts.assessment import (
         ASSESSMENT_SYSTEM_V3,
@@ -262,6 +267,12 @@ def test_every_prompt_names_the_wrapper_key_its_schema_requires():
         recurrence_schema_v1,
     )
     from sentinelops.llm.prompts.review import REVIEW_SYSTEM_V2, review_schema_v1
+    from sentinelops.llm.prompts.taxonomy import (
+        CONSOLIDATE_SYSTEM_V2,
+        PROPOSE_SYSTEM_V2,
+        consolidate_schema_v1,
+        propose_schema_v1,
+    )
     from sentinelops.llm.prompts.triage import TRIAGE_SYSTEM_V2, triage_schema_v1
 
     # All six, not the two that were caught. Every one of these prompts has to
@@ -274,6 +285,8 @@ def test_every_prompt_names_the_wrapper_key_its_schema_requires():
         ("assessment", ASSESSMENT_SYSTEM_V3, assessment_schema_v2()),
         ("review", REVIEW_SYSTEM_V2, review_schema_v1()),
         ("audit report", AUDIT_REPORT_SYSTEM_V2, audit_report_schema_v1()),
+        ("taxonomy propose", PROPOSE_SYSTEM_V2, propose_schema_v1()),
+        ("taxonomy consolidate", CONSOLIDATE_SYSTEM_V2, consolidate_schema_v1()),
     ]
     for name, system, schema in cases:
         for key in schema["required"]:
