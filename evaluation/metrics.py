@@ -387,6 +387,57 @@ def zero_model_share(conn) -> dict[str, Any]:
     }
 
 
+def recover_run_stats(conn) -> dict[str, Any]:
+    """The pipeline's own counters, read back off the trail rather than trusted.
+
+    `run_pipeline` accumulates these while it runs, which is fine for a run
+    scored in the same process. A saved run scored later recovered them from
+    the spend ledger instead, and when that ledger held no completed-replay
+    entry — which is every run that was resumed rather than finishing in one
+    process — they fell back to zeros and were printed as measurements: "0
+    reminders and 0 escalations" over a run that sent 570 and raised 226. A
+    plausible wrong number is worse than an obviously broken one; this is the
+    stale-truth-file failure wearing different clothes.
+
+    Everything the report quotes is on the audit log, and the two figures it
+    quotes most are there twice over: once per cycle in `followup_completed`,
+    and once per act as `finding_reminder_sent` and `finding_escalated`. Both
+    are read, and a disagreement raises rather than quietly preferring one.
+
+    `remediated` counts instances *re-assessed* after remediation evidence
+    arrived — one `assessment_superseded` each. It is not the number of
+    remediations the corpus contains, which is a property of the corpus and is
+    counted there.
+    """
+    repo = repositories(conn)
+    events = repo["audit"].read_all()
+
+    def total(action: str, key: str) -> int:
+        return sum(e.detail.get(key, 0) for e in events if e.action == action)
+
+    def occurrences(action: str) -> int:
+        return len([e for e in events if e.action == action])
+
+    reminders, escalations = total("followup_completed", "reminders"), total(
+        "followup_completed", "escalations"
+    )
+    by_event = (occurrences("finding_reminder_sent"), occurrences("finding_escalated"))
+    if (reminders, escalations) != by_event:
+        raise UnscorableRows(
+            f"the trail disagrees with itself about the chase: the cycles report "
+            f"{reminders} reminders and {escalations} escalations, the individual "
+            f"events {by_event[0]} and {by_event[1]}. One of them is wrong and "
+            f"neither is safe to print"
+        )
+    return {
+        "screened": total("prescreen_completed", "considered"),
+        "assessed": total("assessment_completed", "assessed"),
+        "reminders": reminders,
+        "escalations": escalations,
+        "remediated": occurrences("assessment_superseded"),
+    }
+
+
 def token_usage(conn) -> dict[str, Any]:
     row = conn.execute(
         "SELECT COUNT(*) calls, COALESCE(SUM(input_tokens),0) input,"

@@ -187,8 +187,12 @@ def score(
     # Scored on the original judgement, not the state after remediation — see
     # `metrics.first_verdicts`.
     verdicts = metrics_module.first_verdicts(conn)
+    # The trail wins over whatever the caller carried in. A run scored in the
+    # same process and one scored from a saved database now report the same
+    # counters, because both read them from the same place.
     pipeline = {
         **run_stats,
+        **metrics_module.recover_run_stats(conn),
         "missed": metrics_module.missed_checks(conn, truth_rows, as_of=SIMULATED_TODAY),
         "detection": metrics_module.time_to_detection(conn),
         "consistency": metrics_module.verdict_consistency(conn),

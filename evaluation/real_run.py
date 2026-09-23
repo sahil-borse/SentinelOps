@@ -565,12 +565,12 @@ def score(baseline_model: str | None) -> int:
         "SELECT 'calls', COUNT(*) FROM token_usage UNION ALL "
         "SELECT 'cost', ROUND(SUM(cost_usd), 4) FROM token_usage"
     )}
-    # The counts the replay itself reported. Zeros would be a lie in results.md,
-    # and re-running the pipeline to recover them would spend the money twice.
-    stats = log.get("replay", {}).get("pipeline") or {
-        "screened": 0, "assessed": 0, "remediated": 0, "reminders": 0,
-        "escalations": 0,
-    }
+    # No counters are carried in at all: `harness.score` reads them off the
+    # audit log. They used to come from this ledger, and a run that was resumed
+    # rather than finished in one process has no `replay` entry here — so the
+    # fallback zeros were printed as "0 reminders, 0 escalations" over a run
+    # that sent 570 and raised 226.
+    stats: dict[str, Any] = {}
     evaluation, _ = harness.score(
         conn, corpus, run_stats=stats, baseline_result=result, baseline_note=note,
     )

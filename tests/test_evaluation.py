@@ -1,7 +1,7 @@
 """The harness must be as trustworthy as the thing it measures."""
 
 import json
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -13,7 +13,7 @@ from evaluation.harness import (
     CYCLE_DATES, StaleGroundTruth, _require_matching_truth, evaluate, run_pipeline,
 )
 from sentinelops.db import connect
-from sentinelops.synth import generate_corpus
+from sentinelops.synth import generate_corpus, seed_database
 from sentinelops.synth.calendar import SIMULATED_TODAY
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +42,73 @@ def evaluation(evaluation_run):
 
 
 # --- the harness is outside the package on purpose -------------------------
+
+def test_the_run_counters_are_read_off_the_trail(conn, corpus):
+    """Recovered from the audit log, so a resumed run counts like an unbroken one.
+
+    These used to be carried in by whoever ran the pipeline. A run scored later
+    recovered them from the spend ledger, and a ledger with no completed-replay
+    entry — every resumed run has none — fell back to zeros, which `results.md`
+    then printed as measurements: "0 reminders and 0 escalations" over a run
+    that had sent 570 and raised 226.
+    """
+    from evaluation.metrics import recover_run_stats
+    from sentinelops.repositories import repositories, simulated_clock
+
+    seed_database(conn, corpus)
+    repo = repositories(conn)
+    with simulated_clock(datetime(2026, 3, 1, 9, 0)):
+        for index in range(3):
+            repo["audit"].append(
+                actor="system", owner="system", action="finding_reminder_sent",
+                entity_type="Finding", entity_id=f"FND-{index}", detail={},
+            )
+        repo["audit"].append(
+            actor="system", owner="system", action="finding_escalated",
+            entity_type="Finding", entity_id="FND-0", detail={"level": 1},
+        )
+        repo["audit"].append(
+            actor="system", owner="system", action="followup_completed",
+            entity_type="Cycle", entity_id="2026-03-01",
+            detail={"reminders": 3, "escalations": 1},
+        )
+
+    recovered = recover_run_stats(conn)
+    assert recovered["reminders"] == 3, "counted from the trail, not handed in"
+    assert recovered["escalations"] == 1
+
+
+def test_a_trail_that_disagrees_with_itself_raises(conn, corpus):
+    """Two routes to the same figure, and no quiet preference between them.
+
+    The cycle totals and the individual acts are both on the log. If they
+    disagree one of them is wrong, and printing either would be a guess.
+    """
+    from evaluation.metrics import UnscorableRows, recover_run_stats
+    from sentinelops.repositories import repositories, simulated_clock
+
+    seed_database(conn, corpus)
+    repo = repositories(conn)
+    with simulated_clock(datetime(2026, 3, 1, 9, 0)):
+        repo["audit"].append(
+            actor="system", owner="system", action="followup_completed",
+            entity_type="Cycle", entity_id="2026-03-01",
+            detail={"reminders": 9, "escalations": 0},
+        )
+
+    with pytest.raises(UnscorableRows) as refused:
+        recover_run_stats(conn)
+    assert "disagrees with itself" in str(refused.value)
+
+
+def test_a_counter_nobody_recovered_says_so_rather_than_reading_zero():
+    """`not recovered` is a fact. `0` is a measurement, and would be a false one."""
+    from evaluation.report import _recovered
+
+    assert _recovered(None) == "not recovered"
+    assert _recovered(0) == "0"
+    assert _recovered(570) == "570"
+
 
 def test_the_suite_never_writes_over_the_committed_results():
     """`evaluate()` writes `results.md` unless told otherwise.

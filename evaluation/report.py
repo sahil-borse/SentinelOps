@@ -265,6 +265,16 @@ def _recurrence_lines(analytics: dict) -> str:
     return "\n".join(lines)
 
 
+def _recovered(value: Any) -> str:
+    """A counter, or the fact that it is missing — never a zero standing in.
+
+    A figure nobody could recover has to look unrecovered. Printing 0 for it
+    reads as a measurement, and "0 reminders" over a run that sent 570 is the
+    kind of plausible wrong number this file exists to avoid.
+    """
+    return "not recovered" if value is None else f"{value:,}"
+
+
 def _pct(value: float) -> str:
     return f"{value:.1%}"
 
@@ -330,6 +340,11 @@ def write_results(evaluation, corpus, truth: dict[str, Any], path: Path) -> str:
     counts = truth["counts"]["by_defect_kind"]
     a = p["analytics"]
     a_rec = p["recurrence"]
+    # A property of the corpus, counted from the corpus. The pipeline's own
+    # `remediated` counter is the number of instances it re-assessed, which is
+    # a different thing that happened to match while nothing went wrong.
+    corpus_submissions = len(corpus.submissions)
+    corpus_remediations = len([s for s in corpus.submissions if s.is_remediation])
 
     model_warning = (
         "> **These runs used `FakeModelClient`, not a language model.** The stub is a\n"
@@ -550,23 +565,29 @@ tokenizer's output. Exact token and cost figures need the real provider; the
     ("Raised", str(p['actions']['raised'])),
     ("Closed by an auditor", str(p['actions']['resolved'])),
     ("Still open", str(p['actions']['open'])),
-    ("Escalated", str(p['actions']['escalated'])),
+    ("Escalated at least once", str(p['actions']['escalated'])),
     ("Closure rate", _pct(p['actions']['resolution_rate'])),
     ("Mean days to closure", str(p['actions']['mean_days_to_resolution'])),
     ("Mean follow-ups per closure",
      str(p['actions']['mean_follow_ups_to_close'])),
 ], ("", "count"))}
 
-The closure rate is low because the corpus contains remediation evidence for
-only {p['remediated']} of the failures — the rest are left open on purpose, so the
-queue in the dashboard is not empty. It measures the corpus, not the diligence of
-a team.
+The closure rate is low because the corpus carries remediation evidence for only
+{corpus_remediations:,} of its {corpus_submissions:,} submissions — the rest of
+the failures are left open on purpose, so the queue in the dashboard is not
+empty. It measures the corpus, not the diligence of a team. Of those, the
+pipeline re-assessed {_recovered(p['remediated'])} instances when their evidence
+arrived; that counter is the re-assessments, not the evidence, and the two are
+equal only when every remediation is picked up.
 
 **What the chase did.** Across the same run the follow-up engine sent
-{p['reminders']:,} reminders and raised {p['escalations']:,} escalations, all
-deterministic and all from the severity table. That is the number a human would
-have had to produce by remembering; it is not a measure of accuracy, and it is
-not claimed as one.
+{_recovered(p['reminders'])} reminders and raised {_recovered(p['escalations'])}
+escalations across {p['actions']['escalated']} findings, all deterministic and
+all from the severity table. That is the number a human would have had to
+produce by remembering; it is not a measure of accuracy, and it is not claimed
+as one. These are read back off the audit log rather than carried in by whoever
+ran the pipeline, so a run scored later reports what a run scored in the moment
+would have.
 
 ---
 

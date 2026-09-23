@@ -272,21 +272,27 @@ tokenizer's output. Exact token and cost figures need the real provider; the
 | Raised | 173 |
 | Closed by an auditor | 89 |
 | Still open | 84 |
-| Escalated | 113 |
+| Escalated at least once | 113 |
 | Closure rate | 51.4% |
 | Mean days to closure | 32.0 |
 | Mean follow-ups per closure | 1.1 |
 
-The closure rate is low because the corpus contains remediation evidence for
-only 0 of the failures — the rest are left open on purpose, so the
-queue in the dashboard is not empty. It measures the corpus, not the diligence of
-a team.
+The closure rate is low because the corpus carries remediation evidence for only
+102 of its 786 submissions — the rest of
+the failures are left open on purpose, so the queue in the dashboard is not
+empty. It measures the corpus, not the diligence of a team. Of those, the
+pipeline re-assessed 102 instances when their evidence
+arrived; that counter is the re-assessments, not the evidence, and the two are
+equal only when every remediation is picked up.
 
 **What the chase did.** Across the same run the follow-up engine sent
-0 reminders and raised 0 escalations, all
-deterministic and all from the severity table. That is the number a human would
-have had to produce by remembering; it is not a measure of accuracy, and it is
-not claimed as one.
+570 reminders and raised 226
+escalations across 113 findings, all deterministic and
+all from the severity table. That is the number a human would have had to
+produce by remembering; it is not a measure of accuracy, and it is not claimed
+as one. These are read back off the audit log rather than carried in by whoever
+ran the pipeline, so a run scored later reports what a run scored in the moment
+would have.
 
 ---
 
