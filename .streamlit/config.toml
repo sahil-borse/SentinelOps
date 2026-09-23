@@ -9,6 +9,11 @@ backgroundColor = "#F8FAFB"
 secondaryBackgroundColor = "#F1F4F6"
 textColor = "#111827"
 font = "sans serif"
+# The grid draws its own header on a canvas, out of reach of the injected
+# stylesheet. This is the one lever over it: a band dark enough to separate
+# the column names from the white rows beneath them.
+dataframeHeaderBackgroundColor = "#E3E8EC"
+dataframeBorderColor = "#E3E8EC"
 
 [client]
 toolbarMode = "minimal"

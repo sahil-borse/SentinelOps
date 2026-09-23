@@ -525,13 +525,28 @@ _CSS = Template("""
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: 0.5rem; }
 .stApp h1 { font-size: ${title}px; font-weight: 650; letter-spacing: -0.015em; line-height: 1.2; color: $n900; }
 .stApp h2 { font-size: ${section}px; font-weight: 640; color: $n900; }
-.stApp h3 { font-size: ${section}px; font-weight: 620; letter-spacing: -0.005em; color: $n900; padding: 0; line-height: 1.35; }
+.stApp h3 { font-size: ${section}px; font-weight: 700; letter-spacing: -0.005em; color: $n900; padding: 0 0 7px; line-height: 1.35; margin-bottom: 8px; border-bottom: 1px solid $n200; display: flex; align-items: center; gap: 8px; }
+.stApp h3::before { content: ""; flex: 0 0 3px; height: 14px; border-radius: 2px; background: $accent; }
+
+/* Tabs. The label is a heading and has to read as one: the section it names
+   is otherwise indistinguishable from the values underneath it. */
+[data-testid="stTabs"] [data-baseweb="tab-list"] { gap: 2px; border-bottom: 1px solid $n200; margin-bottom: 4px; }
+[data-testid="stTabs"] [role="tab"] { font-size: ${body}px; font-weight: 600; color: $n500; padding: 7px 14px; }
+[data-testid="stTabs"] [role="tab"]:hover { color: $n700; background: $n50; }
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] { color: $n900; font-weight: 700; }
+[data-testid="stTabs"] [data-baseweb="tab-highlight"] { background: $accent; height: 3px; }
+[data-testid="stTabs"] [data-baseweb="tab-border"] { background: transparent; }
 [data-testid="stCaptionContainer"] p { color: $n500; font-size: ${small}px; line-height: 1.45; }
 .stButton button, .stFormSubmitButton button, .stDownloadButton button { border-radius: 8px; font-weight: 600; min-height: 2.25rem; }
 [data-testid="stSidebar"] [data-testid="stColumn"] .stButton button { padding-left: 2px; padding-right: 2px; font-size: 13px; white-space: nowrap; }
 [data-testid="stPageLink"] a p { font-size: 13px; font-weight: 600; color: $accent; }
 div[class*="st-key-card"] { background: $n0; border: 1px solid $n200; border-radius: 12px; padding: 14px 16px 22px; box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04); }
 div[class*="st-key-alert"] { background: $n0; border: 1px solid $n200; border-left: 4px solid $n900; border-radius: 12px; padding: 14px 16px 22px; }
+/* The grid draws itself on a canvas: its header row cannot be reached from
+   this stylesheet at all, and the theme variables it reads are set in the
+   app's theme config rather than here. What separates its column names from
+   its values is the header fill set there. Everything above a grid is ours,
+   so the card heading carries the weight. */
 [data-testid="stDataFrame"] { border: 1px solid $n200; border-radius: 8px; }
 [data-testid="stExpander"] details { border-radius: 10px; border-color: $n200; background: $n0; }
 
@@ -618,7 +633,7 @@ div[class*="st-key-inbox_table"] [data-testid="stDataFrame"], div[class*="st-key
 .so-link-why b { color: $n700; font-weight: 650; }
 .so-table-wrap { border: 1px solid $n200; border-radius: 10px; overflow: hidden; margin: 4px 0 8px; }
 .so-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-.so-table th { text-align: left; font-size: 12px; font-weight: 650; color: $n500; padding: 8px 12px; border-bottom: 1px solid $n200; background: $n50; }
+.so-table th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: $n700; padding: 9px 12px; border-bottom: 1px solid $n300; background: $n100; }
 .so-table td { padding: 9px 12px; border-bottom: 1px solid $n100; color: $n900; vertical-align: top; }
 .so-table tr:last-child td { border-bottom: 0; }
 .so-table .so-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }

@@ -50,7 +50,10 @@ with top_left:
              for unit, row in split["by_unit"].items()],
             hide_index=True, width="stretch", height=320,
             column_config={"Closed %": st.column_config.ProgressColumn(
-                "Closed", min_value=0, max_value=100, format="%.0f%%")},
+                # Not "Closed": the column beside it is already called that,
+                # and two columns under one heading is a table that has to be
+                # read twice.
+                "Closed rate", min_value=0, max_value=100, format="%.0f%%")},
         )
 with top_right:
     with st.container(key="card_severity"):
