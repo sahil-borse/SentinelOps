@@ -25,8 +25,15 @@ def corpus():
 
 
 @pytest.fixture(scope="module")
-def evaluation_run():
-    return evaluate()
+def evaluation_run(tmp_path_factory):
+    """Scored into a temporary file, never over the committed one.
+
+    `evaluate()` writes `results.md` by default, so running the suite replaced
+    the repository's copy with a stub run — including, once, a real-provider
+    run that had been paid for. A test that overwrites a committed artefact is
+    a test with a side effect nobody asked for.
+    """
+    return evaluate(results_path=tmp_path_factory.mktemp("results") / "results.md")
 
 
 @pytest.fixture(scope="module")
@@ -35,6 +42,30 @@ def evaluation(evaluation_run):
 
 
 # --- the harness is outside the package on purpose -------------------------
+
+def test_the_suite_never_writes_over_the_committed_results():
+    """`evaluate()` writes `results.md` unless told otherwise.
+
+    The suite ran it with the default and replaced a real-provider run — paid
+    for, and the only measured one — with a stub run, quietly, as a side effect
+    of testing. Every call in the tests names its own path.
+    """
+    import re
+
+    for path in sorted(Path(__file__).parent.glob("test_*.py")):
+        source = re.sub(r"`[^`]*`", "", path.read_text(encoding="utf-8"))
+        # Only the harness's own `evaluate`. Applicability has a function of the
+        # same name that decides whether a control applies to a unit, and
+        # `review.evaluate` reads an evidence round; neither writes anything.
+        if "from evaluation.harness import" not in source:
+            continue
+        for arguments in re.findall(r"(?<![.\w])evaluate\(([^)]*)\)", source):
+            if arguments.strip() == "...":
+                continue  # prose, not a call
+            assert "results_path" in arguments, (
+                f"{path.name}: evaluate({arguments}) would write the committed file"
+            )
+
 
 def test_the_harness_is_not_part_of_the_installed_package():
     """It reads the truth file, so it must not be importable by the pipeline."""
@@ -474,7 +505,13 @@ def test_two_runs_on_the_same_seed_produce_byte_identical_results(
         result.pipeline["first_verdicts"]
     )
     assert written.read_text(encoding="utf-8") == markdown
-    assert written.read_bytes() == (ROOT / "results.md").read_bytes()
+
+    # Deliberately not compared against the committed `results.md`. That held
+    # only while the suite was overwriting it on every run: the file in the
+    # repository is generated from the real-provider run, and asserting these
+    # bytes match would quietly require it to be a stub artefact instead. The
+    # property under test is that one seed gives one answer, which the two
+    # assertions above establish between two interpreters.
 
 
 # --- the guard that stops a plausible wrong answer ---------------------------

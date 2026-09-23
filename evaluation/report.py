@@ -21,7 +21,7 @@ from sentinelops.synth.calendar import SIMULATED_TODAY
 REAL_DIR = Path(__file__).resolve().parents[1] / "data" / "real"
 
 
-def _real_run_section() -> str:
+def _real_run_section(baseline=None) -> str:
     """The real-provider run: every figure marked quotable or not.
 
     Generated from the files the run left behind — the two comparison columns
@@ -151,6 +151,31 @@ def _real_run_section() -> str:
     table = _table([tuple(row) for row in rows],
                    ("Figure", "FakeModelClient", models, "Quotable?"))
 
+    # The headline's token comparison is pipeline *total* against a baseline
+    # that only ever assesses: classification and recurrence are work the naive
+    # path does not do at all, so on a real model the total can exceed it and
+    # the ratio stops meaning what a reader assumes. The like-for-like figure —
+    # assessment against assessment, the same job — belongs next to it rather
+    # than in place of it.
+    like_for_like = ""
+    assess_row = next(
+        (row for row in tokens.get("by_stage", []) if row["tier"] == "assess"), None
+    )
+    if baseline is not None and assess_row is not None and baseline.model_calls:
+        assess_tokens = assess_row["input_tokens"] + assess_row["output_tokens"]
+        like_for_like = (
+            "**Assessment against assessment, which is the comparison that holds.** "
+            f"The pipeline judged the same evidence in {assess_row['calls']} calls and "
+            f"{assess_tokens:,} tokens; the naive baseline needed "
+            f"{baseline.model_calls} calls and {baseline.total_tokens:,}. That is "
+            f"{baseline.model_calls / assess_row['calls']:.1f}x the calls and "
+            f"{baseline.total_tokens / assess_tokens:.1f}x the tokens for the same job. "
+            "The totals below and in the headline include classification and "
+            "recurrence, which the naive path does not do at all — so the total "
+            "ratio compares a pipeline doing more work against a baseline doing "
+            "less, and on a real model it runs the other way.\n\n"
+        )
+
     stages = "".join(
         f"> - `{row['tier']}` → `{row['model']}` · {row['calls']} calls ·"
         f" {row['input_tokens'] + row['output_tokens']:,} tokens ·"
@@ -164,7 +189,7 @@ The pipeline was replayed to the vantage point against `{models}`:
 Read back from the run's own metering rows, so this says what actually answered:
 
 {stages}
-**What the accuracy figures are measured on has not changed.** They describe a
+{like_for_like}**What the accuracy figures are measured on has not changed.** They describe a
 *synthetic corpus with constructed failure modes* — the generator decided what
 counted as a gap and then wrote a document to embody it. Section 4's scope note
 applies to the real column exactly as it applies to the stub's.
@@ -344,7 +369,7 @@ Corpus seed `{evaluation.seed}` · fingerprint `{evaluation.corpus_fingerprint[:
 {evaluation.cycles} scheduled cycles to the vantage point {SIMULATED_TODAY}
 
 {model_warning}
-{_real_run_section()}## Headline
+{_real_run_section(b["result"])}## Headline
 
 {headline_table(evaluation)}
 
