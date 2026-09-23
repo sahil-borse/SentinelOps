@@ -110,6 +110,29 @@ def test_a_counter_nobody_recovered_says_so_rather_than_reading_zero():
     assert _recovered(570) == "570"
 
 
+def test_a_stub_run_refuses_to_overwrite_a_measured_one(tmp_path):
+    """Free figures must not quietly replace figures that cost money.
+
+    `python -m evaluation` writes a stub run to `results.md`. Twice that
+    destroyed a real-provider run — once from a test fixture, once from the
+    command line. Regenerating a stub run is cheap and regenerating a real one
+    is not, so the default is to refuse.
+    """
+    from evaluation.__main__ import MEASURED, main, measured
+
+    stub = tmp_path / "stub.md"
+    stub.write_text("# figures from the deterministic stub\n", encoding="utf-8")
+    assert not measured(stub)
+
+    real = tmp_path / "real.md"
+    real.write_text(f"> **{MEASURED}.** One model per stage.\n", encoding="utf-8")
+    assert measured(real)
+
+    before = real.read_text(encoding="utf-8")
+    assert main(["--out", str(real)]) == 1, "it refuses rather than overwriting"
+    assert real.read_text(encoding="utf-8") == before, "and leaves the file alone"
+
+
 def test_the_suite_never_writes_over_the_committed_results():
     """`evaluate()` writes `results.md` unless told otherwise.
 
