@@ -101,6 +101,16 @@ measured against a real provider it refuses, because replacing paid figures with
 free ones is a bad trade — `--out` writes elsewhere, `--force` overwrites anyway,
 and `python -m evaluation.real_run score` rebuilds it from the saved real run.
 
+```bash
+python -m evaluation.summary              # one-screen presentation of the figures
+```
+
+Writes [`data/artefacts/results_summary.html`](data/artefacts/results_summary.html):
+the same figures as `results.md`, on a single self-contained page that fits 1080p
+without scrolling, for screen recording. Every number comes from the same scored
+evaluation the report is rendered from, and the scope note and quotable marks are
+quoted out of `results.md` rather than restated, so the two cannot disagree.
+
 Demonstrations that print rather than render, each self-contained:
 
 ```bash

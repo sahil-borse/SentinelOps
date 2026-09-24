@@ -110,6 +110,62 @@ def test_a_counter_nobody_recovered_says_so_rather_than_reading_zero():
     assert _recovered(570) == "570"
 
 
+def test_the_summary_page_shows_the_figures_the_results_data_holds(evaluation):
+    """Read from the same object `results.md` is rendered from, never retyped.
+
+    The page is for a video, where a figure nobody can check is worse than no
+    figure. Each headline value is recomputed here from the evaluation data and
+    looked for in the rendered page, so a number typed into the template — or
+    left behind when the underlying one moves — fails rather than ships.
+    """
+    from evaluation import summary
+
+    results = summary.RESULTS.read_text(encoding="utf-8")
+    page = summary.render(evaluation, results)
+    p, m = evaluation.pipeline, evaluation.manual
+    gap, missed = p["gap_detection"], p["missed"]
+
+    expected = {
+        "obligations": f"{missed['examined']}/{missed['due']}",
+        "chase": f"{p['reminders']:,} · {p['escalations']:,}",
+        "escalated findings": f"across {p['actions']['escalated']} findings",
+        "detection": f"{p['detection']['median']:g} days",
+        "manual detection": f"{m['detection']['median']:g} simulated manual",
+        "gap detection": (f"{gap.precision:.1%} · {gap.recall:.1%} · "
+                          f"{gap.false_positive_rate:.1%}"),
+        "confusion": (f"TP {gap.true_positive} FP {gap.false_positive} "
+                      f"FN {gap.false_negative}"),
+        "zero model": f"{p['zero_model']['share']:.1%}",
+        "cost": f"${p['tokens']['cost_usd']:.2f}",
+        "calls": f"{p['tokens']['calls']:,} calls",
+    }
+    for name, value in expected.items():
+        assert value in page, f"the page does not show the {name} figure: {value}"
+
+
+def test_the_summary_page_quotes_its_caveats_rather_than_restating_them(evaluation):
+    """A caveat reworded to fit a slide is a caveat quietly weakened."""
+    from evaluation import summary
+
+    results = summary.RESULTS.read_text(encoding="utf-8")
+    note = summary.scope_note(results)
+    assert "synthetic corpus with constructed failure modes" in note
+    assert "The generator decided what counted as a gap" in note
+
+    # Every word of it is in results.md, allowing for the line wrapping there.
+    flattened = " ".join(results.split())
+    assert " ".join(note.split()) in flattened
+
+    page = summary.render(evaluation, results)
+    for fragment in ("synthetic corpus with constructed failure modes",
+                     "not as an expected accuracy on your own evidence"):
+        assert fragment in page
+    assert "a thin measurement" in page, "recurrence keeps its own caveat"
+
+    # Self-contained: nothing to fetch, nothing to run.
+    assert "<script" not in page and "http://" not in page and "https://" not in page
+
+
 def test_a_stub_run_refuses_to_overwrite_a_measured_one(tmp_path):
     """Free figures must not quietly replace figures that cost money.
 
