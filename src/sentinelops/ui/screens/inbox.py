@@ -30,12 +30,15 @@ with st.container(key="card_inbox"):
             "No notification matches this filter. Choose **All** to see everything.",
         ))
     else:
+        page = shell.page_of(shown, key=f"inbox_{choice}", default=25)
         picked = st.dataframe(
-            view.inbox_table(shown), hide_index=True, width="stretch", height=380,
+            view.inbox_table(page.rows), hide_index=True, width="stretch",
+            height=view.table_height(len(page.rows)),
             # Keyed on the filter and a counter the modal bumps on close, so a
             # closed notification is not still selected — and reopened — on the
             # next rerun, and a new filter never inherits an old row index.
-            key=f"inbox_table_{choice}_{st.session_state.get('inbox_table_version', 0)}",
+            key=f"inbox_table_{choice}_{st.session_state.get('inbox_table_version', 0)}"
+                f"_{page.number}_{page.per_page}",
             # A click anywhere on a row opens it, not only on a checkbox.
             on_select="rerun", selection_mode="single-cell",
             column_config={
@@ -50,6 +53,7 @@ with st.container(key="card_inbox"):
                 "Subject": st.column_config.TextColumn("Subject", width="large"),
             },
         )
+        shell.pager(page, key=f"inbox_{choice}", noun="notification")
         st.caption("Select a notification to read it in full.")
         if picked.selection.cells:
-            shell.notification(conn, shown[picked.selection.cells[0][0]], actor)
+            shell.notification(conn, page.rows[picked.selection.cells[0][0]], actor)

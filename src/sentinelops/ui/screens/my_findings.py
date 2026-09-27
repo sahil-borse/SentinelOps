@@ -26,10 +26,14 @@ with st.container(key="card_mine"):
             "against your unit it appears here, soonest target date first.",
         ))
     else:
-        st.caption("Select a finding to file evidence or report progress on it.")
+        st.caption("Click anywhere on a finding to file evidence or report "
+                   "progress on it.")
+        page = shell.page_of(rows, key="mine")
         picked = st.dataframe(
-            view.owner_table(rows), hide_index=True, width="stretch",
-            key="mine_table", on_select="rerun", selection_mode="single-row",
+            view.owner_table(page.rows), hide_index=True, width="stretch",
+            height=view.table_height(len(page.rows)),
+            key=f"mine_table_{page.number}_{page.per_page}",
+            on_select="rerun", selection_mode="single-cell",
             column_config={
                 "Severity": shell.SEVERITY_COLUMN,
                 "Target": st.column_config.DateColumn("Target", format=shell.DATE_FORMAT),
@@ -39,8 +43,9 @@ with st.container(key="card_mine"):
                 "Chased": st.column_config.NumberColumn("Chased", format="%d×", width="small"),
             },
         )
-        if picked.selection.rows:
-            st.session_state["owner_finding"] = rows[picked.selection.rows[0]]["id"]
+        shell.pager(page, key="mine", noun="finding")
+        if picked.selection.cells:
+            st.session_state["owner_finding"] = page.rows[picked.selection.cells[0][0]]["id"]
             st.switch_page("screens/owner_detail.py")
 
 with st.container(key="card_checks"):

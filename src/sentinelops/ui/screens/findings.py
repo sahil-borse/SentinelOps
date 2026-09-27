@@ -50,12 +50,20 @@ if not shown:
         "check whose evidence fails assessment.",
     ))
 else:
-    st.caption(f"Showing {len(shown)} of {view.plural(len(rows), 'finding')}. "
-               "Select a row to open it.")
+    st.caption(f"{len(shown)} of {view.plural(len(rows), 'finding')} match. "
+               "Click anywhere on a row to open it.")
+    page = shell.page_of(shown, key="findings")
     version = st.session_state.get("findings_table_version", 0)
     picked = st.dataframe(
-        view.findings_table(shown), hide_index=True, width="stretch", height=360,
-        key=f"findings_table_{version}", on_select="rerun", selection_mode="single-row",
+        view.findings_table(page.rows), hide_index=True, width="stretch",
+        height=view.table_height(len(page.rows)),
+        # The key carries the page: a row index means nothing once the page under
+        # it has changed, and a stale selection would reopen whatever now sits in
+        # that position.
+        key=f"findings_table_{version}_{page.number}_{page.per_page}",
+        # A click anywhere on the row opens it. Row selection would confine that
+        # to the checkbox, which is a hard target and reads as a bulk action.
+        on_select="rerun", selection_mode="single-cell",
         column_config={
             "Finding": st.column_config.TextColumn("Finding", width="medium"),
             "Severity": shell.SEVERITY_COLUMN,
@@ -66,8 +74,9 @@ else:
             "Chronic": st.column_config.CheckboxColumn("Chronic", width="small"),
         },
     )
-    if picked.selection.rows:
-        st.session_state["selected_finding"] = shown[picked.selection.rows[0]]["id"]
+    shell.pager(page, key="findings", noun="finding")
+    if picked.selection.cells:
+        st.session_state["selected_finding"] = page.rows[picked.selection.cells[0][0]]["id"]
 
 # The finding opens over the list, in a modal, rather than below it.
 selected = st.session_state.get("selected_finding")

@@ -1523,3 +1523,81 @@ def test_the_inbox_shows_nothing_sent_after_the_simulated_date(conn, corpus):
         "test checks nothing"
     )
     assert all(row["sent"].date() <= start for row in shown)
+
+
+# --- paging the long tables -------------------------------------------------
+
+def test_a_page_reports_where_it_sits_in_the_whole_list():
+    page = view.paginate(list(range(84)), number=3, per_page=10)
+
+    assert page.rows == list(range(20, 30))
+    assert (page.number, page.pages, page.total) == (3, 9, 84)
+    assert (page.first, page.last) == (21, 30)
+    assert page.caption("finding") == "Showing 21–30 of 84 findings · page 3 of 9"
+
+
+def test_the_last_page_holds_the_remainder():
+    page = view.paginate(list(range(84)), number=9, per_page=10)
+
+    assert page.rows == list(range(80, 84))
+    assert (page.first, page.last) == (81, 84)
+
+
+def test_a_page_past_the_end_lands_on_the_last_one_that_exists():
+    """A filter narrows the table while the reader is on page seven. Clamping
+    rather than raising, and not silently resetting to page one either."""
+    page = view.paginate(list(range(12)), number=7, per_page=10)
+
+    assert page.number == 2 and page.rows == list(range(10, 12))
+
+
+def test_a_short_list_is_one_page_and_says_so():
+    page = view.paginate([1, 2, 3], number=1, per_page=10)
+
+    assert (page.pages, page.number) == (1, 1)
+    assert page.caption("finding") == "Showing all 3 findings"
+
+
+def test_an_empty_list_still_has_a_first_page():
+    page = view.paginate([], number=4, per_page=10)
+
+    assert (page.rows, page.number, page.pages, page.total) == ([], 1, 1, 0)
+    assert page.caption("finding") == "Nothing to show"
+
+
+def test_a_table_never_renders_taller_than_its_cap():
+    """A page of 100 rows rendered 100 rows tall pushes the page under it away."""
+    assert view.table_height(3) < view.table_height(10) <= view.table_height(100)
+    assert view.table_height(100) == view.table_height(view.VISIBLE_ROWS)
+
+
+def test_every_long_table_is_paged_and_opens_on_a_click_anywhere():
+    """The four tables that outgrow a screen. The short ones — portfolio,
+    schedule, overview — are left alone: a pager with one page is furniture."""
+    for screen, key in (("findings.py", "findings"), ("my_findings.py", "mine"),
+                        ("inbox.py", "inbox_"), ("today.py", "overdue")):
+        source = (SRC / "ui" / "screens" / screen).read_text(encoding="utf-8")
+        assert "shell.page_of(" in source and "shell.pager(" in source, screen
+        assert f'key="{key}' in source or f'key=f"{key}' in source, screen
+        assert 'selection_mode="single-cell"' in source, (
+            f"{screen}: a click on the finding's own name must open it"
+        )
+        assert "picked.selection.rows" not in source, (
+            f"{screen}: row selection would confine opening to the checkbox"
+        )
+
+
+def test_a_paged_table_keys_itself_on_the_page_it_is_showing():
+    """Row indexes are positions in a page, not identities. A key that outlives
+    the page would carry a selection onto whatever now sits in that row."""
+    for screen in ("findings.py", "my_findings.py", "inbox.py", "today.py"):
+        source = (SRC / "ui" / "screens" / screen).read_text(encoding="utf-8")
+        assert "{page.number}" in source, screen
+
+
+def test_every_table_a_click_opens_shows_the_pointer():
+    """The grid has no hover state of its own, so the cursor is the only thing
+    that says a row is a door rather than a cell."""
+    rule = next(block for block in view.CSS.split("}") if "cursor: pointer" in block)
+    for key in ("inbox_table", "findings_table", "mine_table", "overdue_table"):
+        assert f"st-key-{key}" in rule, key

@@ -111,10 +111,15 @@ with rail:
             ))
         else:
             st.caption(f"{view.plural(len(rows), 'open finding')} at or past target, "
-                       "most severe first. Select one to open it.")
+                       "most severe first. Click one to open it.")
+            # Compact: the queue sits in the narrow rail, where a page-size
+            # selectbox would take the width the finding ids need.
+            page = shell.page_of(rows, key="overdue")
             picked = st.dataframe(
-                view.overdue_table(rows), hide_index=True, width="stretch", height=286,
-                key="overdue_table", on_select="rerun", selection_mode="single-row",
+                view.overdue_table(page.rows), hide_index=True, width="stretch",
+                height=view.table_height(len(page.rows)),
+                key=f"overdue_table_{page.number}", on_select="rerun",
+                selection_mode="single-cell",
                 # The compact queue: what, how bad, how late. Escalation level and
                 # owner are one click away on the finding itself.
                 column_order=["Finding", "Severity", "Late"],
@@ -127,8 +132,10 @@ with rail:
                                                           help="Days past the target date"),
                 },
             )
-            if picked.selection.rows:
-                st.session_state["selected_finding"] = rows[picked.selection.rows[0]]["id"]
+            shell.pager(page, key="overdue", noun="finding", compact=True)
+            if picked.selection.cells:
+                st.session_state["selected_finding"] = \
+                    page.rows[picked.selection.cells[0][0]]["id"]
                 st.switch_page("screens/findings.py")
 
     week = analytics.upcoming(repositories(conn), today, horizon_days=7)

@@ -550,7 +550,13 @@ div[class*="st-key-alert"] { background: $n0; border: 1px solid $n200; border-le
 [data-testid="stDataFrame"] { border: 1px solid $n200; border-radius: 8px; }
 [data-testid="stExpander"] details { border-radius: 10px; border-color: $n200; background: $n0; }
 
-div[class*="st-key-inbox_table"] [data-testid="stDataFrame"], div[class*="st-key-inbox_table"] [data-testid="stDataFrame"] * { cursor: pointer !important; }
+/* The tables a click opens something from: the pointer is the only signal that
+   a row is a door, since the grid gives no hover state of its own. Every one of
+   these selects a single cell, so the whole row is a target, not a checkbox. */
+div[class*="st-key-inbox_table"] [data-testid="stDataFrame"], div[class*="st-key-inbox_table"] [data-testid="stDataFrame"] *,
+div[class*="st-key-findings_table"] [data-testid="stDataFrame"], div[class*="st-key-findings_table"] [data-testid="stDataFrame"] *,
+div[class*="st-key-mine_table"] [data-testid="stDataFrame"], div[class*="st-key-mine_table"] [data-testid="stDataFrame"] *,
+div[class*="st-key-overdue_table"] [data-testid="stDataFrame"], div[class*="st-key-overdue_table"] [data-testid="stDataFrame"] * { cursor: pointer !important; }
 [data-testid="stDialog"] { background: rgba(17, 24, 39, 0.45) !important; cursor: not-allowed; }
 [data-testid="stDialog"] > div { cursor: default; border-radius: 14px; box-shadow: 0 20px 48px rgba(17, 24, 39, 0.28); }
 [data-testid="stSidebarNavLink"] { position: relative; }
@@ -808,6 +814,62 @@ def month_label(month: str) -> str:
 def plural(count: int, word: str, many: str | None = None) -> str:
     """`3 days`, `1 day`; `many` for the words that do not take an s."""
     return f"{count} {word if count == 1 else (many or word + 's')}"
+
+
+#: The page sizes a reader can choose between on a long table.
+PAGE_SIZES: tuple[int, ...] = (10, 25, 50, 100)
+
+#: Rows a paged table shows before it scrolls inside itself. A page of 100 that
+#: renders 100 rows tall pushes everything under it off the screen.
+VISIBLE_ROWS = 12
+
+
+@dataclass(frozen=True)
+class Page:
+    """One page of a long table, with the numbers needed to say where it sits."""
+
+    rows: list[Any]
+    number: int
+    pages: int
+    per_page: int
+    total: int
+
+    @property
+    def first(self) -> int:
+        """The 1-based position of the first row on this page, 0 if empty."""
+        return (self.number - 1) * self.per_page + 1 if self.total else 0
+
+    @property
+    def last(self) -> int:
+        return min(self.number * self.per_page, self.total)
+
+    def caption(self, noun: str = "row") -> str:
+        if not self.total:
+            return "Nothing to show"
+        if self.pages == 1:
+            return f"Showing all {plural(self.total, noun)}"
+        return (f"Showing {self.first}–{self.last} of {plural(self.total, noun)}"
+                f" · page {self.number} of {self.pages}")
+
+
+def paginate(rows: list[Any], number: int = 1, per_page: int = PAGE_SIZES[0]) -> Page:
+    """One page of `rows`, with the page number clamped into what exists.
+
+    Clamping rather than raising: the page number outlives the list it points
+    into — a filter narrows the table while the reader is on page seven — and
+    landing on the last page is what someone in that position wants.
+    """
+    per_page = max(1, per_page)
+    pages = max(1, -(-len(rows) // per_page))
+    number = min(max(1, number), pages)
+    start = (number - 1) * per_page
+    return Page(rows=rows[start:start + per_page], number=number, pages=pages,
+                per_page=per_page, total=len(rows))
+
+
+def table_height(row_count: int, *, header: int = 38, row: int = 35) -> int:
+    """Pixels for a table of `row_count` rows, capped so a big page still fits."""
+    return header + row * max(1, min(row_count, VISIBLE_ROWS))
 
 
 def due_phrase(days_past_target: int) -> str:

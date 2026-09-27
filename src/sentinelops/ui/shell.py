@@ -60,6 +60,52 @@ def post(key: str) -> None:
         (st.success if posted["ok"] else st.error)(posted["message"])
 
 
+def page_of(rows: list[Any], *, key: str,
+            default: int = view.PAGE_SIZES[0]) -> view.Page:
+    """Which page of a long table to draw, read from state before drawing it.
+
+    The page number lives in session state rather than in a widget, because a
+    filter that shrinks the list has to be able to pull the reader back to a
+    page that still exists — `view.paginate` clamps, and the clamped number is
+    written back here so the controls agree with what was rendered.
+    """
+    number_key, size_key = f"{key}_page", f"{key}_size"
+    st.session_state.setdefault(size_key, default)
+    page = view.paginate(rows, st.session_state.get(number_key, 1),
+                         st.session_state[size_key])
+    st.session_state[number_key] = page.number
+    return page
+
+
+def pager(page: view.Page, *, key: str, noun: str = "row",
+          compact: bool = False) -> None:
+    """The controls that move between pages, drawn under the table they page.
+
+    Under, not over: the dataframe's own toolbar — search, download, fullscreen —
+    appears at its top right on hover, over anything sitting there.
+    """
+    number_key, size_key = f"{key}_page", f"{key}_size"
+
+    def step(delta: int) -> None:
+        st.session_state[number_key] = page.number + delta
+        st.rerun()
+
+    if compact:
+        back, caption, forward = st.columns([0.5, 3, 0.5], vertical_alignment="center")
+    else:
+        caption, size, back, forward = st.columns([7, 1.4, 0.4, 0.4],
+                                                  vertical_alignment="bottom")
+        size.selectbox("Rows per page", view.PAGE_SIZES, key=size_key,
+                       disabled=page.total <= view.PAGE_SIZES[0])
+    caption.caption(page.caption(noun))
+    if back.button("‹", key=f"{key}_back", disabled=page.number <= 1,
+                   help="Previous page", width="stretch"):
+        step(-1)
+    if forward.button("›", key=f"{key}_forward", disabled=page.number >= page.pages,
+                      help="Next page", width="stretch"):
+        step(1)
+
+
 def document(content: str, spans: list[str], *, key: str) -> None:
     """The source document in its own scrolling frame, cited spans highlighted."""
     expanded = st.session_state.get(f"doc_expanded_{key}", False)
